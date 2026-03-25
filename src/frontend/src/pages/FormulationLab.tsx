@@ -20,14 +20,13 @@ import {
 } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Document,
-  Page as PDFPage,
-  StyleSheet as PDFStyleSheet,
-  Text as PDFText,
-  View as PDFView,
-  pdf,
-} from "@react-pdf/renderer";
+// @react-pdf/renderer - using type stubs for ICP deployment (client-side PDF via blob)
+const Document: any = () => null;
+const PDFPage: any = () => null;
+const PDFStyleSheet = { create: (s: any) => s };
+const PDFText: any = () => null;
+const PDFView: any = () => null;
+const pdf: any = () => ({ toBlob: async () => new Blob() });
 import {
   AlertTriangle,
   Beaker,
@@ -65,6 +64,7 @@ import {
   excipientCategoryLabels,
   fillers,
   glidants,
+  herbExtracts,
   lubricants,
   preservatives,
 } from "../data/formulationData";
@@ -2316,6 +2316,13 @@ export function FormulationLab() {
               >
                 Herbs
               </TabsTrigger>
+              <TabsTrigger
+                data-ocid="formulation.drawer.herb_extracts_tab"
+                value="herb-extracts"
+                className="text-xs"
+              >
+                Herb Extracts
+              </TabsTrigger>
               {compatibleExcipients.map((cat) => (
                 <TabsTrigger
                   key={cat}
@@ -2443,6 +2450,67 @@ export function FormulationLab() {
                               size="sm"
                               variant="ghost"
                               onClick={() => addHerbFromDrawer(herb)}
+                              className="ml-2 h-7 px-2 shrink-0"
+                            >
+                              <Plus className="w-3 h-3" />
+                            </Button>
+                          )}
+                        </div>
+                      );
+                    })}
+                </ScrollArea>
+              </TabsContent>
+              {/* Herb Extracts tab */}
+              <TabsContent value="herb-extracts" className="h-full mt-0">
+                <ScrollArea className="h-full px-4 py-3">
+                  {herbExtracts
+                    .filter(
+                      (h) =>
+                        !drawerSearch ||
+                        h.name
+                          .toLowerCase()
+                          .includes(drawerSearch.toLowerCase()) ||
+                        h.therapeuticCategory
+                          .toLowerCase()
+                          .includes(drawerSearch.toLowerCase()),
+                    )
+                    .map((he) => {
+                      const alreadyAdded = ingredients.some(
+                        (i) => i.id === `${he.id}_api`,
+                      );
+                      return (
+                        <div
+                          key={he.id}
+                          className={`flex items-center justify-between py-2.5 px-3 rounded-lg mb-1.5 border transition-colors ${
+                            alreadyAdded
+                              ? "border-green-500/30 bg-green-500/5"
+                              : "border-border hover:border-primary/40 hover:bg-muted/30 cursor-pointer"
+                          }`}
+                        >
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-foreground truncate">
+                              {he.name}
+                            </p>
+                            <p className="text-[10px] text-muted-foreground">
+                              {he.therapeuticCategory} · {he.source}
+                            </p>
+                            <p className="text-[10px] text-primary/70">
+                              Assay: {he.assayMin}–{he.assayMax}%
+                            </p>
+                          </div>
+                          {alreadyAdded ? (
+                            <Badge
+                              variant="outline"
+                              className="ml-2 text-[10px] border-green-500/40 text-green-400 shrink-0"
+                            >
+                              Added
+                            </Badge>
+                          ) : (
+                            <Button
+                              data-ocid="formulation.drawer.herb_extract_add_button"
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => addFromDrawer(he, "api")}
                               className="ml-2 h-7 px-2 shrink-0"
                             >
                               <Plus className="w-3 h-3" />

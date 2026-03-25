@@ -2933,3 +2933,563 @@ export const excipientCategoryLabels: Record<ExcipientCategory, string> = {
   coatingAgents: "Coating Agents",
   preservatives: "Preservatives",
 };
+
+// ─── Pharmacological Effects Map for APIs ────────────────────────────────────
+export interface PharmacologicalEffect {
+  mechanism: string;
+  therapeuticUses: string[];
+  notes: string;
+}
+
+export const apiPharmacologicalEffects: Record<string, PharmacologicalEffect> =
+  {
+    metformin: {
+      mechanism:
+        "Activates AMPK, reduces hepatic gluconeogenesis, improves peripheral insulin sensitivity",
+      therapeuticUses: [
+        "Type 2 Diabetes Mellitus — first-line therapy",
+        "Reduces HbA1c by 1.0–2.0%",
+        "Cardioprotective — reduces CV mortality (UKPDS)",
+        "Polycystic ovary syndrome (off-label)",
+        "Weight-neutral or mild weight reduction",
+      ],
+      notes:
+        "Preferred first-line agent per WHO, ADA, and IP 2022. Reduces all-cause mortality. Must be stopped before contrast media.",
+    },
+    paracetamol: {
+      mechanism:
+        "COX inhibition in CNS; serotonergic and cannabinoid pathway modulation; reduces prostaglandin synthesis centrally",
+      therapeuticUses: [
+        "Mild to moderate analgesia",
+        "Antipyresis (fever reduction)",
+        "Safe alternative to NSAIDs in GI-sensitive patients",
+        "Post-operative pain management",
+      ],
+      notes:
+        "Safest OTC analgesic; hepatotoxic in overdose (>4g/day). Metabolised by CYP2E1. IP 2022, WHO Model List.",
+    },
+    ibuprofen: {
+      mechanism:
+        "Non-selective COX-1/COX-2 inhibitor; reduces prostaglandin and thromboxane synthesis",
+      therapeuticUses: [
+        "Mild to moderate pain relief",
+        "Anti-inflammatory — arthritis, musculoskeletal conditions",
+        "Antipyresis",
+        "Dysmenorrhoea",
+        "Post-dental pain",
+      ],
+      notes:
+        "Avoid in renal impairment, peptic ulcer disease. GI-protective co-prescription recommended for long-term use. IP 2022.",
+    },
+    omeprazole: {
+      mechanism:
+        "Irreversible inhibition of H⁺/K⁺-ATPase (proton pump) in gastric parietal cells",
+      therapeuticUses: [
+        "GERD and acid reflux",
+        "Peptic ulcer disease — treatment and prophylaxis",
+        "H. pylori eradication (combination therapy)",
+        "Zollinger-Ellison syndrome",
+        "NSAID-induced ulcer prevention",
+      ],
+      notes:
+        "Peak effect in 2–4 days of continuous dosing. CYP2C19 polymorphism affects efficacy. IP 2022 / BP 2023.",
+    },
+    atorvastatin: {
+      mechanism:
+        "Competitive inhibition of HMG-CoA reductase; reduces hepatic cholesterol synthesis; upregulates LDL receptors",
+      therapeuticUses: [
+        "Hyperlipidaemia — reduces LDL-C by 40–60%",
+        "Primary and secondary cardiovascular prevention",
+        "Reduces risk of MI, stroke, and coronary death",
+        "Familial hypercholesterolaemia",
+      ],
+      notes:
+        "Myopathy risk; monitor CK and LFTs. Evening dosing traditionally recommended. IP 2022.",
+    },
+    amoxicillin: {
+      mechanism:
+        "Inhibits bacterial cell wall synthesis by binding PBPs (penicillin-binding proteins); bactericidal",
+      therapeuticUses: [
+        "Community-acquired pneumonia",
+        "Urinary tract infections",
+        "H. pylori eradication",
+        "Otitis media, sinusitis, pharyngitis",
+        "Skin and soft tissue infections",
+      ],
+      notes:
+        "Broad spectrum penicillin; hypersensitivity in 1–10% of penicillin-sensitive patients. IP 2022.",
+    },
+    cetirizine: {
+      mechanism:
+        "Selective H1-histamine receptor antagonist; minimal CNS penetration — low sedation",
+      therapeuticUses: [
+        "Allergic rhinitis (seasonal and perennial)",
+        "Chronic urticaria",
+        "Allergic conjunctivitis",
+        "Angioedema",
+      ],
+      notes:
+        "Second-generation antihistamine; low sedation vs. first-generation. IP 2022.",
+    },
+    pantoprazole: {
+      mechanism:
+        "Irreversible proton pump inhibitor (H⁺/K⁺-ATPase); more acid-stable than omeprazole",
+      therapeuticUses: [
+        "GERD — superior acid suppression",
+        "Erosive oesophagitis",
+        "Stress ulcer prophylaxis in ICU",
+        "H. pylori eradication regimens",
+      ],
+      notes: "Less CYP2C19 interaction than omeprazole. IP 2022.",
+    },
+    amlodipine: {
+      mechanism:
+        "Dihydropyridine calcium channel blocker; selectively relaxes vascular smooth muscle",
+      therapeuticUses: [
+        "Hypertension — sustained 24-hour BP control",
+        "Stable and vasospastic angina pectoris",
+        "Coronary artery disease prevention",
+      ],
+      notes:
+        "Long half-life (30–50h); once-daily dosing. Well tolerated; peripheral oedema common. IP 2022.",
+    },
+    azithromycin: {
+      mechanism:
+        "Macrolide antibiotic; inhibits bacterial protein synthesis by binding 50S ribosomal subunit",
+      therapeuticUses: [
+        "Community-acquired pneumonia",
+        "Chlamydia and other STIs",
+        "Pharyngitis, tonsillitis",
+        "Skin infections",
+        "Atypical pneumonia (Mycoplasma, Chlamydia)",
+      ],
+      notes:
+        "Z-pack (3-day course) for most indications. QT prolongation risk. IP 2022.",
+    },
+    ciprofloxacin: {
+      mechanism:
+        "Fluoroquinolone; inhibits DNA gyrase (topoisomerase II) and topoisomerase IV; bactericidal",
+      therapeuticUses: [
+        "UTIs including complicated cases",
+        "Typhoid fever",
+        "Respiratory tract infections",
+        "Bone and joint infections",
+        "Anthrax post-exposure prophylaxis",
+      ],
+      notes:
+        "Broad-spectrum; avoid in children and pregnancy. Tendinopathy risk. IP 2022 / WHO EML.",
+    },
+    diclofenac: {
+      mechanism:
+        "Preferential COX-2 inhibitor (also COX-1); reduces prostaglandin synthesis at inflammatory sites",
+      therapeuticUses: [
+        "Musculoskeletal pain and inflammation",
+        "Rheumatoid arthritis, osteoarthritis",
+        "Post-operative pain",
+        "Dysmenorrhoea",
+        "Topical: sports injuries, soft tissue",
+      ],
+      notes:
+        "Hepatotoxicity risk — monitor LFTs. Available as oral, topical, and injectable. IP 2022.",
+    },
+    losartan: {
+      mechanism:
+        "Angiotensin II receptor blocker (ARB); blocks AT1 receptors; reduces vasoconstriction and aldosterone secretion",
+      therapeuticUses: [
+        "Hypertension",
+        "Diabetic nephropathy (type 2 DM)",
+        "Heart failure — reduces hospitalisation",
+        "Stroke prevention in hypertensive patients with LVH",
+      ],
+      notes:
+        "First ARB approved; also has uricosuric effect (reduces uric acid). IP 2022.",
+    },
+    metoprolol: {
+      mechanism:
+        "Cardioselective beta-1 adrenergic receptor blocker; reduces heart rate, cardiac output, and renin release",
+      therapeuticUses: [
+        "Hypertension",
+        "Angina pectoris",
+        "Myocardial infarction — reduces mortality",
+        "Heart failure (low-dose titration)",
+        "Arrhythmias — rate control in AF",
+      ],
+      notes:
+        "Cardioselective; lower risk of bronchospasm than non-selective. IP 2022.",
+    },
+    ranitidine: {
+      mechanism:
+        "Histamine H2-receptor antagonist; reduces gastric acid secretion by 70–80%",
+      therapeuticUses: [
+        "Peptic ulcer disease",
+        "GERD",
+        "Zollinger-Ellison syndrome",
+        "Prevention of stress ulcers",
+      ],
+      notes:
+        "Largely superseded by PPIs for most indications; NDMA contamination concerns led to market withdrawal in some countries. IP 2022.",
+    },
+    sertraline: {
+      mechanism:
+        "Selective serotonin reuptake inhibitor (SSRI); blocks SERT transporter; increases synaptic serotonin",
+      therapeuticUses: [
+        "Major depressive disorder",
+        "OCD (most studied SSRI)",
+        "Panic disorder",
+        "PTSD",
+        "Social anxiety disorder",
+        "Premenstrual dysphoric disorder",
+      ],
+      notes:
+        "First-line antidepressant; 6–8 week onset of full effect. IP 2022.",
+    },
+    fluoxetine: {
+      mechanism:
+        "SSRI; long half-life (1–6 days) + active metabolite norfluoxetine (4–16 days); inhibits SERT",
+      therapeuticUses: [
+        "Major depressive disorder",
+        "Bulimia nervosa",
+        "OCD",
+        "Panic disorder",
+        "Bipolar depression (with mood stabiliser)",
+      ],
+      notes:
+        "Longest half-life of all SSRIs; minimal discontinuation syndrome. IP 2022.",
+    },
+    lisinopril: {
+      mechanism:
+        "ACE inhibitor; prevents conversion of Ang I to Ang II; reduces vasoconstriction and aldosterone release; increases bradykinin",
+      therapeuticUses: [
+        "Hypertension",
+        "Heart failure — reduces mortality and hospitalisations",
+        "Post-MI cardioprotection",
+        "Diabetic nephropathy",
+      ],
+      notes:
+        "Dry cough in 10–15% due to bradykinin accumulation; switch to ARB if intolerable. IP 2022.",
+    },
+    montelukast: {
+      mechanism:
+        "Selective cysteinyl leukotriene (CysLT1) receptor antagonist; reduces bronchoconstriction and airway inflammation",
+      therapeuticUses: [
+        "Asthma — maintenance and exercise-induced",
+        "Seasonal allergic rhinitis",
+        "Aspirin-exacerbated respiratory disease",
+      ],
+      notes:
+        "Oral, once-daily; well tolerated. Neuropsychiatric adverse events — FDA black box warning (2020). IP 2022.",
+    },
+    clopidogrel: {
+      mechanism:
+        "P2Y12 ADP receptor irreversible antagonist; inhibits platelet aggregation; prodrug activated by CYP2C19",
+      therapeuticUses: [
+        "Acute coronary syndromes — dual antiplatelet therapy with aspirin",
+        "Post-PCI stent thrombosis prevention",
+        "Ischaemic stroke and TIA prevention",
+        "Peripheral arterial disease",
+      ],
+      notes:
+        "Resistance in poor CYP2C19 metabolisers. Bleeding risk; avoid with PPIs (omeprazole). IP 2022.",
+    },
+    rifampicin: {
+      mechanism:
+        "Inhibits DNA-dependent RNA polymerase; bactericidal against rapidly dividing mycobacteria",
+      therapeuticUses: [
+        "Pulmonary tuberculosis — cornerstone of RNTCP regimen",
+        "Leprosy (multidrug therapy)",
+        "Meningococcal prophylaxis",
+        "Legionella, Brucella infections",
+      ],
+      notes:
+        "Strong CYP inducer — multiple drug interactions. Red-orange urine/sweat/tears — harmless. IP 2022 / WHO EML.",
+    },
+    doxycycline: {
+      mechanism:
+        "Tetracycline antibiotic; inhibits 30S ribosomal subunit; bacteriostatic; broad spectrum",
+      therapeuticUses: [
+        "Malaria chemoprophylaxis and treatment (P. falciparum)",
+        "Rickettsia, Chlamydia, Mycoplasma infections",
+        "Lyme disease",
+        "Community-acquired pneumonia",
+        "Acne vulgaris (long-term)",
+      ],
+      notes:
+        "Avoid in children <8 years (dental staining) and pregnancy. Take with plenty of water. IP 2022.",
+    },
+    prednisolone: {
+      mechanism:
+        "Synthetic glucocorticoid; binds GRs; inhibits NF-kB, AP-1; suppresses cytokines, prostaglandins, and immune cell proliferation",
+      therapeuticUses: [
+        "Asthma acute exacerbations",
+        "Rheumatoid arthritis and connective tissue diseases",
+        "Inflammatory bowel disease",
+        "Nephrotic syndrome",
+        "Adrenal insufficiency replacement",
+      ],
+      notes:
+        "Multiple adverse effects with long-term use: osteoporosis, Cushing's, HPA suppression. Taper slowly. IP 2022.",
+    },
+    hydroxychloroquine: {
+      mechanism:
+        "Impairs lysosomal function and antigen presentation; inhibits TLR signalling; modulates cytokine production",
+      therapeuticUses: [
+        "Rheumatoid arthritis — DMARD",
+        "Systemic lupus erythematosus",
+        "Malaria prophylaxis and treatment",
+        "Sjögren's syndrome",
+      ],
+      notes:
+        "Regular ophthalmological monitoring required (retinopathy risk). IP 2022 / WHO EML.",
+    },
+    ivermectin: {
+      mechanism:
+        "Glutamate-gated chloride channel agonist in invertebrates; causes paralysis and death of parasites",
+      therapeuticUses: [
+        "Onchocerciasis (river blindness)",
+        "Lymphatic filariasis (mass drug administration)",
+        "Strongyloidiasis",
+        "Scabies (topical and oral)",
+        "Head lice",
+      ],
+      notes:
+        "WHO EML essential medicine. Avoid in CNS disorders. Not routinely indicated for COVID-19 per WHO/NIH. IP 2022.",
+    },
+  };
+
+// ─── Herb Extracts (for Formulation Lab ingredient picker) ───────────────────
+export const herbExtracts: APIIngredient[] = [
+  {
+    id: "ashwagandha-extract",
+    name: "Ashwagandha Root Extract",
+    cas: "84696-07-1",
+    molecularFormula: "C₂₈H₃₈O₆ (Withaferin A marker)",
+    source: "API Vol. I / IP 2022",
+    therapeuticCategory: "Adaptogen / Rasayana",
+    description:
+      "Standardized root extract of Withania somnifera containing ≥2.5% withanolides; adaptogenic, anti-stress, immunomodulatory, anabolic. Used as Rasayana in Ayurveda.",
+    assayMin: 2.5,
+    assayMax: 5.0,
+    storage: "Cool dry place, below 25°C, protect from light and moisture",
+    solubility: "Freely soluble in ethanol (95%), partially soluble in water",
+    parameters: [
+      {
+        name: "Withanolides (marker)",
+        limit: "NLT 2.5% (as Withanolide A)",
+        method: "HPLC-UV / API Vol. I",
+      },
+      { name: "Loss on drying", limit: "NMT 5.0%", method: "105°C / 2h" },
+      { name: "Total Ash", limit: "NMT 7.0%", method: "IP 2022" },
+      { name: "Heavy metals", limit: "NMT 10 ppm", method: "IP / WHO" },
+    ],
+  },
+  {
+    id: "phytosomal-curcumin",
+    name: "Phytosomal Curcumin Extract",
+    cas: "458-37-7",
+    molecularFormula: "C₂₁H₂₀O₆ (Curcumin)",
+    source: "IP 2022 / Published Literature",
+    therapeuticCategory: "Anti-inflammatory / Antioxidant",
+    description:
+      "Phospholipid-bound (phytosomal) curcumin extract from Curcuma longa rhizomes; ≥95% curcuminoids. 29× better bioavailability than standard curcumin. Anti-inflammatory via NF-kB inhibition.",
+    assayMin: 95.0,
+    assayMax: 100.0,
+    storage:
+      "Store below 25°C, protect from light; hygroscopic — keep container tightly closed",
+    solubility: "Insoluble in water; soluble in ethanol, DMSO, methanol",
+    parameters: [
+      {
+        name: "Total curcuminoids",
+        limit: "NLT 95.0%",
+        method: "HPLC / IP 2022",
+      },
+      { name: "Curcumin (primary)", limit: "NLT 75.0%", method: "HPLC" },
+      { name: "Loss on drying", limit: "NMT 3.0%", method: "105°C / 2h" },
+      { name: "Heavy metals", limit: "NMT 10 ppm", method: "IP" },
+    ],
+  },
+  {
+    id: "reishi-extract",
+    name: "Reishi Mushroom Extract",
+    cas: "84650-60-2",
+    molecularFormula: "C₃₀H₄₄O₇ (Ganoderic acid A marker)",
+    source: "WHO Monograph / Published Literature",
+    therapeuticCategory: "Immunomodulator / Adaptogen",
+    description:
+      "Hot-water and ethanol dual-extraction from Ganoderma lucidum fruiting body; ≥10% polysaccharides (beta-glucans) and ≥1% triterpenes (ganoderic acids). Enhances NK cell and T-cell activity.",
+    assayMin: 10.0,
+    assayMax: 30.0,
+    storage: "Store in cool dry place below 25°C, protect from humidity",
+    solubility:
+      "Polysaccharide fraction: freely soluble in water; triterpene fraction: soluble in ethanol",
+    parameters: [
+      {
+        name: "Beta-glucan polysaccharides",
+        limit: "NLT 10.0%",
+        method: "Phenol-H₂SO₄ colorimetric",
+      },
+      {
+        name: "Triterpenes (ganoderic acids)",
+        limit: "NLT 1.0%",
+        method: "UV-Vis spectrophotometry",
+      },
+      { name: "Loss on drying", limit: "NMT 6.0%", method: "105°C / 2h" },
+      { name: "Heavy metals", limit: "NMT 5 ppm", method: "WHO Guideline" },
+    ],
+  },
+  {
+    id: "guduchi-extract",
+    name: "Guduchi Stem Extract",
+    cas: "94151-94-1",
+    molecularFormula: "C₂₀H₂₂O₄N₂ (Tinosporin marker)",
+    source: "API Vol. I / IP 2022",
+    therapeuticCategory: "Immunomodulator / Antipyretic / Rasayana",
+    description:
+      "Standardized aqueous extract from Tinospora cordifolia stem; ≥2% tinosporin and alkaloid fraction. Immunostimulatory, antipyretic, anti-diabetic, hepatoprotective.",
+    assayMin: 2.0,
+    assayMax: 5.0,
+    storage: "Store below 30°C, away from direct sunlight",
+    solubility:
+      "Freely soluble in water (aqueous extract); partially soluble in methanol",
+    parameters: [
+      {
+        name: "Tinosporin + alkaloid fraction",
+        limit: "NLT 2.0%",
+        method: "HPLC / API Vol. I",
+      },
+      {
+        name: "Total bitter principles",
+        limit: "NLT 1.5% (as berberine equiv.)",
+        method: "Gravimetric",
+      },
+      { name: "Loss on drying", limit: "NMT 5.0%", method: "105°C / 2h" },
+      { name: "Total Ash", limit: "NMT 8.0%", method: "API Vol. I" },
+    ],
+  },
+  {
+    id: "ginger-extract",
+    name: "Ginger Root Extract",
+    cas: "84696-15-1",
+    molecularFormula: "C₁₇H₂₆O₄ ([6]-Gingerol marker)",
+    source: "IP 2022 / API Vol. IV",
+    therapeuticCategory: "Carminative / Anti-emetic / Anti-inflammatory",
+    description:
+      "CO₂ or ethanol extract from Zingiber officinale rhizome; ≥5% gingerols (primarily [6]-gingerol). Anti-emetic, carminative, anti-nausea, anti-inflammatory.",
+    assayMin: 5.0,
+    assayMax: 8.0,
+    storage: "Store below 25°C in airtight container, protect from light",
+    solubility: "Soluble in ethanol and acetone; slightly soluble in water",
+    parameters: [
+      {
+        name: "Total gingerols",
+        limit: "NLT 5.0% (as [6]-gingerol)",
+        method: "HPLC / IP 2022",
+      },
+      { name: "Shogaols", limit: "NMT 3.0%", method: "HPLC" },
+      { name: "Loss on drying", limit: "NMT 4.0%", method: "105°C / 2h" },
+      { name: "Heavy metals", limit: "NMT 10 ppm", method: "IP" },
+    ],
+  },
+  {
+    id: "green-tea-extract",
+    name: "Green Tea Polyphenol Extract",
+    cas: "84650-60-2",
+    molecularFormula: "C₂₂H₁₈O₁₁ (EGCG marker)",
+    source: "BP 2023 / Published Literature",
+    therapeuticCategory: "Antioxidant / Chemoprotective / Cardioprotective",
+    description:
+      "Hot-water extract from Camellia sinensis leaves; ≥95% total polyphenols, ≥45% EGCG (epigallocatechin gallate). Strong antioxidant, anti-carcinogenic, anti-inflammatory, cardioprotective.",
+    assayMin: 95.0,
+    assayMax: 100.0,
+    storage: "Store below 25°C, protect from light and moisture; hygroscopic",
+    solubility: "Freely soluble in water and methanol",
+    parameters: [
+      {
+        name: "Total polyphenols",
+        limit: "NLT 95.0%",
+        method: "Folin-Ciocalteu / BP 2023",
+      },
+      { name: "EGCG content", limit: "NLT 45.0%", method: "HPLC" },
+      { name: "Catechins total", limit: "NLT 60.0%", method: "HPLC" },
+      { name: "Loss on drying", limit: "NMT 4.0%", method: "105°C / 2h" },
+    ],
+  },
+  {
+    id: "mcc-ph102",
+    name: "Microcrystalline Cellulose (PH102)",
+    cas: "9004-34-6",
+    molecularFormula: "(C₆H₁₀O₅)ₙ",
+    source: "IP 2022 / USP-NF",
+    therapeuticCategory: "Filler / Binder (Excipient)",
+    description:
+      "Purified, partially depolymerized cellulose (DP ~220). PH102 grade (larger particle size, ~100 µm) designed for direct compression tableting. Excellent compressibility and flow properties.",
+    assayMin: 97.0,
+    assayMax: 102.0,
+    storage:
+      "Store in cool dry place; hygroscopic — keep container tightly closed",
+    solubility:
+      "Practically insoluble in water, dilute acids, ethanol, and most organic solvents",
+    parameters: [
+      {
+        name: "Assay (as dried basis)",
+        limit: "97.0–102.0%",
+        method: "IP 2022 / USP",
+      },
+      { name: "Loss on drying", limit: "NMT 7.0%", method: "105°C / 1h" },
+      {
+        name: "Particle size (D50)",
+        limit: "90–150 µm",
+        method: "Laser diffraction",
+      },
+      { name: "pH (2% suspension)", limit: "5.0–7.5", method: "IP 2022" },
+    ],
+  },
+  {
+    id: "silicon-dioxide-colloidal",
+    name: "Silicon Dioxide (Colloidal)",
+    cas: "7631-86-9",
+    molecularFormula: "SiO₂",
+    source: "IP 2022 / USP-NF",
+    therapeuticCategory: "Glidant / Anticaking Agent / Adsorbent (Excipient)",
+    description:
+      "Colloidal amorphous silicon dioxide (Aerosil® 200 grade). Highly effective glidant at 0.1–0.5% concentration; improves powder flow and prevents caking in tablet manufacturing.",
+    assayMin: 99.0,
+    assayMax: 100.5,
+    storage: "Store in tightly closed container in cool dry place",
+    solubility:
+      "Practically insoluble in water and most organic solvents; soluble in hot NaOH and HF",
+    parameters: [
+      {
+        name: "Assay (as SiO₂, ignited)",
+        limit: "99.0–100.5%",
+        method: "IP 2022 / USP",
+      },
+      { name: "Loss on drying", limit: "NMT 2.5%", method: "105°C / 2h" },
+      { name: "Loss on ignition", limit: "NMT 2.0%", method: "IP" },
+      { name: "Heavy metals", limit: "NMT 25 ppm", method: "IP 2022" },
+    ],
+  },
+  {
+    id: "magnesium-stearate-form",
+    name: "Magnesium Stearate",
+    cas: "557-04-0",
+    molecularFormula: "C₃₆H₇₀MgO₄",
+    source: "IP 2022 / USP-NF",
+    therapeuticCategory: "Lubricant (Excipient)",
+    description:
+      "Magnesium salt of stearic acid. Most widely used tablet/capsule lubricant at 0.25–1.0%. Reduces friction during compression and ejection. Hydrophobic — excess use impairs dissolution.",
+    assayMin: 98.0,
+    assayMax: 101.5,
+    storage: "Store in cool dry place; avoid moisture and heat",
+    solubility: "Practically insoluble in water and ethanol",
+    parameters: [
+      {
+        name: "Assay (as Mg, dried)",
+        limit: "4.0–5.0% Mg",
+        method: "IP 2022 / USP",
+      },
+      { name: "Loss on drying", limit: "NMT 6.0%", method: "105°C / 2h" },
+      { name: "Microbial count", limit: "NMT 10³ CFU/g", method: "IP 2022" },
+      { name: "Stearic acid content", limit: "NLT 40.0%", method: "GC" },
+    ],
+  },
+];

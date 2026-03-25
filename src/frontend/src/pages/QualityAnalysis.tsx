@@ -45,13 +45,17 @@ import {
   Tooltip,
 } from "recharts";
 import { SemiGauge } from "../components/SemiGauge";
+import { getExcipientCollegeParams } from "../data/excipientCollegeParams";
 import {
   type ExcipientCategory,
   type ExcipientIngredient,
   apiDrugs,
+  apiPharmacologicalEffects,
   excipientCategoryLabels,
   excipientCategoryMap,
 } from "../data/formulationData";
+import { getHerbCollegeParams } from "../data/herbCollegeParams";
+import { getProfileByHerbName } from "../data/pharmacologicalProfiles";
 import {
   type HerbMonograph,
   findHerb,
@@ -74,165 +78,295 @@ const paramLabels: [string, keyof import("../backend.d").AnalysisResult][] = [
   ["Microbial", "microbialOk"],
 ];
 
-// ---- Herb Monograph Detail ----
+// ---- Herb Monograph Detail (College-Level) ----
+
+function SectionHeader({ title }: { title: string }) {
+  return (
+    <div
+      className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider"
+      style={{
+        background: "oklch(0.26 0.065 172)",
+        color: "oklch(0.72 0.168 172)",
+      }}
+    >
+      {title}
+    </div>
+  );
+}
+
+function ParamTable({
+  rows,
+  editField,
+  editValue,
+  setEditValue,
+  startEdit,
+  saveEdit,
+  stopEdit,
+  customVals,
+}: {
+  rows: {
+    label: string;
+    field?: string;
+    range: string;
+    unit: string;
+    reference: string;
+  }[];
+  editField: string | null;
+  editValue: string;
+  setEditValue: (v: string) => void;
+  startEdit: (field: string, current: string) => void;
+  saveEdit: (field: string) => void;
+  stopEdit: () => void;
+  customVals: Record<string, string>;
+}) {
+  return (
+    <table className="w-full text-xs">
+      <thead style={{ background: "oklch(0.24 0.055 170)" }}>
+        <tr>
+          <th className="text-left px-3 py-1.5 text-muted-foreground font-semibold w-[32%]">
+            Parameter
+          </th>
+          <th className="text-left px-3 py-1.5 text-muted-foreground font-semibold">
+            Limit / Range
+          </th>
+          <th className="text-left px-2 py-1.5 text-muted-foreground font-semibold w-[22%]">
+            Unit
+          </th>
+          <th className="text-left px-2 py-1.5 text-muted-foreground font-semibold w-[22%]">
+            Reference
+          </th>
+          <th className="w-6" />
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map(({ label, field, range, unit, reference }, i) => {
+          const isEditing = field && editField === field;
+          const displayRange =
+            field && customVals[field] !== undefined
+              ? customVals[field]
+              : range;
+          return (
+            <tr
+              key={label}
+              style={{
+                background:
+                  i % 2 === 0 ? "oklch(0.22 0.052 170)" : "transparent",
+                borderTop: "1px solid oklch(0.32 0.065 172 / 0.2)",
+              }}
+            >
+              <td className="px-3 py-1.5 text-foreground">{label}</td>
+              <td className="px-3 py-1.5">
+                {isEditing ? (
+                  <span className="flex items-center gap-1">
+                    <input
+                      type="text"
+                      value={editValue}
+                      onChange={(e) => setEditValue(e.target.value)}
+                      className="w-24 px-1.5 py-0.5 rounded text-xs"
+                      style={{
+                        background: "oklch(0.28 0.060 170)",
+                        border: "1px solid oklch(0.72 0.130 78 / 0.5)",
+                        color: "oklch(0.94 0.018 162)",
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => saveEdit(field!)}
+                      className="text-green-400 hover:text-green-300"
+                    >
+                      <Save size={12} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={stopEdit}
+                      className="text-muted-foreground hover:text-foreground"
+                    >
+                      <X size={12} />
+                    </button>
+                  </span>
+                ) : (
+                  <span
+                    style={{
+                      color:
+                        field && customVals[field] !== undefined
+                          ? "oklch(0.72 0.130 78)"
+                          : "oklch(0.64 0.168 145)",
+                    }}
+                  >
+                    {displayRange}
+                  </span>
+                )}
+              </td>
+              <td className="px-2 py-1.5 text-muted-foreground text-[10px]">
+                {unit}
+              </td>
+              <td
+                className="px-2 py-1.5 text-[10px]"
+                style={{ color: "oklch(0.60 0.168 245)" }}
+              >
+                {reference}
+              </td>
+              <td className="px-1 py-1.5 text-center">
+                {field && !isEditing && (
+                  <button
+                    type="button"
+                    onClick={() => startEdit(field, displayRange)}
+                    className="text-muted-foreground hover:text-foreground opacity-40 hover:opacity-100"
+                  >
+                    <Pencil size={10} />
+                  </button>
+                )}
+              </td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
+  );
+}
+
 function MonographDetail({ herb }: { herb: HerbMonograph }) {
   const [editField, setEditField] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
-  const [customVals, setCustomVals] = useState<Record<string, number>>(() => {
-    const c = getCustomRef(herb.id);
-    return (c as Record<string, number>) || {};
-  });
-  const hasCustom = Object.keys(customVals).length > 0;
-
-  const startEdit = (field: string, current: number) => {
-    setEditField(field);
-    setEditValue(String(current));
-  };
-
-  const saveEdit = (field: string) => {
-    const val = Number.parseFloat(editValue);
-    if (!Number.isNaN(val)) {
-      const updated = { ...customVals, [field]: val };
-      setCustomVals(updated);
-      saveCustomRef(
-        herb.id,
-        updated as unknown as Partial<HerbMonograph["parameters"]>,
-      );
+  const [customVals, setCustomVals] = useState<Record<string, string>>(() => {
+    try {
+      const stored = localStorage.getItem(`ayurnexis_college_ref_${herb.id}`);
+      return stored ? JSON.parse(stored) : {};
+    } catch {
+      return {};
     }
+  });
+
+  const hasCustom = Object.keys(customVals).length > 0;
+  const cp = getHerbCollegeParams(herb.id);
+
+  const startEdit = (field: string, current: string) => {
+    setEditField(field);
+    setEditValue(current);
+  };
+  const saveEdit = (field: string) => {
+    const updated = { ...customVals, [field]: editValue };
+    setCustomVals(updated);
+    localStorage.setItem(
+      `ayurnexis_college_ref_${herb.id}`,
+      JSON.stringify(updated),
+    );
     setEditField(null);
   };
-
+  const stopEdit = () => setEditField(null);
   const resetCustom = () => {
     setCustomVals({});
-    localStorage.removeItem(`ayurnexis_custom_ref_${herb.id}`);
+    localStorage.removeItem(`ayurnexis_college_ref_${herb.id}`);
   };
 
-  const p = herb.parameters;
-
-  const rows: {
-    label: string;
-    field: string;
-    value: number;
-    unit: string;
-    isMin?: boolean;
-  }[] = [
-    {
-      label: "Moisture",
-      field: "moisture",
-      value: customVals.moisture ?? p.moisture.max,
-      unit: "% max",
-    },
-    {
-      label: "Total Ash",
-      field: "totalAsh",
-      value: customVals.totalAsh ?? p.totalAsh.max,
-      unit: "% max",
-    },
-    {
-      label: "Acid-Insoluble Ash",
-      field: "acidInsolubleAsh",
-      value: customVals.acidInsolubleAsh ?? p.acidInsolubleAsh.max,
-      unit: "% max",
-    },
-    {
-      label: "Water-Sol. Extractive",
-      field: "waterSolubleExtractive",
-      value: customVals.waterSolubleExtractive ?? p.waterSolubleExtractive.min,
-      unit: "% min",
-      isMin: true,
-    },
-    {
-      label: "Alcohol-Sol. Extractive",
-      field: "alcoholSolubleExtractive",
-      value:
-        customVals.alcoholSolubleExtractive ?? p.alcoholSolubleExtractive.min,
-      unit: "% min",
-      isMin: true,
-    },
-    {
-      label: "Lead (Pb)",
-      field: "lead",
-      value: customVals.lead ?? p.heavyMetals.lead.max,
-      unit: "ppm max",
-    },
-    {
-      label: "Arsenic (As)",
-      field: "arsenic",
-      value: customVals.arsenic ?? p.heavyMetals.arsenic.max,
-      unit: "ppm max",
-    },
-    {
-      label: "Mercury (Hg)",
-      field: "mercury",
-      value: customVals.mercury ?? p.heavyMetals.mercury.max,
-      unit: "ppm max",
-    },
-    {
-      label: "Cadmium (Cd)",
-      field: "cadmium",
-      value: customVals.cadmium ?? p.heavyMetals.cadmium.max,
-      unit: "ppm max",
-    },
-    {
-      label: "Total Aerobic Count",
-      field: "totalAerobicCount",
-      value: customVals.totalAerobicCount ?? p.microbial.totalAerobicCount.max,
-      unit: "CFU/g max",
-    },
-    {
-      label: "Yeast & Mold",
-      field: "yeastMold",
-      value: customVals.yeastMold ?? p.microbial.yeastMold.max,
-      unit: "CFU/g max",
-    },
-    {
-      label: "Foreign Matter",
-      field: "foreignMatter",
-      value: customVals.foreignMatter ?? p.foreignMatter.max,
-      unit: "% max",
-    },
-    {
-      label: "Loss on Drying",
-      field: "lossOnDrying",
-      value: customVals.lossOnDrying ?? p.lossOnDrying.max,
-      unit: "% max",
-    },
-    ...(p.volatileOil
-      ? [
-          {
-            label: "Volatile Oil",
-            field: "volatileOil",
-            value: customVals.volatileOil ?? p.volatileOil.min,
-            unit: "% v/w min",
-            isMin: true,
-          },
-        ]
-      : []),
-    ...(p.activeMarker
-      ? [
-          {
-            label: `Active Marker (${p.activeMarker.compound})`,
-            field: "activeMarker",
-            value: customVals.activeMarker ?? p.activeMarker.min,
-            unit: "% min",
-            isMin: true,
-          },
-        ]
-      : []),
-  ];
+  // Fallback: use old parameters if no college params available
+  if (!cp) {
+    const p = herb.parameters;
+    return (
+      <div className="mt-3">
+        <div className="text-xs text-muted-foreground mb-2">
+          Source:{" "}
+          <span
+            className="font-semibold"
+            style={{ color: "oklch(0.72 0.130 78)" }}
+          >
+            {herb.source}
+          </span>{" "}
+          · Part: <span className="text-foreground">{herb.part}</span>
+        </div>
+        <div
+          className="rounded-lg overflow-hidden"
+          style={{ border: "1px solid oklch(0.32 0.065 172 / 0.3)" }}
+        >
+          <table className="w-full text-xs">
+            <thead style={{ background: "oklch(0.24 0.055 170)" }}>
+              <tr>
+                <th className="text-left px-3 py-2 text-muted-foreground font-semibold">
+                  Parameter
+                </th>
+                <th className="text-right px-3 py-2 text-muted-foreground font-semibold">
+                  Limit
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {[
+                { label: "Moisture (LoD)", v: `NMT ${p.moisture.max}%` },
+                { label: "Total Ash", v: `NMT ${p.totalAsh.max}%` },
+                {
+                  label: "Acid-Insoluble Ash",
+                  v: `NMT ${p.acidInsolubleAsh.max}%`,
+                },
+                {
+                  label: "Water-Sol. Extractive",
+                  v: `NLT ${p.waterSolubleExtractive.min}%`,
+                },
+                {
+                  label: "Alcohol-Sol. Extractive",
+                  v: `NLT ${p.alcoholSolubleExtractive.min}%`,
+                },
+                { label: "Foreign Matter", v: `NMT ${p.foreignMatter.max}%` },
+              ].map(({ label, v }, i) => (
+                <tr
+                  key={label}
+                  style={{
+                    background:
+                      i % 2 === 0 ? "oklch(0.22 0.052 170)" : "transparent",
+                    borderTop: "1px solid oklch(0.32 0.065 172 / 0.2)",
+                  }}
+                >
+                  <td className="px-3 py-1.5 text-foreground">{label}</td>
+                  <td
+                    className="px-3 py-1.5 text-right"
+                    style={{ color: "oklch(0.64 0.168 145)" }}
+                  >
+                    {v}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="mt-3">
-      <div className="flex items-center justify-between mb-2">
-        <div className="text-xs text-muted-foreground">
-          Source: <span className="text-gold font-semibold">{herb.source}</span>{" "}
-          · Part used: <span className="text-foreground">{herb.part}</span>
-        </div>
+    <div className="mt-2 space-y-0">
+      {/* Header: Categorical Info */}
+      <div className="flex flex-wrap items-center gap-1.5 mb-2">
+        <span
+          className="text-[10px] px-2 py-0.5 rounded-full font-medium"
+          style={{
+            background: "oklch(0.26 0.065 172)",
+            color: "oklch(0.80 0.120 172)",
+          }}
+        >
+          🌿 {cp.categoricalInfo.plantPart}
+        </span>
+        <span
+          className="text-[10px] px-2 py-0.5 rounded-full font-medium"
+          style={{
+            background: "oklch(0.60 0.168 245 / 0.15)",
+            color: "oklch(0.60 0.168 245)",
+          }}
+        >
+          📚 {cp.categoricalInfo.source}
+        </span>
+        <span
+          className="text-[10px] px-2 py-0.5 rounded-full font-medium"
+          style={{
+            background: "oklch(0.72 0.130 78 / 0.12)",
+            color: "oklch(0.72 0.130 78)",
+          }}
+        >
+          💊 {cp.categoricalInfo.form}
+        </span>
         {hasCustom && (
           <button
             type="button"
             onClick={resetCustom}
-            className="text-[10px] text-destructive hover:text-red-400 flex items-center gap-1"
+            className="ml-auto text-[10px] text-destructive hover:text-red-400 flex items-center gap-1"
           >
             <X size={10} /> Reset custom
           </button>
@@ -241,13 +375,13 @@ function MonographDetail({ herb }: { herb: HerbMonograph }) {
 
       {hasCustom && (
         <div
-          className="mb-2 px-2 py-1 rounded text-[10px] flex items-center gap-1.5"
+          className="mb-1.5 px-2 py-1 rounded text-[10px] flex items-center gap-1.5"
           style={{
             background: "oklch(0.72 0.130 78 / 0.10)",
             color: "oklch(0.72 0.130 78)",
           }}
         >
-          <Pencil size={10} /> Custom values active for this herb
+          <Pencil size={10} /> Custom values active
         </div>
       )}
 
@@ -255,22 +389,33 @@ function MonographDetail({ herb }: { herb: HerbMonograph }) {
         className="rounded-lg overflow-hidden"
         style={{ border: "1px solid oklch(0.32 0.065 172 / 0.3)" }}
       >
+        {/* Organoleptic Parameters */}
+        <SectionHeader title="Organoleptic Parameters" />
         <table className="w-full text-xs">
           <thead style={{ background: "oklch(0.24 0.055 170)" }}>
             <tr>
-              <th className="text-left px-3 py-2 text-muted-foreground font-semibold">
+              <th className="text-left px-3 py-1.5 text-muted-foreground font-semibold w-[32%]">
                 Parameter
               </th>
-              <th className="text-right px-3 py-2 text-muted-foreground font-semibold">
-                Limit
+              <th className="text-left px-3 py-1.5 text-muted-foreground font-semibold">
+                Standard Description
               </th>
-              <th className="w-8" />
+              <th className="text-left px-2 py-1.5 text-muted-foreground font-semibold w-[18%]">
+                Reference
+              </th>
             </tr>
           </thead>
           <tbody>
-            {rows.map(({ label, field, value, unit }, i) => (
+            {(
+              [
+                ["Color", cp.organoleptic.color],
+                ["Odor", cp.organoleptic.odor],
+                ["Taste", cp.organoleptic.taste],
+                ["Texture", cp.organoleptic.texture],
+              ] as [string, typeof cp.organoleptic.color][]
+            ).map(([label, param], i) => (
               <tr
-                key={field}
+                key={label}
                 style={{
                   background:
                     i % 2 === 0 ? "oklch(0.22 0.052 170)" : "transparent",
@@ -278,75 +423,539 @@ function MonographDetail({ herb }: { herb: HerbMonograph }) {
                 }}
               >
                 <td className="px-3 py-1.5 text-foreground">{label}</td>
-                <td className="px-3 py-1.5 text-right">
-                  {editField === field ? (
-                    <span className="flex items-center justify-end gap-1">
-                      <input
-                        type="number"
-                        step="any"
-                        value={editValue}
-                        onChange={(e) => setEditValue(e.target.value)}
-                        className="w-20 text-right px-1.5 py-0.5 rounded text-xs"
-                        style={{
-                          background: "oklch(0.28 0.060 170)",
-                          border: "1px solid oklch(0.72 0.130 78 / 0.5)",
-                          color: "oklch(0.94 0.018 162)",
-                        }}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => saveEdit(field)}
-                        className="text-green-400 hover:text-green-300"
-                      >
-                        <Save size={12} />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setEditField(null)}
-                        className="text-muted-foreground hover:text-foreground"
-                      >
-                        <X size={12} />
-                      </button>
-                    </span>
-                  ) : (
-                    <span
-                      style={{
-                        color:
-                          customVals[field] !== undefined
-                            ? "oklch(0.72 0.130 78)"
-                            : "oklch(0.64 0.168 145)",
-                      }}
-                    >
-                      {value}{" "}
-                      <span className="text-muted-foreground">{unit}</span>
-                    </span>
-                  )}
+                <td className="px-3 py-1.5 text-foreground/90">
+                  {param.value}{" "}
+                  <span className="text-muted-foreground text-[10px]">
+                    ({param.unit})
+                  </span>
                 </td>
-                <td className="px-1 py-1.5 text-center">
-                  {editField !== field && (
-                    <button
-                      type="button"
-                      onClick={() => startEdit(field, value)}
-                      className="text-muted-foreground hover:text-foreground opacity-50 hover:opacity-100"
-                    >
-                      <Pencil size={10} />
-                    </button>
-                  )}
+                <td
+                  className="px-2 py-1.5 text-[10px]"
+                  style={{ color: "oklch(0.60 0.168 245)" }}
+                >
+                  {param.reference}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+        {/* Physicochemical Parameters */}
+        <SectionHeader title="Physicochemical Parameters" />
+        <ParamTable
+          rows={[
+            {
+              label: "Moisture Content (LoD)",
+              field: "moistureContent",
+              range: cp.physicochemical.moistureContent.range,
+              unit: cp.physicochemical.moistureContent.unit,
+              reference: cp.physicochemical.moistureContent.reference,
+            },
+            {
+              label: "Total Ash",
+              field: "totalAsh",
+              range: cp.physicochemical.totalAsh.range,
+              unit: cp.physicochemical.totalAsh.unit,
+              reference: cp.physicochemical.totalAsh.reference,
+            },
+            {
+              label: "Acid-Insoluble Ash",
+              field: "acidInsolubleAsh",
+              range: cp.physicochemical.acidInsolubleAsh.range,
+              unit: cp.physicochemical.acidInsolubleAsh.unit,
+              reference: cp.physicochemical.acidInsolubleAsh.reference,
+            },
+            {
+              label: "Water-Soluble Extractive",
+              field: "waterSolubleExtractive",
+              range: cp.physicochemical.waterSolubleExtractive.range,
+              unit: cp.physicochemical.waterSolubleExtractive.unit,
+              reference: cp.physicochemical.waterSolubleExtractive.reference,
+            },
+            {
+              label: "Alcohol-Soluble Extractive",
+              field: "alcoholSolubleExtractive",
+              range: cp.physicochemical.alcoholSolubleExtractive.range,
+              unit: cp.physicochemical.alcoholSolubleExtractive.unit,
+              reference: cp.physicochemical.alcoholSolubleExtractive.reference,
+            },
+            {
+              label: "pH",
+              field: "pH",
+              range: cp.physicochemical.pH.range,
+              unit: cp.physicochemical.pH.unit,
+              reference: cp.physicochemical.pH.reference,
+            },
+          ]}
+          editField={editField}
+          editValue={editValue}
+          setEditValue={setEditValue}
+          startEdit={startEdit}
+          saveEdit={saveEdit}
+          stopEdit={stopEdit}
+          customVals={customVals}
+        />
+
+        {/* Basic Evaluation Tests */}
+        <SectionHeader title="Basic Evaluation Tests" />
+        <ParamTable
+          rows={[
+            {
+              label: "Foreign Matter %",
+              field: "foreignMatter",
+              range: cp.basicEvaluation.foreignMatter.range,
+              unit: cp.basicEvaluation.foreignMatter.unit,
+              reference: cp.basicEvaluation.foreignMatter.reference,
+            },
+            {
+              label: "Extract Yield %",
+              field: "extractYield",
+              range: cp.basicEvaluation.extractYield.range,
+              unit: cp.basicEvaluation.extractYield.unit,
+              reference: cp.basicEvaluation.extractYield.reference,
+            },
+          ]}
+          editField={editField}
+          editValue={editValue}
+          setEditValue={setEditValue}
+          startEdit={startEdit}
+          saveEdit={saveEdit}
+          stopEdit={stopEdit}
+          customVals={customVals}
+        />
+
+        {/* Phytochemical Screening */}
+        <SectionHeader title="Preliminary Phytochemical Screening" />
+        <div
+          className="px-3 py-2.5 flex flex-wrap gap-2"
+          style={{ background: "oklch(0.21 0.050 170)" }}
+        >
+          {(
+            [
+              ["Alkaloids", cp.phytochemicalScreening.alkaloids],
+              ["Flavonoids", cp.phytochemicalScreening.flavonoids],
+              ["Tannins", cp.phytochemicalScreening.tannins],
+              ["Saponins", cp.phytochemicalScreening.saponins],
+            ] as [string, typeof cp.phytochemicalScreening.alkaloids][]
+          ).map(([name, val]) => (
+            <div key={name} className="flex flex-col items-center gap-0.5">
+              <span
+                className="text-[10px] font-semibold px-2.5 py-1 rounded-full"
+                style={
+                  val.result === "Present"
+                    ? {
+                        background: "oklch(0.35 0.100 145)",
+                        color: "oklch(0.85 0.168 145)",
+                      }
+                    : {
+                        background: "oklch(0.28 0.030 200)",
+                        color: "oklch(0.60 0.030 200)",
+                      }
+                }
+              >
+                {name}: {val.result}
+              </span>
+              <span className="text-[9px] text-muted-foreground">
+                {val.reference}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+      <MonographPharmWrapper herb={herb} />
+    </div>
+  );
+}
+
+function MonographPharmWrapper({
+  herb,
+}: { herb: import("../data/pharmacopeiaData").HerbMonograph }) {
+  return <HerbPharmacologicalProfile herbName={herb.name} />;
+}
+
+// ---- Excipient / API College-Level Detail ----
+
+function HerbPharmacologicalProfile({ herbName }: { herbName: string }) {
+  const profile = getProfileByHerbName(herbName);
+  if (!profile) return null;
+  return (
+    <div
+      className="mt-3 rounded-lg overflow-hidden"
+      style={{ border: "1px solid oklch(0.72 0.130 78 / 0.3)" }}
+    >
+      <div
+        className="px-3 py-2"
+        style={{ background: "oklch(0.72 0.130 78 / 0.12)" }}
+      >
+        <span
+          className="text-[11px] font-bold uppercase tracking-wider"
+          style={{ color: "oklch(0.72 0.130 78)" }}
+        >
+          🔬 Pharmacological Profile
+        </span>
+      </div>
+      <div
+        className="px-3 py-2.5 space-y-2"
+        style={{ background: "oklch(0.21 0.050 170)" }}
+      >
+        <div>
+          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-0.5">
+            Mechanism / Active Constituents
+          </p>
+          <p className="text-xs text-foreground/90">
+            {profile.phytochemicals.map((p) => p.name).join(", ") ||
+              "See pharmacopoeia monograph"}
+          </p>
+          {profile.phytochemicals[0] && (
+            <p className="text-[10px] text-muted-foreground mt-0.5">
+              {profile.phytochemicals[0].mechanism}
+            </p>
+          )}
+        </div>
+        <div>
+          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-0.5">
+            Therapeutic Uses
+          </p>
+          <ul className="space-y-0.5">
+            {profile.therapeuticUses.slice(0, 5).map((use) => (
+              <li
+                key={use.substring(0, 30)}
+                className="text-[11px] text-foreground/80 flex gap-1.5"
+              >
+                <span style={{ color: "oklch(0.72 0.130 78)" }}>•</span>
+                <span>{use}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+        {profile.modernEvidence.length > 0 && (
+          <div>
+            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-0.5">
+              Modern Evidence
+            </p>
+            <ul className="space-y-0.5">
+              {profile.modernEvidence.slice(0, 3).map((ev) => (
+                <li
+                  key={ev.substring(0, 30)}
+                  className="text-[11px] text-muted-foreground flex gap-1.5"
+                >
+                  <span style={{ color: "oklch(0.60 0.168 245)" }}>📄</span>
+                  <span>{ev}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        <div className="flex flex-wrap gap-1 pt-0.5">
+          <span
+            className="text-[10px] px-1.5 py-0.5 rounded"
+            style={{
+              background: "oklch(0.64 0.168 145 / 0.15)",
+              color: "oklch(0.64 0.168 145)",
+            }}
+          >
+            Ref: {profile.pharmacopeiaRef}
+          </span>
+          <span
+            className="text-[10px] px-1.5 py-0.5 rounded"
+            style={{
+              background:
+                profile.riskLevel === "Low"
+                  ? "oklch(0.64 0.168 145 / 0.15)"
+                  : "oklch(0.72 0.130 78 / 0.15)",
+              color:
+                profile.riskLevel === "Low"
+                  ? "oklch(0.64 0.168 145)"
+                  : "oklch(0.72 0.130 78)",
+            }}
+          >
+            Risk: {profile.riskLevel}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function APIPharmacologicalProfile({ apiId }: { apiId: string }) {
+  const profile = apiPharmacologicalEffects[apiId];
+  if (!profile) return null;
+  return (
+    <div
+      className="mt-3 rounded-lg overflow-hidden"
+      style={{ border: "1px solid oklch(0.60 0.168 245 / 0.3)" }}
+    >
+      <div
+        className="px-3 py-2"
+        style={{ background: "oklch(0.60 0.168 245 / 0.12)" }}
+      >
+        <span
+          className="text-[11px] font-bold uppercase tracking-wider"
+          style={{ color: "oklch(0.60 0.168 245)" }}
+        >
+          💊 Pharmacological Profile
+        </span>
+      </div>
+      <div
+        className="px-3 py-2.5 space-y-2"
+        style={{ background: "oklch(0.21 0.050 170)" }}
+      >
+        <div>
+          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-0.5">
+            Mechanism of Action
+          </p>
+          <p className="text-xs text-foreground/90">{profile.mechanism}</p>
+        </div>
+        <div>
+          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-0.5">
+            Therapeutic Uses
+          </p>
+          <ul className="space-y-0.5">
+            {profile.therapeuticUses.map((use) => (
+              <li
+                key={use.substring(0, 30)}
+                className="text-[11px] text-foreground/80 flex gap-1.5"
+              >
+                <span style={{ color: "oklch(0.60 0.168 245)" }}>•</span>
+                <span>{use}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+        {profile.notes && (
+          <div
+            className="text-[10px] text-muted-foreground italic border-t pt-1.5"
+            style={{ borderColor: "oklch(0.32 0.065 172 / 0.3)" }}
+          >
+            📝 {profile.notes}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ExcipientDetail({ id, source }: { id: string; source: string }) {
+  const cp = getExcipientCollegeParams(id);
+  if (!cp) {
+    return (
+      <div className="px-3 py-2 text-xs text-muted-foreground italic">
+        College-level parameters not available. Source: {source}
+      </div>
+    );
+  }
+  return (
+    <div className="space-y-0">
+      {/* Categorical Info */}
+      <div
+        className="px-3 py-2 flex flex-wrap gap-1.5"
+        style={{ background: "oklch(0.21 0.050 170)" }}
+      >
+        <span
+          className="text-[10px] px-2 py-0.5 rounded-full font-medium"
+          style={{
+            background: "oklch(0.26 0.065 172)",
+            color: "oklch(0.80 0.120 172)",
+          }}
+        >
+          🧪 {cp.categoricalInfo.chemicalClass}
+        </span>
+        <span
+          className="text-[10px] px-2 py-0.5 rounded-full font-medium"
+          style={{
+            background: "oklch(0.60 0.168 245 / 0.15)",
+            color: "oklch(0.60 0.168 245)",
+          }}
+        >
+          📚 {cp.categoricalInfo.source}
+        </span>
+        <span
+          className="text-[10px] px-2 py-0.5 rounded-full font-medium"
+          style={{
+            background: "oklch(0.72 0.130 78 / 0.12)",
+            color: "oklch(0.72 0.130 78)",
+          }}
+        >
+          💊 {cp.categoricalInfo.form}
+        </span>
+      </div>
+      <div
+        className="rounded-b-lg overflow-hidden"
+        style={{
+          border: "1px solid oklch(0.32 0.065 172 / 0.3)",
+          borderTop: "none",
+        }}
+      >
+        {/* Organoleptic */}
+        <SectionHeader title="Organoleptic Parameters" />
+        <table className="w-full text-xs">
+          <thead style={{ background: "oklch(0.24 0.055 170)" }}>
+            <tr>
+              <th className="text-left px-3 py-1.5 text-muted-foreground font-semibold w-[28%]">
+                Parameter
+              </th>
+              <th className="text-left px-3 py-1.5 text-muted-foreground font-semibold">
+                Standard Description
+              </th>
+              <th className="text-left px-2 py-1.5 text-muted-foreground font-semibold w-[20%]">
+                Reference
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {(
+              [
+                ["Color", cp.organoleptic.color],
+                ["Odor", cp.organoleptic.odor],
+                ["Taste", cp.organoleptic.taste],
+                ["Texture", cp.organoleptic.texture],
+              ] as [string, typeof cp.organoleptic.color][]
+            ).map(([label, param], i) => (
+              <tr
+                key={label}
+                style={{
+                  background:
+                    i % 2 === 0 ? "oklch(0.22 0.052 170)" : "transparent",
+                  borderTop: "1px solid oklch(0.32 0.065 172 / 0.2)",
+                }}
+              >
+                <td className="px-3 py-1.5 text-foreground">{label}</td>
+                <td className="px-3 py-1.5 text-foreground/90">
+                  {param.value}{" "}
+                  <span className="text-muted-foreground text-[10px]">
+                    ({param.unit})
+                  </span>
+                </td>
+                <td
+                  className="px-2 py-1.5 text-[10px]"
+                  style={{ color: "oklch(0.60 0.168 245)" }}
+                >
+                  {param.reference}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {/* Physicochemical */}
+        <SectionHeader title="Physicochemical Parameters" />
+        <table className="w-full text-xs">
+          <thead style={{ background: "oklch(0.24 0.055 170)" }}>
+            <tr>
+              <th className="text-left px-3 py-1.5 text-muted-foreground font-semibold w-[28%]">
+                Parameter
+              </th>
+              <th className="text-left px-3 py-1.5 text-muted-foreground font-semibold">
+                Limit / Range
+              </th>
+              <th className="text-left px-2 py-1.5 text-muted-foreground font-semibold w-[14%]">
+                Unit
+              </th>
+              <th className="text-left px-2 py-1.5 text-muted-foreground font-semibold w-[18%]">
+                Reference
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {[
+              {
+                label: "Moisture Content (LoD)",
+                d: cp.physicochemical.moistureContent,
+              },
+              ...(cp.physicochemical.totalAsh
+                ? [{ label: "Total Ash", d: cp.physicochemical.totalAsh }]
+                : []),
+              { label: "pH", d: cp.physicochemical.pH },
+              { label: "Solubility", d: cp.physicochemical.solubility },
+            ].map(({ label, d }, i) => (
+              <tr
+                key={label}
+                style={{
+                  background:
+                    i % 2 === 0 ? "oklch(0.22 0.052 170)" : "transparent",
+                  borderTop: "1px solid oklch(0.32 0.065 172 / 0.2)",
+                }}
+              >
+                <td className="px-3 py-1.5 text-foreground">{label}</td>
+                <td
+                  className="px-3 py-1.5"
+                  style={{ color: "oklch(0.64 0.168 145)" }}
+                >
+                  {(d as any).range ?? (d as any).value}
+                </td>
+                <td className="px-2 py-1.5 text-muted-foreground text-[10px]">
+                  {d.unit}
+                </td>
+                <td
+                  className="px-2 py-1.5 text-[10px]"
+                  style={{ color: "oklch(0.60 0.168 245)" }}
+                >
+                  {d.reference}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {/* Assay/Purity */}
+        <SectionHeader title="Basic Evaluation / Assay" />
+        <table className="w-full text-xs">
+          <thead style={{ background: "oklch(0.24 0.055 170)" }}>
+            <tr>
+              <th className="text-left px-3 py-1.5 text-muted-foreground font-semibold w-[28%]">
+                Parameter
+              </th>
+              <th className="text-left px-3 py-1.5 text-muted-foreground font-semibold">
+                Limit / Range
+              </th>
+              <th className="text-left px-2 py-1.5 text-muted-foreground font-semibold w-[20%]">
+                Unit
+              </th>
+              <th className="text-left px-2 py-1.5 text-muted-foreground font-semibold w-[18%]">
+                Reference
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {[
+              ...(cp.basicEvaluation.foreignMatter
+                ? [
+                    {
+                      label: "Foreign Matter",
+                      d: cp.basicEvaluation.foreignMatter,
+                    },
+                  ]
+                : []),
+              { label: "Assay / Purity", d: cp.basicEvaluation.assayPurity },
+            ].map(({ label, d }, i) => (
+              <tr
+                key={label}
+                style={{
+                  background:
+                    i % 2 === 0 ? "oklch(0.22 0.052 170)" : "transparent",
+                  borderTop: "1px solid oklch(0.32 0.065 172 / 0.2)",
+                }}
+              >
+                <td className="px-3 py-1.5 text-foreground">{label}</td>
+                <td
+                  className="px-3 py-1.5"
+                  style={{ color: "oklch(0.64 0.168 145)" }}
+                >
+                  {d.range}
+                </td>
+                <td className="px-2 py-1.5 text-muted-foreground text-[10px]">
+                  {d.unit}
+                </td>
+                <td
+                  className="px-2 py-1.5 text-[10px]"
+                  style={{ color: "oklch(0.60 0.168 245)" }}
+                >
+                  {d.reference}
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-
-      <div className="mt-2 space-y-1 text-[10px] text-muted-foreground">
-        <div>
-          E. coli:{" "}
-          <span className="text-destructive font-semibold">Absent</span> ·
-          Salmonella:{" "}
-          <span className="text-destructive font-semibold">Absent</span>
-        </div>
-      </div>
+      <APIPharmacologicalProfile apiId={id} />
     </div>
   );
 }
@@ -1477,82 +2086,12 @@ export function QualityAnalysis() {
                             className="overflow-hidden"
                           >
                             <div
-                              className="px-3 py-3 space-y-2 text-xs"
                               style={{ background: "oklch(0.21 0.050 170)" }}
                             >
-                              <div className="grid grid-cols-2 gap-2">
-                                <div>
-                                  <span className="text-muted-foreground">
-                                    CAS:
-                                  </span>{" "}
-                                  <span className="text-foreground font-mono">
-                                    {api.cas}
-                                  </span>
-                                </div>
-                                <div>
-                                  <span className="text-muted-foreground">
-                                    Formula:
-                                  </span>{" "}
-                                  <span className="text-foreground font-mono">
-                                    {api.molecularFormula}
-                                  </span>
-                                </div>
-                                <div>
-                                  <span className="text-muted-foreground">
-                                    Assay:
-                                  </span>{" "}
-                                  <span className="text-foreground">
-                                    {api.assayMin}–{api.assayMax}%
-                                  </span>
-                                </div>
-                                <div>
-                                  <span className="text-muted-foreground">
-                                    Source:
-                                  </span>{" "}
-                                  <span className="text-foreground">
-                                    {api.source}
-                                  </span>
-                                </div>
-                              </div>
-                              <div>
-                                <span className="text-muted-foreground">
-                                  Solubility:
-                                </span>{" "}
-                                <span className="text-foreground">
-                                  {api.solubility}
-                                </span>
-                              </div>
-                              <div>
-                                <span className="text-muted-foreground">
-                                  Storage:
-                                </span>{" "}
-                                <span className="text-foreground">
-                                  {api.storage}
-                                </span>
-                              </div>
-                              <div className="text-foreground/80 italic">
-                                {api.description}
-                              </div>
-                              {api.parameters.length > 0 && (
-                                <div>
-                                  <div className="text-muted-foreground font-semibold mb-1">
-                                    Test Parameters:
-                                  </div>
-                                  {api.parameters.map((p) => (
-                                    <div
-                                      key={p.name}
-                                      className="flex justify-between py-0.5 border-b border-border/20"
-                                    >
-                                      <span className="text-foreground">
-                                        {p.name}
-                                      </span>
-                                      <span className="text-muted-foreground">
-                                        {p.limit} ({p.method})
-                                      </span>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
+                              <ExcipientDetail
+                                id={api.id}
+                                source={api.source}
+                              />
                             </div>
                           </motion.div>
                         )}
@@ -1639,62 +2178,12 @@ export function QualityAnalysis() {
                             className="overflow-hidden"
                           >
                             <div
-                              className="px-3 py-3 space-y-2 text-xs"
                               style={{ background: "oklch(0.21 0.050 170)" }}
                             >
-                              <div className="grid grid-cols-2 gap-2">
-                                <div>
-                                  <span className="text-muted-foreground">
-                                    CAS:
-                                  </span>{" "}
-                                  <span className="text-foreground font-mono">
-                                    {excip.cas}
-                                  </span>
-                                </div>
-                                <div>
-                                  <span className="text-muted-foreground">
-                                    Assay:
-                                  </span>{" "}
-                                  <span className="text-foreground">
-                                    {excip.assayMin}–{excip.assayMax}
-                                  </span>
-                                </div>
-                                <div>
-                                  <span className="text-muted-foreground">
-                                    Source:
-                                  </span>{" "}
-                                  <span className="text-foreground">
-                                    {excip.source}
-                                  </span>
-                                </div>
-                                <div>
-                                  <span className="text-muted-foreground">
-                                    Typical use:
-                                  </span>{" "}
-                                  <span className="text-foreground">
-                                    {excip.typicalUse}
-                                  </span>
-                                </div>
-                              </div>
-                              <div>
-                                <span className="text-muted-foreground">
-                                  Solubility:
-                                </span>{" "}
-                                <span className="text-foreground">
-                                  {excip.solubility}
-                                </span>
-                              </div>
-                              <div>
-                                <span className="text-muted-foreground">
-                                  Storage:
-                                </span>{" "}
-                                <span className="text-foreground">
-                                  {excip.storage}
-                                </span>
-                              </div>
-                              <div className="text-foreground/80 italic">
-                                {excip.description}
-                              </div>
+                              <ExcipientDetail
+                                id={excip.id}
+                                source={excip.source}
+                              />
                             </div>
                           </motion.div>
                         )}
