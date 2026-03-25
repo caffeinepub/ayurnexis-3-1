@@ -3413,83 +3413,223 @@ export const herbExtracts: APIIngredient[] = [
       { name: "Loss on drying", limit: "NMT 4.0%", method: "105°C / 2h" },
     ],
   },
+
+  // ── New Herb Extracts ─────────────────────────────────────────────────────
   {
-    id: "mcc-ph102",
-    name: "Microcrystalline Cellulose (PH102)",
-    cas: "9004-34-6",
-    molecularFormula: "(C₆H₁₀O₅)ₙ",
-    source: "IP 2022 / USP-NF",
-    therapeuticCategory: "Filler / Binder (Excipient)",
+    id: "boswellia-extract",
+    name: "Boswellia serrata Extract",
+    cas: "89913-60-0",
+    molecularFormula: "C₃₀H₄₈O₃ (AKBA marker)",
+    source: "IP 2022 / Published Literature",
+    therapeuticCategory: "Anti-inflammatory / Joint health",
     description:
-      "Purified, partially depolymerized cellulose (DP ~220). PH102 grade (larger particle size, ~100 µm) designed for direct compression tableting. Excellent compressibility and flow properties.",
+      "Standardized extract from Boswellia serrata resin containing ≥65% boswellic acids (AKBA). Potent 5-LOX inhibitor; clinically proven for osteoarthritis, IBD, and asthma.",
+    assayMin: 65.0,
+    assayMax: 85.0,
+    storage:
+      "Store below 25°C in airtight container, protect from light and moisture",
+    solubility: "Soluble in ethanol and methanol; slightly soluble in water",
+    parameters: [
+      {
+        name: "Total boswellic acids",
+        limit: "NLT 65.0%",
+        method: "HPLC-UV / IP 2022",
+      },
+      { name: "AKBA content", limit: "NLT 10.0%", method: "HPLC" },
+      { name: "Loss on drying", limit: "NMT 5.0%", method: "105°C / 2h" },
+      { name: "Heavy metals", limit: "NMT 10 ppm", method: "IP / WHO" },
+    ],
+  },
+  {
+    id: "bacopa-extract",
+    name: "Bacopa monnieri Extract",
+    cas: "93164-89-7",
+    molecularFormula: "C₄₁H₆₄O₁₃ (Bacoside A marker)",
+    source: "API Vol. II / IP 2022",
+    therapeuticCategory: "Nootropic / Memory enhancer",
+    description:
+      "Standardized whole-plant extract of Bacopa monnieri containing ≥20% bacosides A and B. Enhances synaptic transmission, antioxidant neuroprotection, anxiolytic. Classical Medhya Rasayana.",
+    assayMin: 20.0,
+    assayMax: 55.0,
+    storage: "Store below 25°C, protect from light; hygroscopic",
+    solubility: "Freely soluble in methanol; partially soluble in water",
+    parameters: [
+      {
+        name: "Bacosides (A+B combined)",
+        limit: "NLT 20.0%",
+        method: "HPLC / API Vol. II",
+      },
+      { name: "Loss on drying", limit: "NMT 5.0%", method: "105°C / 2h" },
+      { name: "Total Ash", limit: "NMT 12.0%", method: "API Vol. II" },
+      { name: "Heavy metals", limit: "NMT 10 ppm", method: "WHO Guideline" },
+    ],
+  },
+  {
+    id: "tulsi-extract",
+    name: "Holy Basil (Tulsi) Extract",
+    cas: "85085-77-4",
+    molecularFormula: "C₁₀H₁₂O₂ (Eugenol marker)",
+    source: "API Vol. I / WHO Monograph",
+    therapeuticCategory: "Adaptogen / Antimicrobial",
+    description:
+      "Ethanolic extract from Ocimum sanctum (Tulsi) aerial parts containing ≥1% eugenol and ursolic acid. Adaptogenic, antimicrobial, immunomodulatory, anti-diabetic.",
+    assayMin: 1.0,
+    assayMax: 3.0,
+    storage: "Store below 25°C in sealed container, protect from light",
+    solubility: "Soluble in ethanol; slightly soluble in water",
+    parameters: [
+      {
+        name: "Eugenol content",
+        limit: "NLT 1.0%",
+        method: "GC-MS / API Vol. I",
+      },
+      { name: "Ursolic acid", limit: "NLT 0.5%", method: "HPLC" },
+      { name: "Loss on drying", limit: "NMT 8.0%", method: "105°C / 2h" },
+      { name: "Total Ash", limit: "NMT 15.0%", method: "API Vol. I" },
+    ],
+  },
+  {
+    id: "amla-extract",
+    name: "Amla (Emblica officinalis) Extract",
+    cas: "90028-03-0",
+    molecularFormula: "C₁₂H₆O₇ (Ellagic acid marker)",
+    source: "API Vol. I / IP 2022",
+    therapeuticCategory: "Antioxidant / Immunomodulator",
+    description:
+      "Standardized fruit extract of Emblica officinalis containing ≥40% tannins and vitamin C. Potent antioxidant, immunomodulatory, hepatoprotective. Key Triphala component.",
+    assayMin: 40.0,
+    assayMax: 70.0,
+    storage: "Store below 25°C, protect from light and moisture; hygroscopic",
+    solubility: "Freely soluble in water and methanol",
+    parameters: [
+      {
+        name: "Total tannins (as gallic acid)",
+        limit: "NLT 40.0%",
+        method: "Folin-Denis / API",
+      },
+      {
+        name: "Vitamin C content",
+        limit: "NLT 0.5%",
+        method: "Titrimetric / HPLC",
+      },
+      { name: "Loss on drying", limit: "NMT 6.0%", method: "105°C / 2h" },
+      { name: "Heavy metals", limit: "NMT 10 ppm", method: "IP 2022" },
+    ],
+  },
+  {
+    id: "neem-extract",
+    name: "Neem Leaf Extract",
+    cas: "84696-08-2",
+    molecularFormula: "C₃₅H₄₄O₁₆ (Nimbin marker)",
+    source: "IP 2022 / WHO Monograph",
+    therapeuticCategory: "Antimicrobial / Anti-inflammatory",
+    description:
+      "Ethanolic extract of Azadirachta indica leaves containing ≥1% nimbin and nimbidin. Broad-spectrum antimicrobial, anti-inflammatory, antifungal. Used in dermatological preparations.",
+    assayMin: 1.0,
+    assayMax: 3.5,
+    storage: "Store below 30°C, protect from light and humidity",
+    solubility: "Soluble in ethanol and methanol; slightly soluble in water",
+    parameters: [
+      { name: "Nimbin content", limit: "NLT 1.0%", method: "HPLC / IP 2022" },
+      {
+        name: "Total bitter principles",
+        limit: "NLT 0.5% (as nimbidin)",
+        method: "UV spectrophotometry",
+      },
+      { name: "Loss on drying", limit: "NMT 7.0%", method: "105°C / 2h" },
+      { name: "Total Ash", limit: "NMT 10.0%", method: "IP 2022" },
+    ],
+  },
+  {
+    id: "brahmi-centella-extract",
+    name: "Brahmi (Centella asiatica) Extract",
+    cas: "84649-98-9",
+    molecularFormula: "C₄₈H₇₈O₁₉ (Asiaticoside marker)",
+    source: "IP 2022 / WHO Monograph",
+    therapeuticCategory: "Nootropic / Wound healing",
+    description:
+      "Standardized leaf extract of Centella asiatica containing ≥8% asiaticoside plus madecassoside. Enhances collagen synthesis, promotes wound healing, nootropic, anxiolytic.",
+    assayMin: 8.0,
+    assayMax: 20.0,
+    storage: "Store below 25°C, protect from light",
+    solubility: "Soluble in water and methanol",
+    parameters: [
+      { name: "Asiaticoside", limit: "NLT 8.0%", method: "HPLC / IP 2022" },
+      { name: "Total triterpenoids", limit: "NLT 12.0%", method: "HPLC" },
+      { name: "Loss on drying", limit: "NMT 5.0%", method: "105°C / 2h" },
+      { name: "Heavy metals", limit: "NMT 10 ppm", method: "IP / WHO" },
+    ],
+  },
+  {
+    id: "triphala-extract",
+    name: "Triphala Extract",
+    cas: "blend-triphala",
+    molecularFormula: "C₁₄H₁₀O₉ blend (gallic/ellagic/chebulic acid)",
+    source: "API Vol. I / IP 2022",
+    therapeuticCategory: "Digestive tonic / Antioxidant",
+    description:
+      "Standardized blend extract of Amalaki, Bibhitaki, Haritaki in equal ratio; ≥20% total tannins. Tridoshic formulation — laxative, antioxidant, immunomodulatory, gastric-protective.",
+    assayMin: 20.0,
+    assayMax: 40.0,
+    storage: "Store below 25°C, dry place; hygroscopic — keep tightly sealed",
+    solubility: "Freely soluble in water and methanol",
+    parameters: [
+      {
+        name: "Total tannins (as gallic acid)",
+        limit: "NLT 20.0%",
+        method: "Folin-Denis / API Vol. I",
+      },
+      { name: "Chebulinic acid", limit: "NLT 1.0%", method: "HPLC" },
+      { name: "Loss on drying", limit: "NMT 8.0%", method: "105°C / 2h" },
+      { name: "Total Ash", limit: "NMT 10.0%", method: "API Vol. I" },
+    ],
+  },
+];
+
+// ─── Extra Excipients (previously misclassified in herbExtracts) ─────────────
+export const extraExcipients: ExcipientIngredient[] = [
+  {
+    id: "mcc-ph102-exc",
+    name: "Microcrystalline Cellulose (PH102)",
+    grade: "PH102",
+    cas: "9004-34-6",
+    source: "IP 2022 / USP-NF",
     assayMin: 97.0,
     assayMax: 102.0,
+    description:
+      "Purified, partially depolymerized cellulose. PH102 grade (~100 µm) designed for direct compression tableting. Excellent compressibility and flow properties.",
     storage:
       "Store in cool dry place; hygroscopic — keep container tightly closed",
     solubility:
       "Practically insoluble in water, dilute acids, ethanol, and most organic solvents",
-    parameters: [
-      {
-        name: "Assay (as dried basis)",
-        limit: "97.0–102.0%",
-        method: "IP 2022 / USP",
-      },
-      { name: "Loss on drying", limit: "NMT 7.0%", method: "105°C / 1h" },
-      {
-        name: "Particle size (D50)",
-        limit: "90–150 µm",
-        method: "Laser diffraction",
-      },
-      { name: "pH (2% suspension)", limit: "5.0–7.5", method: "IP 2022" },
-    ],
+    typicalUse: "Filler/Binder: 10–90% w/w in tablets and capsules",
   },
   {
-    id: "silicon-dioxide-colloidal",
+    id: "silicon-dioxide-colloidal-exc",
     name: "Silicon Dioxide (Colloidal)",
+    grade: "Aerosil 200",
     cas: "7631-86-9",
-    molecularFormula: "SiO₂",
     source: "IP 2022 / USP-NF",
-    therapeuticCategory: "Glidant / Anticaking Agent / Adsorbent (Excipient)",
-    description:
-      "Colloidal amorphous silicon dioxide (Aerosil® 200 grade). Highly effective glidant at 0.1–0.5% concentration; improves powder flow and prevents caking in tablet manufacturing.",
     assayMin: 99.0,
     assayMax: 100.5,
+    description:
+      "Colloidal amorphous SiO₂. Highly effective glidant at 0.1–0.5% concentration; improves powder flow and prevents caking in tablet manufacturing.",
     storage: "Store in tightly closed container in cool dry place",
-    solubility:
-      "Practically insoluble in water and most organic solvents; soluble in hot NaOH and HF",
-    parameters: [
-      {
-        name: "Assay (as SiO₂, ignited)",
-        limit: "99.0–100.5%",
-        method: "IP 2022 / USP",
-      },
-      { name: "Loss on drying", limit: "NMT 2.5%", method: "105°C / 2h" },
-      { name: "Loss on ignition", limit: "NMT 2.0%", method: "IP" },
-      { name: "Heavy metals", limit: "NMT 25 ppm", method: "IP 2022" },
-    ],
+    solubility: "Practically insoluble in water and most organic solvents",
+    typicalUse: "Glidant/Anticaking: 0.1–0.5% w/w",
   },
   {
-    id: "magnesium-stearate-form",
+    id: "magnesium-stearate-exc",
     name: "Magnesium Stearate",
+    grade: "Pharma Grade",
     cas: "557-04-0",
-    molecularFormula: "C₃₆H₇₀MgO₄",
     source: "IP 2022 / USP-NF",
-    therapeuticCategory: "Lubricant (Excipient)",
-    description:
-      "Magnesium salt of stearic acid. Most widely used tablet/capsule lubricant at 0.25–1.0%. Reduces friction during compression and ejection. Hydrophobic — excess use impairs dissolution.",
     assayMin: 98.0,
     assayMax: 101.5,
+    description:
+      "Magnesium salt of stearic acid. Most widely used tablet/capsule lubricant at 0.25–1.0%. Reduces friction during compression and ejection.",
     storage: "Store in cool dry place; avoid moisture and heat",
     solubility: "Practically insoluble in water and ethanol",
-    parameters: [
-      {
-        name: "Assay (as Mg, dried)",
-        limit: "4.0–5.0% Mg",
-        method: "IP 2022 / USP",
-      },
-      { name: "Loss on drying", limit: "NMT 6.0%", method: "105°C / 2h" },
-      { name: "Microbial count", limit: "NMT 10³ CFU/g", method: "IP 2022" },
-      { name: "Stearic acid content", limit: "NLT 40.0%", method: "GC" },
-    ],
+    typicalUse: "Lubricant: 0.25–1.0% w/w",
   },
 ];

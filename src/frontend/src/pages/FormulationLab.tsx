@@ -20,13 +20,8 @@ import {
 } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-// @react-pdf/renderer - using type stubs for ICP deployment (client-side PDF via blob)
-const Document: any = () => null;
-const PDFPage: any = () => null;
-const PDFStyleSheet = { create: (s: any) => s };
-const PDFText: any = () => null;
-const PDFView: any = () => null;
-const pdf: any = () => ({ toBlob: async () => new Blob() });
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 import {
   AlertTriangle,
   Beaker,
@@ -62,6 +57,7 @@ import {
   coatingAgents,
   disintegrants,
   excipientCategoryLabels,
+  extraExcipients,
   fillers,
   glidants,
   herbExtracts,
@@ -69,6 +65,377 @@ import {
   preservatives,
 } from "../data/formulationData";
 import { type HerbMonograph, pharmacopeiaData } from "../data/pharmacopeiaData";
+
+// ─── Pharmacopeia Incompatibility Database ────────────────────────────────────
+const INCOMPATIBILITY_DB: Array<{
+  a: string;
+  b: string;
+  severity: "incompatible" | "caution";
+  reason: string;
+}> = [
+  {
+    a: "magnesium stearate",
+    b: "aspirin",
+    severity: "incompatible",
+    reason:
+      "Ester hydrolysis — Mg stearate catalyzes aspirin hydrolysis to salicylic acid, reducing potency.",
+  },
+  {
+    a: "magnesium stearate",
+    b: "ibuprofen",
+    severity: "caution",
+    reason:
+      "Possible hydrolysis of ibuprofen ester linkage; monitor stability.",
+  },
+  {
+    a: "calcium carbonate",
+    b: "tetracycline",
+    severity: "incompatible",
+    reason:
+      "Chelation — divalent Ca²⁺ binds tetracycline forming insoluble complex, severely reducing bioavailability.",
+  },
+  {
+    a: "dicalcium phosphate",
+    b: "tetracycline",
+    severity: "incompatible",
+    reason: "Chelation with Ca²⁺ reduces tetracycline absorption by >50%.",
+  },
+  {
+    a: "sodium bicarbonate",
+    b: "aspirin",
+    severity: "incompatible",
+    reason:
+      "Acid-base reaction produces CO₂, destabilizes tablet structure and degrades aspirin.",
+  },
+  {
+    a: "sodium bicarbonate",
+    b: "ibuprofen",
+    severity: "caution",
+    reason:
+      "Alkaline microenvironment may accelerate hydrolytic degradation of ibuprofen.",
+  },
+  {
+    a: "lactose",
+    b: "primary amine drugs",
+    severity: "incompatible",
+    reason:
+      "Maillard reaction between lactose reducing sugar and primary amines causes browning and potency loss.",
+  },
+  {
+    a: "lactose",
+    b: "metformin",
+    severity: "incompatible",
+    reason:
+      "Maillard reaction: metformin (primary amine) reacts with lactose reducing end, causing discoloration.",
+  },
+  {
+    a: "lactose",
+    b: "fluoxetine",
+    severity: "caution",
+    reason:
+      "Potential Maillard reaction — monitor appearance during stability studies.",
+  },
+  {
+    a: "magnesium stearate",
+    b: "sodium lauryl sulfate",
+    severity: "caution",
+    reason:
+      "Ionic interaction may reduce lubricant efficiency and affect dissolution.",
+  },
+  {
+    a: "talc",
+    b: "quaternary ammonium compounds",
+    severity: "caution",
+    reason:
+      "Adsorption of active onto talc surface may reduce bioavailability.",
+  },
+  {
+    a: "stearic acid",
+    b: "sodium carbonate",
+    severity: "incompatible",
+    reason:
+      "Saponification reaction produces sodium stearate soap, altering tablet properties.",
+  },
+  {
+    a: "microcrystalline cellulose",
+    b: "hygroscopic actives",
+    severity: "caution",
+    reason:
+      "MCC retains moisture; may accelerate hydrolysis of moisture-sensitive APIs.",
+  },
+  {
+    a: "povidone",
+    b: "sodium nitroprusside",
+    severity: "incompatible",
+    reason:
+      "Chemical incompatibility resulting in discoloration and degradation.",
+  },
+  {
+    a: "crospovidone",
+    b: "ascorbic acid",
+    severity: "caution",
+    reason: "Oxidative interaction may degrade ascorbic acid over time.",
+  },
+  {
+    a: "benzalkonium chloride",
+    b: "anionic surfactants",
+    severity: "incompatible",
+    reason:
+      "Cationic-anionic interaction forms precipitate, reducing antimicrobial efficacy.",
+  },
+  {
+    a: "methylparaben",
+    b: "polyethylene glycol",
+    severity: "caution",
+    reason:
+      "PEG can partition methylparaben away from aqueous phase, reducing preservative efficacy.",
+  },
+  {
+    a: "propylparaben",
+    b: "polyethylene glycol",
+    severity: "caution",
+    reason:
+      "Partitioning into PEG phase reduces free propylparaben concentration.",
+  },
+  {
+    a: "carbomer",
+    b: "cationic polymers",
+    severity: "incompatible",
+    reason: "Ionic crosslinking causes gel collapse and loss of viscosity.",
+  },
+  {
+    a: "gelatin",
+    b: "formaldehyde",
+    severity: "incompatible",
+    reason:
+      "Crosslinking of gelatin reduces capsule dissolution and bioavailability.",
+  },
+  {
+    a: "sorbitol",
+    b: "microcrystalline cellulose",
+    severity: "caution",
+    reason:
+      "Sorbitol plasticity may soften MCC matrix affecting tablet hardness.",
+  },
+  {
+    a: "mannitol",
+    b: "moisture sensitive actives",
+    severity: "caution",
+    reason:
+      "Mannitol crystallization during drying can trap moisture and stress APIs.",
+  },
+  {
+    a: "acacia",
+    b: "alcohol",
+    severity: "caution",
+    reason:
+      "High alcohol concentration precipitates acacia gum, reducing binder efficacy.",
+  },
+  {
+    a: "sodium starch glycolate",
+    b: "cationic drugs",
+    severity: "caution",
+    reason:
+      "Ionic binding may reduce drug release rate from disintegrant network.",
+  },
+  {
+    a: "eudragit",
+    b: "magnesium stearate",
+    severity: "caution",
+    reason:
+      "Mg ions may interact with carboxyl groups on Eudragit, softening enteric coat at lower pH.",
+  },
+];
+
+// ─── Stability Properties Database ───────────────────────────────────────────
+const STABILITY_PROPS: Record<
+  string,
+  {
+    hygroscopic: boolean;
+    thermolabile: boolean;
+    lightSensitive: boolean;
+    oxidationRisk: boolean;
+    hydrolysisRisk: boolean;
+    phRange: [number, number];
+  }
+> = {
+  metformin: {
+    hygroscopic: false,
+    thermolabile: false,
+    lightSensitive: false,
+    oxidationRisk: false,
+    hydrolysisRisk: false,
+    phRange: [6.5, 8.0],
+  },
+  paracetamol: {
+    hygroscopic: false,
+    thermolabile: false,
+    lightSensitive: false,
+    oxidationRisk: true,
+    hydrolysisRisk: true,
+    phRange: [3.8, 6.1],
+  },
+  ibuprofen: {
+    hygroscopic: false,
+    thermolabile: false,
+    lightSensitive: false,
+    oxidationRisk: true,
+    hydrolysisRisk: true,
+    phRange: [4.0, 7.0],
+  },
+  aspirin: {
+    hygroscopic: true,
+    thermolabile: false,
+    lightSensitive: false,
+    oxidationRisk: false,
+    hydrolysisRisk: true,
+    phRange: [2.0, 4.0],
+  },
+  omeprazole: {
+    hygroscopic: true,
+    thermolabile: true,
+    lightSensitive: true,
+    oxidationRisk: true,
+    hydrolysisRisk: true,
+    phRange: [6.0, 8.0],
+  },
+  atorvastatin: {
+    hygroscopic: false,
+    thermolabile: false,
+    lightSensitive: true,
+    oxidationRisk: true,
+    hydrolysisRisk: false,
+    phRange: [4.0, 7.0],
+  },
+  amoxicillin: {
+    hygroscopic: true,
+    thermolabile: true,
+    lightSensitive: false,
+    oxidationRisk: false,
+    hydrolysisRisk: true,
+    phRange: [3.5, 6.0],
+  },
+  ciprofloxacin: {
+    hygroscopic: false,
+    thermolabile: false,
+    lightSensitive: true,
+    oxidationRisk: false,
+    hydrolysisRisk: false,
+    phRange: [3.0, 4.5],
+  },
+  diclofenac: {
+    hygroscopic: false,
+    thermolabile: false,
+    lightSensitive: true,
+    oxidationRisk: true,
+    hydrolysisRisk: false,
+    phRange: [5.0, 8.0],
+  },
+  prednisolone: {
+    hygroscopic: true,
+    thermolabile: false,
+    lightSensitive: true,
+    oxidationRisk: true,
+    hydrolysisRisk: false,
+    phRange: [5.0, 7.0],
+  },
+  rifampicin: {
+    hygroscopic: true,
+    thermolabile: false,
+    lightSensitive: true,
+    oxidationRisk: true,
+    hydrolysisRisk: false,
+    phRange: [4.5, 6.5],
+  },
+  doxycycline: {
+    hygroscopic: true,
+    thermolabile: false,
+    lightSensitive: true,
+    oxidationRisk: true,
+    hydrolysisRisk: true,
+    phRange: [2.0, 4.0],
+  },
+  ashwagandha: {
+    hygroscopic: true,
+    thermolabile: false,
+    lightSensitive: false,
+    oxidationRisk: true,
+    hydrolysisRisk: false,
+    phRange: [5.0, 7.0],
+  },
+  curcumin: {
+    hygroscopic: false,
+    thermolabile: false,
+    lightSensitive: true,
+    oxidationRisk: true,
+    hydrolysisRisk: false,
+    phRange: [5.0, 7.5],
+  },
+  lactose: {
+    hygroscopic: true,
+    thermolabile: false,
+    lightSensitive: false,
+    oxidationRisk: false,
+    hydrolysisRisk: false,
+    phRange: [4.0, 8.0],
+  },
+  "microcrystalline cellulose": {
+    hygroscopic: true,
+    thermolabile: false,
+    lightSensitive: false,
+    oxidationRisk: false,
+    hydrolysisRisk: false,
+    phRange: [5.0, 8.0],
+  },
+  "magnesium stearate": {
+    hygroscopic: false,
+    thermolabile: false,
+    lightSensitive: false,
+    oxidationRisk: false,
+    hydrolysisRisk: false,
+    phRange: [6.0, 8.0],
+  },
+  povidone: {
+    hygroscopic: true,
+    thermolabile: false,
+    lightSensitive: false,
+    oxidationRisk: false,
+    hydrolysisRisk: false,
+    phRange: [3.0, 9.0],
+  },
+  starch: {
+    hygroscopic: true,
+    thermolabile: false,
+    lightSensitive: false,
+    oxidationRisk: false,
+    hydrolysisRisk: false,
+    phRange: [4.0, 8.0],
+  },
+  talc: {
+    hygroscopic: false,
+    thermolabile: false,
+    lightSensitive: false,
+    oxidationRisk: false,
+    hydrolysisRisk: false,
+    phRange: [5.0, 9.0],
+  },
+  "sodium benzoate": {
+    hygroscopic: false,
+    thermolabile: false,
+    lightSensitive: false,
+    oxidationRisk: false,
+    hydrolysisRisk: false,
+    phRange: [3.0, 6.0],
+  },
+  "silicon dioxide": {
+    hygroscopic: false,
+    thermolabile: false,
+    lightSensitive: false,
+    oxidationRisk: false,
+    hydrolysisRisk: false,
+    phRange: [5.0, 9.0],
+  },
+};
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -539,275 +906,6 @@ const EXCIPIENT_DATA: Record<ExcipientCategory, ExcipientIngredient[]> = {
 
 // ─── PDF Document ─────────────────────────────────────────────────────────────
 
-const pdfStyles = PDFStyleSheet.create({
-  page: { padding: 40, backgroundColor: "#0f1923", color: "#e2f5ec" },
-  header: {
-    borderBottom: "2px solid #2dd4bf",
-    paddingBottom: 12,
-    marginBottom: 16,
-  },
-  title: { fontSize: 22, fontWeight: "bold", color: "#2dd4bf" },
-  subtitle: { fontSize: 11, color: "#94a3b8", marginTop: 4 },
-  section: { marginBottom: 16 },
-  sectionTitle: {
-    fontSize: 14,
-    fontWeight: "bold",
-    color: "#f59e0b",
-    marginBottom: 8,
-    borderBottom: "1px solid #1e3a3a",
-    paddingBottom: 4,
-  },
-  row: {
-    flexDirection: "row",
-    paddingVertical: 4,
-    borderBottom: "1px solid #1e3a3a",
-  },
-  cell: { flex: 1, fontSize: 9, color: "#e2f5ec" },
-  cellBold: { flex: 1, fontSize: 9, fontWeight: "bold", color: "#94f5e0" },
-  tableHeader: {
-    flexDirection: "row",
-    backgroundColor: "#1a3040",
-    paddingVertical: 5,
-    paddingHorizontal: 4,
-    marginBottom: 4,
-  },
-  text: { fontSize: 9, color: "#e2f5ec", marginBottom: 4 },
-  certBox: {
-    border: "2px solid #2dd4bf",
-    padding: 20,
-    marginTop: 16,
-    backgroundColor: "#0f2030",
-  },
-  certTitle: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: "#2dd4bf",
-    textAlign: "center",
-    marginBottom: 8,
-  },
-  certText: {
-    fontSize: 10,
-    color: "#e2f5ec",
-    textAlign: "center",
-    lineHeight: 1.5,
-  },
-  badge: {
-    backgroundColor: "#1a3040",
-    padding: "4 8",
-    borderRadius: 4,
-    marginRight: 8,
-  },
-  badgeText: { fontSize: 8, color: "#2dd4bf" },
-});
-
-function FormulationPDFDocument({
-  dosageForm,
-  method,
-  ingredients,
-  formulationName,
-  ownerName,
-  institution,
-  designation,
-  scaleUp,
-  sopSteps,
-  today,
-}: {
-  dosageForm: string;
-  method: string;
-  ingredients: FormulationIngredient[];
-  formulationName: string;
-  ownerName: string;
-  institution: string;
-  designation: string;
-  scaleUp: number;
-  sopSteps: string[];
-  today: string;
-}) {
-  const apis = ingredients.filter((i) => i.category === "api");
-  const excipients = ingredients.filter((i) => i.category !== "api");
-  const totalWeight = ingredients.reduce((s, i) => s + i.quantity * scaleUp, 0);
-
-  return (
-    <Document>
-      <PDFPage size="A4" style={pdfStyles.page}>
-        {/* Header */}
-        <PDFView style={pdfStyles.header}>
-          <PDFText style={pdfStyles.title}>
-            AyurNexis 3.1 — Formulation Report
-          </PDFText>
-          <PDFText style={pdfStyles.subtitle}>
-            {formulationName || `${dosageForm} Formulation`} | Generated:{" "}
-            {today}
-          </PDFText>
-        </PDFView>
-
-        {/* Formulation Overview */}
-        <PDFView style={pdfStyles.section}>
-          <PDFText style={pdfStyles.sectionTitle}>FORMULATION OVERVIEW</PDFText>
-          <PDFView style={pdfStyles.row}>
-            <PDFText style={pdfStyles.cellBold}>Dosage Form</PDFText>
-            <PDFText style={pdfStyles.cell}>{dosageForm}</PDFText>
-            <PDFText style={pdfStyles.cellBold}>Method</PDFText>
-            <PDFText style={pdfStyles.cell}>{method}</PDFText>
-          </PDFView>
-          <PDFView style={pdfStyles.row}>
-            <PDFText style={pdfStyles.cellBold}>Scale</PDFText>
-            <PDFText style={pdfStyles.cell}>{scaleUp} unit(s)</PDFText>
-            <PDFText style={pdfStyles.cellBold}>Total Weight</PDFText>
-            <PDFText style={pdfStyles.cell}>
-              {totalWeight.toFixed(2)} mg
-            </PDFText>
-          </PDFView>
-        </PDFView>
-
-        {/* Composition Table */}
-        <PDFView style={pdfStyles.section}>
-          <PDFText style={pdfStyles.sectionTitle}>COMPOSITION TABLE</PDFText>
-          <PDFView style={pdfStyles.tableHeader}>
-            <PDFText style={{ ...pdfStyles.cellBold, flex: 2 }}>
-              Ingredient
-            </PDFText>
-            <PDFText style={pdfStyles.cellBold}>Category</PDFText>
-            <PDFText style={pdfStyles.cellBold}>Qty/unit</PDFText>
-            <PDFText style={pdfStyles.cellBold}>Total ({scaleUp}x)</PDFText>
-          </PDFView>
-          {ingredients.map((ing) => (
-            <PDFView key={ing.id} style={pdfStyles.row}>
-              <PDFText style={{ ...pdfStyles.cell, flex: 2 }}>
-                {ing.name}
-              </PDFText>
-              <PDFText style={pdfStyles.cell}>
-                {ing.category === "api"
-                  ? "API"
-                  : excipientCategoryLabels[ing.category as ExcipientCategory]}
-              </PDFText>
-              <PDFText style={pdfStyles.cell}>
-                {ing.quantity} {ing.unit}
-              </PDFText>
-              <PDFText style={pdfStyles.cell}>
-                {(ing.quantity * scaleUp).toFixed(2)} {ing.unit}
-              </PDFText>
-            </PDFView>
-          ))}
-        </PDFView>
-
-        {/* API Analysis */}
-        {apis.length > 0 && (
-          <PDFView style={pdfStyles.section}>
-            <PDFText style={pdfStyles.sectionTitle}>
-              API ANALYSIS SUMMARY
-            </PDFText>
-            {apis.map((ing) => {
-              const api = ing.source as APIIngredient;
-              return (
-                <PDFView key={ing.id} style={{ marginBottom: 8 }}>
-                  <PDFView style={pdfStyles.row}>
-                    <PDFText style={pdfStyles.cellBold}>API</PDFText>
-                    <PDFText style={pdfStyles.cell}>{ing.name}</PDFText>
-                    <PDFText style={pdfStyles.cellBold}>Therapeutic</PDFText>
-                    <PDFText style={pdfStyles.cell}>
-                      {api?.therapeuticCategory || "—"}
-                    </PDFText>
-                  </PDFView>
-                  <PDFView style={pdfStyles.row}>
-                    <PDFText style={pdfStyles.cellBold}>Assay Range</PDFText>
-                    <PDFText style={pdfStyles.cell}>
-                      {api?.assayMin}–{api?.assayMax}%
-                    </PDFText>
-                    <PDFText style={pdfStyles.cellBold}>Pharmacopeia</PDFText>
-                    <PDFText style={pdfStyles.cell}>
-                      {api?.source || "—"}
-                    </PDFText>
-                  </PDFView>
-                </PDFView>
-              );
-            })}
-          </PDFView>
-        )}
-
-        {/* Excipient Summary */}
-        {excipients.length > 0 && (
-          <PDFView style={pdfStyles.section}>
-            <PDFText style={pdfStyles.sectionTitle}>EXCIPIENT SUMMARY</PDFText>
-            {excipients.map((ing) => (
-              <PDFView key={ing.id} style={pdfStyles.row}>
-                <PDFText style={{ ...pdfStyles.cell, flex: 2 }}>
-                  {ing.name}
-                </PDFText>
-                <PDFText style={pdfStyles.cell}>
-                  {excipientCategoryLabels[ing.category as ExcipientCategory]}
-                </PDFText>
-                <PDFText style={pdfStyles.cell}>
-                  {ing.quantity} {ing.unit}
-                </PDFText>
-              </PDFView>
-            ))}
-          </PDFView>
-        )}
-      </PDFPage>
-
-      {/* SOP Page */}
-      <PDFPage size="A4" style={pdfStyles.page}>
-        <PDFView style={pdfStyles.header}>
-          <PDFText style={pdfStyles.title}>
-            STANDARD OPERATING PROCEDURE
-          </PDFText>
-          <PDFText style={pdfStyles.subtitle}>
-            {dosageForm} by {method} | Scale: {scaleUp}x
-          </PDFText>
-        </PDFView>
-
-        <PDFView style={pdfStyles.section}>
-          <PDFText style={pdfStyles.sectionTitle}>MATERIALS REQUIRED</PDFText>
-          {ingredients.map((ing) => (
-            <PDFText key={ing.id} style={pdfStyles.text}>
-              • {ing.name} — {(ing.quantity * scaleUp).toFixed(2)} {ing.unit}
-            </PDFText>
-          ))}
-        </PDFView>
-
-        <PDFView style={pdfStyles.section}>
-          <PDFText style={pdfStyles.sectionTitle}>PROCEDURE</PDFText>
-          {sopSteps.map((sopStep, i) => (
-            <PDFText key={sopStep.slice(0, 20)} style={pdfStyles.text}>
-              {i + 1}. {sopStep}
-            </PDFText>
-          ))}
-        </PDFView>
-
-        {/* Certificate */}
-        {ownerName && (
-          <PDFView style={pdfStyles.certBox}>
-            <PDFText style={pdfStyles.certTitle}>
-              CERTIFICATE OF FORMULATION DEVELOPMENT
-            </PDFText>
-            <PDFText style={pdfStyles.certText}>
-              This certifies that {ownerName}
-              {designation ? `, ${designation},` : ""} of{" "}
-              {institution || "[Institution]"} has developed the following
-              formulation using AyurNexis 3.1 Formulation Lab.
-            </PDFText>
-            <PDFText
-              style={{
-                ...pdfStyles.certText,
-                marginTop: 8,
-                fontWeight: "bold",
-                color: "#2dd4bf",
-              }}
-            >
-              Formulation: {formulationName || `${dosageForm} Formulation`}
-            </PDFText>
-            <PDFText style={pdfStyles.certText}>
-              Dosage Form: {dosageForm} | Method: {method}
-            </PDFText>
-            <PDFText style={pdfStyles.certText}>Date: {today}</PDFText>
-          </PDFView>
-        )}
-      </PDFPage>
-    </Document>
-  );
-}
-
 // ─── Step Indicator ───────────────────────────────────────────────────────────
 
 const STEPS = [
@@ -904,6 +1002,11 @@ export function FormulationLab() {
 
   // ── Step 8 ────────────────────────────────────────────────────────────────
   const [exporting, setExporting] = useState(false);
+  const [hoveredCell, setHoveredCell] = useState<{
+    i: number;
+    j: number;
+    reason: string;
+  } | null>(null);
 
   // ── Derived ───────────────────────────────────────────────────────────────
   const methods = dosageForm ? (DOSAGE_METHODS[dosageForm] ?? []) : [];
@@ -911,7 +1014,6 @@ export function FormulationLab() {
   const compatibleExcipients = selectedMethod?.compatibleExcipients ?? [];
 
   const apiIngredients = ingredients.filter((i) => i.category === "api");
-  const excipientIngredients = ingredients.filter((i) => i.category !== "api");
   const totalWeight = ingredients.reduce((s, i) => s + i.quantity, 0);
   const apiLoad =
     totalWeight > 0
@@ -998,6 +1100,193 @@ export function FormulationLab() {
     return Math.max(0, Math.min(100, score));
   }, [apiIngredients, analysisFlags]);
 
+  // ── Compatibility Matrix ──────────────────────────────────────────────────
+  const compatibilityMatrix = useMemo(() => {
+    if (ingredients.length < 2) return [];
+    return ingredients.map((ing1) =>
+      ingredients.map((ing2) => {
+        if (ing1.id === ing2.id) return { status: "self" as const, reason: "" };
+        const name1 = ing1.name.toLowerCase();
+        const name2 = ing2.name.toLowerCase();
+        const match = INCOMPATIBILITY_DB.find(
+          (entry) =>
+            (name1.includes(entry.a) && name2.includes(entry.b)) ||
+            (name1.includes(entry.b) && name2.includes(entry.a)),
+        );
+        if (match)
+          return {
+            status: match.severity as "incompatible" | "caution",
+            reason: match.reason,
+          };
+        return {
+          status: "compatible" as const,
+          reason:
+            "No known incompatibilities reported in pharmacopeia literature.",
+        };
+      }),
+    );
+  }, [ingredients]);
+
+  // ── Advanced Stability ────────────────────────────────────────────────────
+  const advancedStability = useMemo(() => {
+    const props = ingredients
+      .map((ing) => {
+        const key = ing.name.toLowerCase();
+        const found = Object.entries(STABILITY_PROPS).find(([k]) =>
+          key.includes(k),
+        );
+        return found ? found[1] : null;
+      })
+      .filter(Boolean) as Array<(typeof STABILITY_PROPS)[string]>;
+
+    const hygroscopicCount = props.filter((p) => p.hygroscopic).length;
+    const thermolabileCount = props.filter((p) => p.thermolabile).length;
+    const lightSensitiveCount = props.filter((p) => p.lightSensitive).length;
+    const oxidationRisk = props.filter((p) => p.oxidationRisk).length;
+    const hydrolysisRisk = props.filter((p) => p.hydrolysisRisk).length;
+
+    const phRanges = props.map((p) => p.phRange);
+    const phMin = phRanges.length ? Math.max(...phRanges.map((r) => r[0])) : 4;
+    const phMax = phRanges.length ? Math.min(...phRanges.map((r) => r[1])) : 8;
+    const phCompatible = phMin <= phMax;
+
+    let shelfLifeMonths = 36;
+    if (hygroscopicCount > 2) shelfLifeMonths -= 6;
+    if (thermolabileCount > 0) shelfLifeMonths -= 6;
+    if (lightSensitiveCount > 1) shelfLifeMonths -= 3;
+    if (oxidationRisk > 1) shelfLifeMonths -= 6;
+    if (hydrolysisRisk > 1) shelfLifeMonths -= 6;
+    if (!phCompatible) shelfLifeMonths -= 12;
+    shelfLifeMonths = Math.max(6, shelfLifeMonths);
+
+    const deductions =
+      (hygroscopicCount > 2 ? 15 : hygroscopicCount * 3) +
+      thermolabileCount * 10 +
+      lightSensitiveCount * 5 +
+      oxidationRisk * 5 +
+      hydrolysisRisk * 5 +
+      (!phCompatible ? 20 : 0);
+    const stabilityScore = Math.max(0, 100 - deductions);
+
+    return {
+      hygroscopicCount,
+      thermolabileCount,
+      lightSensitiveCount,
+      oxidationRisk,
+      hydrolysisRisk,
+      phCompatible,
+      phMin,
+      phMax,
+      shelfLifeMonths,
+      stabilityScore,
+    };
+  }, [ingredients]);
+
+  // ── Composition Analysis ──────────────────────────────────────────────────
+  const compositionAnalysis = useMemo(() => {
+    const advantages: string[] = [];
+    const disadvantages: string[] = [];
+
+    const apis = ingredients.filter(
+      (i) => i.category === "api" || i.category === "herb",
+    );
+    const hasBinder = ingredients.some((i) => i.category === "binders");
+    const hasDisintegrant = ingredients.some(
+      (i) => i.category === "disintegrants",
+    );
+    const hasLubricant = ingredients.some((i) => i.category === "lubricants");
+    const hasFiller = ingredients.some((i) => i.category === "fillers");
+    const hasGlidant = ingredients.some((i) => i.category === "glidants");
+    const hasCoating = ingredients.some((i) => i.category === "coatingAgents");
+    const hasPreservative = ingredients.some(
+      (i) => i.category === "preservatives",
+    );
+
+    const totalWt = ingredients.reduce((s, i) => s + i.quantity, 0);
+    const apiWt = apis.reduce((s, i) => s + i.quantity, 0);
+    const apiLoadPct = totalWt > 0 ? (apiWt / totalWt) * 100 : 0;
+
+    if (apis.length > 0)
+      advantages.push(
+        `Contains ${apis.length} active pharmaceutical ingredient(s) providing targeted therapeutic effect.`,
+      );
+    if (apis.length > 1)
+      advantages.push(
+        "Combination therapy: multiple APIs may provide synergistic therapeutic effects.",
+      );
+    if (hasBinder)
+      advantages.push(
+        "Binder present: ensures tablet/granule cohesion and mechanical strength during manufacturing.",
+      );
+    if (hasDisintegrant)
+      advantages.push(
+        "Disintegrant present: promotes rapid tablet disintegration enabling faster drug release.",
+      );
+    if (hasLubricant)
+      advantages.push(
+        "Lubricant included: reduces friction during compression, preventing sticking and ensuring uniform tablet ejection.",
+      );
+    if (hasFiller)
+      advantages.push(
+        "Filler/diluent present: ensures adequate tablet weight and volume for handling and swallowability.",
+      );
+    if (hasGlidant)
+      advantages.push(
+        "Glidant included: improves powder flowability and ensures uniform die fill during compression.",
+      );
+    if (hasCoating)
+      advantages.push(
+        "Coating agent present: provides taste masking, moisture protection, and controlled/targeted drug release.",
+      );
+    if (hasPreservative)
+      advantages.push(
+        "Preservative included: prevents microbial growth extending product shelf life and ensuring patient safety.",
+      );
+    if (apiLoadPct >= 10 && apiLoadPct <= 40)
+      advantages.push(
+        `API load of ${apiLoadPct.toFixed(1)}% is within optimal range (10–40%) for good compressibility.`,
+      );
+
+    if (!hasBinder && (dosageForm === "Tablet" || dosageForm === "Capsule"))
+      disadvantages.push(
+        "No binder detected: tablet/capsule may lack cohesive strength; consider adding PVP K30 or HPMC E5.",
+      );
+    if (!hasDisintegrant && dosageForm === "Tablet")
+      disadvantages.push(
+        "No disintegrant present: tablet may have poor disintegration; consider Croscarmellose sodium or SSG.",
+      );
+    if (!hasLubricant && dosageForm === "Tablet")
+      disadvantages.push(
+        "No lubricant present: manufacturing issues (sticking, capping) are likely; add Magnesium stearate or Talc.",
+      );
+    if (apis.length === 0)
+      disadvantages.push(
+        "No API detected: formulation has no active therapeutic component.",
+      );
+    if (apis.length > 3)
+      disadvantages.push(
+        "High API count (>3): drug–drug interactions and compatibility risks increase significantly.",
+      );
+    if (apiLoadPct > 60)
+      disadvantages.push(
+        `High API load (${apiLoadPct.toFixed(1)}%): may compromise compressibility and dissolution; add more excipient support.`,
+      );
+    if (advancedStability.oxidationRisk > 1)
+      disadvantages.push(
+        "Multiple oxidation-prone ingredients: antioxidant (e.g., BHA, BHT, Ascorbic acid) or inert gas packaging recommended.",
+      );
+    if (advancedStability.hydrolysisRisk > 1)
+      disadvantages.push(
+        "Multiple hydrolysis-prone APIs: minimize moisture exposure; use desiccants and moisture-barrier packaging.",
+      );
+    if (!advancedStability.phCompatible)
+      disadvantages.push(
+        `pH incompatibility detected: ingredient pH ranges do not overlap (required pH ${advancedStability.phMin.toFixed(1)}–${advancedStability.phMax.toFixed(1)} is conflicted); reformulation needed.`,
+      );
+
+    return { advantages, disadvantages };
+  }, [ingredients, dosageForm, advancedStability]);
+
   // ── Handlers ──────────────────────────────────────────────────────────────
   function addFromDrawer(
     ing: APIIngredient | ExcipientIngredient,
@@ -1058,28 +1347,478 @@ export function FormulationLab() {
   async function handleExport() {
     setExporting(true);
     try {
-      const blob = await pdf(
-        <FormulationPDFDocument
-          dosageForm={dosageForm!}
-          method={method!}
-          ingredients={ingredients}
-          formulationName={formulationName}
-          ownerName={ownerName}
-          institution={institution}
-          designation={designation}
-          scaleUp={scaleUp}
-          sopSteps={sopSteps}
-          today={today}
-        />,
-      ).toBlob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `${formulationName || dosageForm}_Formulation_${today}.pdf`;
-      a.click();
-      URL.revokeObjectURL(url);
+      const doc = new jsPDF({
+        orientation: "portrait",
+        unit: "mm",
+        format: "a4",
+      });
+      const pageW = doc.internal.pageSize.getWidth();
+      const margin = 15;
+      let y = 20;
+
+      const addSectionHeader = (text: string) => {
+        y += 4;
+        doc.setFillColor(30, 30, 80);
+        doc.rect(margin, y - 4, pageW - margin * 2, 8, "F");
+        doc.setFontSize(10);
+        doc.setFont("helvetica", "bold");
+        doc.setTextColor(255, 255, 255);
+        doc.text(text, margin + 2, y + 0.5);
+        y += 8;
+        doc.setTextColor(0, 0, 0);
+      };
+      const checkPage = (needed = 20) => {
+        if (y + needed > 270) {
+          doc.addPage();
+          y = 20;
+        }
+      };
+
+      // Cover
+      doc.setFillColor(245, 245, 255);
+      doc.rect(0, 0, pageW, 60, "F");
+      doc.setFontSize(20);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(30, 30, 80);
+      doc.text("FORMULATION DEVELOPMENT REPORT", pageW / 2, 25, {
+        align: "center",
+      });
+      doc.setFontSize(13);
+      doc.setTextColor(60, 60, 120);
+      doc.text(formulationName || `${dosageForm} Formulation`, pageW / 2, 37, {
+        align: "center",
+      });
+      doc.setFontSize(9);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(80, 80, 80);
+      doc.text(
+        `Prepared by: ${ownerName || "N/A"}  |  Institution: ${institution || "N/A"}`,
+        pageW / 2,
+        47,
+        { align: "center" },
+      );
+      doc.text(
+        `Date: ${new Date().toLocaleDateString("en-IN", { year: "numeric", month: "long", day: "numeric" })}`,
+        pageW / 2,
+        54,
+        { align: "center" },
+      );
+      y = 70;
+
+      // Section 1: Formulation Overview
+      addSectionHeader("1. FORMULATION OVERVIEW");
+      autoTable(doc, {
+        startY: y,
+        head: [["Parameter", "Details"]],
+        body: [
+          ["Dosage Form", dosageForm || "N/A"],
+          ["Manufacturing Method", method || "N/A"],
+          ["Total Ingredients", ingredients.length.toString()],
+          [
+            "Total Batch Weight (single dose)",
+            `${ingredients.reduce((s, i) => s + i.quantity, 0)} mg`,
+          ],
+          [
+            "API Count",
+            ingredients
+              .filter((i) => i.category === "api" || i.category === "herb")
+              .length.toString(),
+          ],
+          ["Compatibility Score", `${compatibilityScore}/100`],
+          ["Stability Score", `${advancedStability.stabilityScore}/100`],
+          [
+            "Predicted Shelf Life",
+            `${advancedStability.shelfLifeMonths} months at 25°C/60% RH`,
+          ],
+        ],
+        theme: "grid",
+        headStyles: { fillColor: [30, 30, 80], textColor: 255 },
+        margin: { left: margin, right: margin },
+      });
+      y = (doc as any).lastAutoTable.finalY + 8;
+
+      // Section 2: Composition Table
+      checkPage(40);
+      addSectionHeader("2. COMPOSITION TABLE");
+      autoTable(doc, {
+        startY: y,
+        head: [
+          ["#", "Ingredient", "Category", `Quantity (×${scaleUp})`, "Unit"],
+        ],
+        body: ingredients.map((ing, idx) => [
+          (idx + 1).toString(),
+          ing.name,
+          ing.category,
+          (ing.quantity * scaleUp).toFixed(2),
+          ing.unit,
+        ]),
+        theme: "striped",
+        headStyles: { fillColor: [30, 30, 80], textColor: 255 },
+        margin: { left: margin, right: margin },
+      });
+      y = (doc as any).lastAutoTable.finalY + 8;
+
+      // Section 3: Compatibility Analysis
+      checkPage(40);
+      addSectionHeader("3. COMPATIBILITY ANALYSIS");
+      const incompatPairs: string[][] = [];
+      const cautionPairs: string[][] = [];
+      ingredients.forEach((ing1, i) => {
+        ingredients.forEach((ing2, j) => {
+          if (j <= i) return;
+          const cell = compatibilityMatrix[i]?.[j];
+          if (cell?.status === "incompatible")
+            incompatPairs.push([ing1.name, ing2.name, cell.reason]);
+          if (cell?.status === "caution")
+            cautionPairs.push([ing1.name, ing2.name, cell.reason]);
+        });
+      });
+      if (incompatPairs.length === 0 && cautionPairs.length === 0) {
+        doc.setFontSize(10);
+        doc.setTextColor(34, 197, 94);
+        doc.text(
+          "No significant incompatibilities detected between selected ingredients.",
+          margin,
+          y,
+        );
+        y += 8;
+        doc.setTextColor(0, 0, 0);
+      } else {
+        if (incompatPairs.length > 0) {
+          doc.setFontSize(10);
+          doc.setFont("helvetica", "bold");
+          doc.setTextColor(220, 38, 38);
+          doc.text("Incompatible Pairs:", margin, y);
+          y += 6;
+          doc.setFont("helvetica", "normal");
+          doc.setTextColor(0, 0, 0);
+          autoTable(doc, {
+            startY: y,
+            head: [["Ingredient A", "Ingredient B", "Reason"]],
+            body: incompatPairs,
+            theme: "grid",
+            headStyles: { fillColor: [220, 38, 38], textColor: 255 },
+            margin: { left: margin, right: margin },
+            columnStyles: { 2: { cellWidth: 90 } },
+          });
+          y = (doc as any).lastAutoTable.finalY + 6;
+        }
+        if (cautionPairs.length > 0) {
+          checkPage(30);
+          doc.setFontSize(10);
+          doc.setFont("helvetica", "bold");
+          doc.setTextColor(202, 138, 4);
+          doc.text("Caution Pairs:", margin, y);
+          y += 6;
+          doc.setFont("helvetica", "normal");
+          doc.setTextColor(0, 0, 0);
+          autoTable(doc, {
+            startY: y,
+            head: [["Ingredient A", "Ingredient B", "Reason"]],
+            body: cautionPairs,
+            theme: "grid",
+            headStyles: { fillColor: [202, 138, 4], textColor: 255 },
+            margin: { left: margin, right: margin },
+            columnStyles: { 2: { cellWidth: 90 } },
+          });
+          y = (doc as any).lastAutoTable.finalY + 6;
+        }
+      }
+
+      // Section 4: Stability Assessment
+      checkPage(60);
+      addSectionHeader("4. PREDICTIVE STABILITY ASSESSMENT");
+      autoTable(doc, {
+        startY: y,
+        head: [["Stability Parameter", "Assessment", "Recommendation"]],
+        body: [
+          [
+            "Hygroscopic Ingredients",
+            `${advancedStability.hygroscopicCount} detected`,
+            advancedStability.hygroscopicCount > 1
+              ? "Use desiccant packaging; store <65% RH"
+              : "Standard packaging acceptable",
+          ],
+          [
+            "Thermolabile Ingredients",
+            `${advancedStability.thermolabileCount} detected`,
+            advancedStability.thermolabileCount > 0
+              ? "Store below 25°C; avoid high-temperature processing"
+              : "No special temperature requirements",
+          ],
+          [
+            "Light-Sensitive Ingredients",
+            `${advancedStability.lightSensitiveCount} detected`,
+            advancedStability.lightSensitiveCount > 0
+              ? "Use amber/opaque packaging"
+              : "Standard packaging acceptable",
+          ],
+          [
+            "Oxidation Risk",
+            `${advancedStability.oxidationRisk} ingredient(s) at risk`,
+            advancedStability.oxidationRisk > 1
+              ? "Add antioxidant; use nitrogen purge packaging"
+              : "Monitor during stability studies",
+          ],
+          [
+            "Hydrolysis Risk",
+            `${advancedStability.hydrolysisRisk} ingredient(s) at risk`,
+            advancedStability.hydrolysisRisk > 1
+              ? "Control moisture; use desiccants"
+              : "Standard precautions apply",
+          ],
+          [
+            "pH Compatibility",
+            advancedStability.phCompatible
+              ? `Compatible (pH ${advancedStability.phMin.toFixed(1)}-${advancedStability.phMax.toFixed(1)})`
+              : "INCOMPATIBLE pH ranges",
+            advancedStability.phCompatible
+              ? "Formulation is pH-stable"
+              : "CRITICAL: pH conflict - reformulate",
+          ],
+          [
+            "Predicted Shelf Life",
+            `${advancedStability.shelfLifeMonths} months`,
+            "At 25°C/60% RH per ICH Q1A guidelines",
+          ],
+          [
+            "Overall Stability Score",
+            `${advancedStability.stabilityScore}/100`,
+            advancedStability.stabilityScore >= 80
+              ? "Excellent - proceed with accelerated stability testing"
+              : advancedStability.stabilityScore >= 60
+                ? "Good - standard stability protocol recommended"
+                : "Poor - reformulation recommended",
+          ],
+        ],
+        theme: "grid",
+        headStyles: { fillColor: [30, 30, 80], textColor: 255 },
+        margin: { left: margin, right: margin },
+        columnStyles: { 2: { cellWidth: 70 } },
+      });
+      y = (doc as any).lastAutoTable.finalY + 8;
+
+      // Section 5: Composition Advantages & Disadvantages
+      checkPage(40);
+      addSectionHeader("5. COMPOSITION ADVANTAGES & DISADVANTAGES");
+      if (compositionAnalysis.advantages.length > 0) {
+        doc.setFontSize(10);
+        doc.setFont("helvetica", "bold");
+        doc.setTextColor(34, 197, 94);
+        doc.text("Advantages:", margin, y);
+        y += 6;
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(0, 0, 0);
+        for (const adv of compositionAnalysis.advantages) {
+          checkPage(8);
+          const lines = doc.splitTextToSize(`- ${adv}`, pageW - margin * 2);
+          doc.text(lines, margin, y);
+          y += lines.length * 5;
+        }
+        y += 4;
+      }
+      if (compositionAnalysis.disadvantages.length > 0) {
+        checkPage(20);
+        doc.setFontSize(10);
+        doc.setFont("helvetica", "bold");
+        doc.setTextColor(220, 38, 38);
+        doc.text("Disadvantages / Risks:", margin, y);
+        y += 6;
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(0, 0, 0);
+        for (const dis of compositionAnalysis.disadvantages) {
+          checkPage(8);
+          const lines = doc.splitTextToSize(`- ${dis}`, pageW - margin * 2);
+          doc.text(lines, margin, y);
+          y += lines.length * 5;
+        }
+      }
+      y += 8;
+
+      // Section 6: SOP
+      checkPage(40);
+      addSectionHeader("6. STANDARD OPERATING PROCEDURE (SOP)");
+      doc.setFontSize(9);
+      doc.setFont("helvetica", "bold");
+      doc.text("Materials Required (Scaled):", margin, y);
+      y += 5;
+      doc.setFont("helvetica", "normal");
+      ingredients.forEach((ing, idx) => {
+        checkPage(6);
+        doc.text(
+          `${idx + 1}. ${ing.name}: ${(ing.quantity * scaleUp).toFixed(2)} ${ing.unit}`,
+          margin + 4,
+          y,
+        );
+        y += 5;
+      });
+      y += 4;
+      doc.setFont("helvetica", "bold");
+      doc.text("Procedure:", margin, y);
+      y += 5;
+      doc.setFont("helvetica", "normal");
+      sopSteps.forEach((step, idx) => {
+        checkPage(8);
+        const lines = doc.splitTextToSize(
+          `Step ${idx + 1}: ${step}`,
+          pageW - margin * 2 - 4,
+        );
+        doc.text(lines, margin + 4, y);
+        y += lines.length * 5 + 2;
+      });
+
+      // Certificate page
+      if (ownerName) {
+        doc.addPage();
+        y = 20;
+        // Gold outer border
+        doc.setDrawColor(180, 130, 30);
+        doc.setLineWidth(3);
+        doc.rect(8, 8, pageW - 16, 279, "S");
+        // Green inner border
+        doc.setDrawColor(20, 83, 45);
+        doc.setLineWidth(1);
+        doc.rect(14, 14, pageW - 28, 267, "S");
+        // Corner ornaments
+        for (const [cx, cy2] of [
+          [12, 12],
+          [pageW - 12, 12],
+          [12, 283],
+          [pageW - 12, 283],
+        ] as [number, number][]) {
+          doc.setFontSize(10);
+          doc.setFont("helvetica", "bold");
+          doc.setTextColor(180, 130, 30);
+          doc.text("◆", cx, cy2, { align: "center" });
+        }
+        // Green header band
+        doc.setFillColor(20, 83, 45);
+        doc.rect(14, 14, pageW - 28, 30, "F");
+        doc.setFontSize(14);
+        doc.setFont("helvetica", "bold");
+        doc.setTextColor(255, 255, 255);
+        doc.text("AyurNexis 3.1", pageW / 2, 27, { align: "center" });
+        doc.setFontSize(8);
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(167, 243, 208);
+        doc.text("FORMULATION EXCELLENCE CERTIFICATE", pageW / 2, 36, {
+          align: "center",
+        });
+        // Divider gold line
+        doc.setDrawColor(180, 130, 30);
+        doc.setLineWidth(0.5);
+        doc.line(30, 48, pageW - 30, 48);
+        // Body
+        doc.setFontSize(9);
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(100, 100, 100);
+        doc.text("THIS IS TO CERTIFY THAT", pageW / 2, 60, { align: "center" });
+        doc.setFontSize(16);
+        doc.setFont("helvetica", "bold");
+        doc.setTextColor(20, 83, 45);
+        doc.text(ownerName.toUpperCase(), pageW / 2, 75, { align: "center" });
+        if (designation) {
+          doc.setFontSize(10);
+          doc.setFont("helvetica", "italic");
+          doc.setTextColor(80, 80, 80);
+          doc.text(designation, pageW / 2, 84, { align: "center" });
+        }
+        if (institution) {
+          doc.setFontSize(9);
+          doc.setFont("helvetica", "normal");
+          doc.setTextColor(100, 100, 100);
+          doc.text(institution, pageW / 2, 93, { align: "center" });
+        }
+        doc.setFontSize(9);
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(80, 80, 80);
+        doc.text(
+          "has successfully developed, validated, and documented the following pharmaceutical",
+          pageW / 2,
+          106,
+          { align: "center" },
+        );
+        doc.text(
+          "formulation using AyurNexis 3.1 AI-Enabled Ayurvedic Quality Assurance Platform.",
+          pageW / 2,
+          114,
+          { align: "center" },
+        );
+        // Formulation box
+        doc.setFillColor(240, 253, 244);
+        doc.setDrawColor(20, 83, 45);
+        doc.setLineWidth(0.5);
+        doc.rect(25, 122, pageW - 50, 40, "FD");
+        doc.setFontSize(13);
+        doc.setFont("helvetica", "bold");
+        doc.setTextColor(20, 83, 45);
+        doc.text(
+          (formulationName || `${dosageForm} Formulation`).toUpperCase(),
+          pageW / 2,
+          137,
+          { align: "center" },
+        );
+        doc.setFontSize(9);
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(80, 80, 80);
+        doc.text(
+          `${dosageForm}  ·  ${method}  ·  ${ingredients.length} Ingredients`,
+          pageW / 2,
+          147,
+          { align: "center" },
+        );
+        doc.text(
+          `Stability Score: ${advancedStability.stabilityScore}/100  ·  Shelf Life: ${advancedStability.shelfLifeMonths} months`,
+          pageW / 2,
+          156,
+          { align: "center" },
+        );
+        // Signature lines
+        doc.setDrawColor(150, 150, 150);
+        doc.setLineWidth(0.3);
+        doc.line(30, 205, 95, 205);
+        doc.line(pageW - 95, 205, pageW - 30, 205);
+        doc.setFontSize(8);
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(120, 120, 120);
+        doc.text("Formulator Signature", 62, 211, { align: "center" });
+        doc.text("QA Authority", pageW - 62, 211, { align: "center" });
+        doc.setFontSize(9);
+        doc.setFont("helvetica", "bold");
+        doc.setTextColor(50, 50, 50);
+        doc.text(ownerName, 62, 218, { align: "center" });
+        doc.text("AyurNexis QA Board", pageW - 62, 218, { align: "center" });
+        // Date and cert number
+        const certDate = new Date().toLocaleDateString("en-IN", {
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+        });
+        const certNum = `AN-${Date.now().toString(36).toUpperCase().slice(-8)}`;
+        doc.setFontSize(8);
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(120, 120, 120);
+        doc.text(`Date of Certification: ${certDate}`, 30, 230);
+        doc.text(`Certificate No.: ${certNum}`, pageW - 30, 230, {
+          align: "right",
+        });
+        // Footer tagline
+        doc.setFillColor(20, 83, 45);
+        doc.rect(14, 270, pageW - 28, 11, "F");
+        doc.setFontSize(7);
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(167, 243, 208);
+        doc.text(
+          "Powered by AyurNexis 3.1 — AI-Enabled Ayurvedic Quality Assurance Platform",
+          pageW / 2,
+          277,
+          { align: "center" },
+        );
+      }
+
+      doc.save(`${formulationName || dosageForm || "formulation"}_report.pdf`);
     } catch (e) {
-      console.error(e);
+      console.error("PDF export error:", e);
     } finally {
       setExporting(false);
     }
@@ -1186,6 +1925,20 @@ export function FormulationLab() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -16 }}
             >
+              <div className="flex items-center gap-3 mb-5">
+                <Button
+                  data-ocid="formulation.step2.back_button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setStep(1);
+                    setMethod(null);
+                  }}
+                  className="gap-1 text-muted-foreground hover:text-foreground"
+                >
+                  <ChevronLeft className="w-4 h-4" /> Back to Dosage Form
+                </Button>
+              </div>
               <div className="mb-5">
                 <h2 className="text-xl font-bold text-foreground">
                   Select Manufacturing Method
@@ -1483,6 +2236,12 @@ export function FormulationLab() {
                   >
                     Dynamic Recommendations
                   </TabsTrigger>
+                  <TabsTrigger
+                    data-ocid="formulation.analysis.compatibility_tab"
+                    value="compat"
+                  >
+                    Compatibility Matrix
+                  </TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="api" className="space-y-4">
@@ -1676,6 +2435,155 @@ export function FormulationLab() {
                     </Card>
                   )}
                 </TabsContent>
+
+                <TabsContent value="compat" className="space-y-4">
+                  {ingredients.length < 2 ? (
+                    <div className="text-center py-14 text-muted-foreground">
+                      <Layers className="w-10 h-10 mx-auto mb-3 opacity-30" />
+                      <p className="text-sm">
+                        Add at least 2 ingredients to see the compatibility
+                        matrix.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      <p className="text-xs text-muted-foreground">
+                        Each cell shows known pharmacopeia compatibility between
+                        ingredient pairs. Click any cell to see details.
+                      </p>
+                      <div className="overflow-x-auto rounded-xl border border-border">
+                        <table className="text-xs border-collapse w-full">
+                          <thead>
+                            <tr>
+                              <th className="p-2 bg-muted/60 text-left text-muted-foreground border border-border min-w-[120px]">
+                                Ingredient
+                              </th>
+                              {ingredients.map((ing) => (
+                                <th
+                                  key={ing.id}
+                                  className="p-2 bg-muted/60 text-center text-muted-foreground border border-border min-w-[90px] max-w-[90px]"
+                                >
+                                  <span
+                                    className="block truncate"
+                                    title={ing.name}
+                                  >
+                                    {ing.name.length > 12
+                                      ? `${ing.name.substring(0, 12)}…`
+                                      : ing.name}
+                                  </span>
+                                </th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {ingredients.map((ing1, i) => (
+                              <tr key={ing1.id}>
+                                <td className="p-2 bg-muted/30 font-medium text-foreground border border-border">
+                                  <span
+                                    className="block truncate max-w-[120px]"
+                                    title={ing1.name}
+                                  >
+                                    {ing1.name.length > 14
+                                      ? `${ing1.name.substring(0, 14)}…`
+                                      : ing1.name}
+                                  </span>
+                                </td>
+                                {ingredients.map((ing2, j) => {
+                                  const cell = compatibilityMatrix[i]?.[j];
+                                  if (!cell)
+                                    return (
+                                      <td
+                                        key={ing2.id}
+                                        className="border border-border"
+                                      />
+                                    );
+                                  const isHovered =
+                                    hoveredCell?.i === i &&
+                                    hoveredCell?.j === j;
+                                  let bg = "#dcfce7";
+                                  let label = "✓ OK";
+                                  let textColor = "#15803d";
+                                  if (cell.status === "self") {
+                                    bg = "#f1f5f9";
+                                    label = "—";
+                                    textColor = "#94a3b8";
+                                  } else if (cell.status === "incompatible") {
+                                    bg = "#fee2e2";
+                                    label = "✗ Risk";
+                                    textColor = "#dc2626";
+                                  } else if (cell.status === "caution") {
+                                    bg = "#fef9c3";
+                                    label = "⚠ Caution";
+                                    textColor = "#ca8a04";
+                                  }
+                                  return (
+                                    <td
+                                      key={ing2.id}
+                                      className="p-2 text-center border border-border cursor-pointer transition-opacity"
+                                      style={{
+                                        backgroundColor: bg,
+                                        opacity: isHovered ? 0.75 : 1,
+                                      }}
+                                      onClick={() =>
+                                        cell.status !== "self"
+                                          ? setHoveredCell(
+                                              hoveredCell?.i === i &&
+                                                hoveredCell?.j === j
+                                                ? null
+                                                : { i, j, reason: cell.reason },
+                                            )
+                                          : undefined
+                                      }
+                                      onKeyDown={(e) => {
+                                        if (
+                                          e.key === "Enter" &&
+                                          cell.status !== "self"
+                                        ) {
+                                          setHoveredCell(
+                                            hoveredCell?.i === i &&
+                                              hoveredCell?.j === j
+                                              ? null
+                                              : { i, j, reason: cell.reason },
+                                          );
+                                        }
+                                      }}
+                                      tabIndex={
+                                        cell.status !== "self" ? 0 : undefined
+                                      }
+                                    >
+                                      <span
+                                        className="text-[11px] font-semibold"
+                                        style={{ color: textColor }}
+                                      >
+                                        {label}
+                                      </span>
+                                    </td>
+                                  );
+                                })}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      {hoveredCell && (
+                        <div className="rounded-xl border border-border bg-card p-4">
+                          <div className="flex items-start gap-3">
+                            <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0 text-yellow-400" />
+                            <div>
+                              <p className="text-xs font-semibold text-foreground mb-1">
+                                {ingredients[hoveredCell.i]?.name} ↔{" "}
+                                {ingredients[hoveredCell.j]?.name}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {hoveredCell.reason}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </TabsContent>
               </Tabs>
             </motion.div>
           )}
@@ -1796,102 +2704,336 @@ export function FormulationLab() {
                 </Card>
               )}
 
-              {/* Stability & compliance */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Card className="border-border">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm">
-                      Stability Assessment
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-2 text-xs">
+              {/* Advanced Stability Cards 2x2 */}
+              <div>
+                <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
+                  <Thermometer className="w-4 h-4 text-primary" /> Predictive
+                  Stability Assessment
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Card 1: Physical Stability */}
+                  <Card className="border-border">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm flex items-center gap-2">
+                        <Thermometer className="w-4 h-4 text-blue-400" />{" "}
+                        Physical Stability
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-2 text-xs">
                       {[
                         {
-                          label: "Preservative System",
-                          ok: excipientIngredients.some(
-                            (i) => i.category === "preservatives",
-                          ),
+                          label: "Hygroscopic Ingredients",
+                          count: advancedStability.hygroscopicCount,
+                          tip:
+                            advancedStability.hygroscopicCount > 1
+                              ? "Store in airtight container away from moisture"
+                              : null,
                         },
                         {
-                          label: "Lubricant / Release Agent",
-                          ok: excipientIngredients.some(
-                            (i) => i.category === "lubricants",
-                          ),
+                          label: "Thermolabile Ingredients",
+                          count: advancedStability.thermolabileCount,
+                          tip:
+                            advancedStability.thermolabileCount > 0
+                              ? "Store below 25°C"
+                              : null,
                         },
                         {
-                          label: "Structural Support (Filler)",
-                          ok: excipientIngredients.some(
-                            (i) => i.category === "fillers",
-                          ),
-                        },
-                        {
-                          label: "Disintegration System",
-                          ok: excipientIngredients.some(
-                            (i) => i.category === "disintegrants",
-                          ),
+                          label: "Light-Sensitive Ingredients",
+                          count: advancedStability.lightSensitiveCount,
+                          tip:
+                            advancedStability.lightSensitiveCount > 0
+                              ? "Use amber/opaque packaging"
+                              : null,
                         },
                       ].map((row) => (
-                        <div
-                          key={row.label}
-                          className="flex items-center justify-between"
-                        >
-                          <span className="text-muted-foreground">
-                            {row.label}
-                          </span>
-                          <Badge
-                            variant="outline"
-                            className={`text-[10px] ${
-                              row.ok
-                                ? "border-green-500/40 text-green-400"
-                                : "border-red-500/40 text-red-400"
-                            }`}
-                          >
-                            {row.ok ? "Present" : "Missing"}
-                          </Badge>
+                        <div key={row.label}>
+                          <div className="flex items-center justify-between">
+                            <span className="text-muted-foreground">
+                              {row.label}
+                            </span>
+                            <Badge
+                              variant="outline"
+                              className={`text-[10px] ${row.count > 2 ? "border-red-500/40 text-red-400" : row.count > 0 ? "border-yellow-500/40 text-yellow-400" : "border-green-500/40 text-green-400"}`}
+                            >
+                              {row.count} detected
+                            </Badge>
+                          </div>
+                          {row.tip && (
+                            <p className="text-[10px] text-yellow-400 mt-0.5">
+                              → {row.tip}
+                            </p>
+                          )}
                         </div>
                       ))}
-                    </div>
-                  </CardContent>
-                </Card>
+                    </CardContent>
+                  </Card>
 
-                <Card className="border-border">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm">
-                      Pharmacopeia Compliance
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    {apiIngredients.length === 0 ? (
-                      <p className="text-xs text-muted-foreground">
-                        No APIs added yet.
-                      </p>
-                    ) : (
-                      <div className="space-y-2 text-xs">
-                        {apiIngredients.map((ing) => {
-                          const api = ing.source as APIIngredient;
-                          return (
-                            <div
-                              key={ing.id}
-                              className="flex items-center justify-between"
-                            >
-                              <span className="text-muted-foreground">
-                                {ing.name}
-                              </span>
-                              <Badge
-                                variant="outline"
-                                className="text-[10px] border-primary/40 text-primary"
-                              >
-                                {api?.source ?? "Custom"}
-                              </Badge>
-                            </div>
-                          );
-                        })}
+                  {/* Card 2: Chemical Stability */}
+                  <Card className="border-border">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm flex items-center gap-2">
+                        <Zap className="w-4 h-4 text-orange-400" /> Chemical
+                        Stability
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-2 text-xs">
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">
+                          Oxidation Risk
+                        </span>
+                        <Badge
+                          variant="outline"
+                          className={`text-[10px] ${advancedStability.oxidationRisk > 1 ? "border-red-500/40 text-red-400" : advancedStability.oxidationRisk > 0 ? "border-yellow-500/40 text-yellow-400" : "border-green-500/40 text-green-400"}`}
+                        >
+                          {advancedStability.oxidationRisk} ingredient(s)
+                        </Badge>
                       </div>
-                    )}
-                  </CardContent>
-                </Card>
+                      {advancedStability.oxidationRisk > 1 && (
+                        <p className="text-[10px] text-yellow-400">
+                          → Add antioxidant; use nitrogen purge packaging
+                        </p>
+                      )}
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">
+                          Hydrolysis Risk
+                        </span>
+                        <Badge
+                          variant="outline"
+                          className={`text-[10px] ${advancedStability.hydrolysisRisk > 1 ? "border-red-500/40 text-red-400" : advancedStability.hydrolysisRisk > 0 ? "border-yellow-500/40 text-yellow-400" : "border-green-500/40 text-green-400"}`}
+                        >
+                          {advancedStability.hydrolysisRisk} ingredient(s)
+                        </Badge>
+                      </div>
+                      {advancedStability.hydrolysisRisk > 1 && (
+                        <p className="text-[10px] text-yellow-400">
+                          → Control moisture; use desiccants
+                        </p>
+                      )}
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">
+                          pH Compatibility
+                        </span>
+                        <Badge
+                          variant="outline"
+                          className={`text-[10px] ${advancedStability.phCompatible ? "border-green-500/40 text-green-400" : "border-red-500/40 text-red-400"}`}
+                        >
+                          {advancedStability.phCompatible
+                            ? `Compatible pH ${advancedStability.phMin.toFixed(1)}–${advancedStability.phMax.toFixed(1)}`
+                            : "⚠ Incompatible pH ranges"}
+                        </Badge>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Card 3: Predicted Shelf Life */}
+                  <Card className="border-border">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm flex items-center gap-2">
+                        <Shield className="w-4 h-4 text-primary" /> Predicted
+                        Shelf Life
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="text-center py-2">
+                      <p
+                        className={`text-4xl font-bold ${advancedStability.shelfLifeMonths >= 30 ? "text-green-400" : advancedStability.shelfLifeMonths >= 18 ? "text-yellow-400" : "text-red-400"}`}
+                      >
+                        {advancedStability.shelfLifeMonths}
+                      </p>
+                      <p className="text-xs font-semibold text-muted-foreground mt-1">
+                        months
+                      </p>
+                      <p className="text-[10px] text-muted-foreground mt-1">
+                        at 25°C / 60% RH (ICH Q1A)
+                      </p>
+                      <div className="text-[10px] text-left mt-3 space-y-1 text-muted-foreground">
+                        {advancedStability.hygroscopicCount > 2 && (
+                          <p>• High moisture sensitivity reduces shelf life</p>
+                        )}
+                        {advancedStability.thermolabileCount > 0 && (
+                          <p>• Thermolabile components require cold chain</p>
+                        )}
+                        {advancedStability.oxidationRisk > 1 && (
+                          <p>
+                            • Multiple oxidation-prone APIs shorten stability
+                          </p>
+                        )}
+                        {advancedStability.hydrolysisRisk > 1 && (
+                          <p>• Hydrolysis risk under humid conditions</p>
+                        )}
+                        {!advancedStability.phCompatible && (
+                          <p>• pH conflict significantly reduces stability</p>
+                        )}
+                        {advancedStability.shelfLifeMonths >= 30 && (
+                          <p>• No major stability concerns identified</p>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Card 4: Stability Score */}
+                  <Card className="border-border">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm flex items-center gap-2">
+                        <CheckCircle className="w-4 h-4 text-primary" /> Overall
+                        Stability Score
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="text-center py-2">
+                      <div className="relative w-24 h-24 mx-auto">
+                        <svg
+                          viewBox="0 0 100 100"
+                          className="w-full h-full -rotate-90"
+                          aria-label="Stability score gauge"
+                        >
+                          <title>Stability Score</title>
+                          <circle
+                            cx="50"
+                            cy="50"
+                            r="40"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="12"
+                            className="text-muted/30"
+                          />
+                          <circle
+                            cx="50"
+                            cy="50"
+                            r="40"
+                            fill="none"
+                            strokeWidth="12"
+                            stroke={
+                              advancedStability.stabilityScore >= 80
+                                ? "#4ade80"
+                                : advancedStability.stabilityScore >= 60
+                                  ? "#facc15"
+                                  : "#f87171"
+                            }
+                            strokeDasharray={`${advancedStability.stabilityScore * 2.513} 251.3`}
+                            strokeLinecap="round"
+                          />
+                        </svg>
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <span
+                            className={`text-2xl font-bold ${advancedStability.stabilityScore >= 80 ? "text-green-400" : advancedStability.stabilityScore >= 60 ? "text-yellow-400" : "text-red-400"}`}
+                          >
+                            {advancedStability.stabilityScore}
+                          </span>
+                        </div>
+                      </div>
+                      <p
+                        className={`text-sm font-semibold mt-2 ${advancedStability.stabilityScore >= 80 ? "text-green-400" : advancedStability.stabilityScore >= 60 ? "text-yellow-400" : "text-red-400"}`}
+                      >
+                        {advancedStability.stabilityScore >= 80
+                          ? "Excellent"
+                          : advancedStability.stabilityScore >= 60
+                            ? "Good"
+                            : advancedStability.stabilityScore >= 40
+                              ? "Moderate"
+                              : "Poor"}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground">
+                        out of 100
+                      </p>
+                    </CardContent>
+                  </Card>
+                </div>
               </div>
+
+              {/* Composition Analysis */}
+              <Card className="border-border">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <BookOpen className="w-4 h-4 text-primary" /> Composition
+                    Analysis
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="rounded-lg bg-green-500/5 border border-green-500/20 p-3">
+                      <p className="text-xs font-semibold text-green-400 mb-2">
+                        ✓ Advantages
+                      </p>
+                      {compositionAnalysis.advantages.length === 0 ? (
+                        <p className="text-xs text-muted-foreground">
+                          None identified
+                        </p>
+                      ) : (
+                        <ul className="space-y-1.5">
+                          {compositionAnalysis.advantages.map((adv) => (
+                            <li
+                              key={`adv-${adv.substring(0, 20)}`}
+                              className="text-xs text-muted-foreground flex gap-2"
+                            >
+                              <span className="text-green-400 shrink-0">•</span>
+                              {adv}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                    <div className="rounded-lg bg-red-500/5 border border-red-500/20 p-3">
+                      <p className="text-xs font-semibold text-red-400 mb-2">
+                        ✗ Disadvantages / Risks
+                      </p>
+                      {compositionAnalysis.disadvantages.length === 0 ? (
+                        <p className="text-xs text-muted-foreground">
+                          None identified
+                        </p>
+                      ) : (
+                        <ul className="space-y-1.5">
+                          {compositionAnalysis.disadvantages.map((dis) => (
+                            <li
+                              key={`dis-${dis.substring(0, 20)}`}
+                              className="text-xs text-muted-foreground flex gap-2"
+                            >
+                              <span className="text-red-400 shrink-0">•</span>
+                              {dis}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Pharmacopeia Compliance */}
+              <Card className="border-border">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm">
+                    Pharmacopeia Compliance
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {apiIngredients.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">
+                      No APIs added yet.
+                    </p>
+                  ) : (
+                    <div className="space-y-2 text-xs">
+                      {apiIngredients.map((ing) => {
+                        const api = ing.source as APIIngredient;
+                        return (
+                          <div
+                            key={ing.id}
+                            className="flex items-center justify-between"
+                          >
+                            <span className="text-muted-foreground">
+                              {ing.name}
+                            </span>
+                            <Badge
+                              variant="outline"
+                              className="text-[10px] border-primary/40 text-primary"
+                            >
+                              {api?.source ?? "Custom"}
+                            </Badge>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
             </motion.div>
           )}
 
@@ -2050,58 +3192,154 @@ export function FormulationLab() {
                   </CardContent>
                 </Card>
 
-                {/* Certificate Preview */}
+                {/* Certificate Preview — Premium Design */}
                 <div
-                  className="rounded-xl border-2 border-primary/40 bg-card p-6 flex flex-col justify-between"
+                  className="rounded-xl border-4 border-yellow-600/60 p-1 relative"
                   data-ocid="formulation.cert.card"
                 >
-                  <div className="text-center">
-                    <div className="flex items-center justify-center gap-2 mb-1">
-                      <Shield className="w-5 h-5 text-primary" />
-                      <span className="text-xs font-semibold text-primary tracking-widest uppercase">
-                        AyurNexis 3.1
-                      </span>
+                  <div className="rounded-lg border-2 border-green-700/40 overflow-hidden">
+                    {/* Corner ornaments */}
+                    <span className="absolute top-3 left-3 text-yellow-600 text-lg font-bold select-none z-10">
+                      ◆
+                    </span>
+                    <span className="absolute top-3 right-3 text-yellow-600 text-lg font-bold select-none z-10">
+                      ◆
+                    </span>
+                    <span className="absolute bottom-3 left-3 text-yellow-600 text-lg font-bold select-none z-10">
+                      ◆
+                    </span>
+                    <span className="absolute bottom-3 right-3 text-yellow-600 text-lg font-bold select-none z-10">
+                      ◆
+                    </span>
+
+                    {/* Header band */}
+                    <div
+                      className="flex items-center justify-between px-6 py-4"
+                      style={{
+                        background: "linear-gradient(135deg, #14532d, #065f46)",
+                      }}
+                    >
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-2xl">🌿</span>
+                          <span className="text-white font-bold text-lg tracking-wide">
+                            AyurNexis 3.1
+                          </span>
+                        </div>
+                        <p className="text-green-200 text-[10px] tracking-widest uppercase mt-0.5">
+                          Formulation Excellence Certificate
+                        </p>
+                      </div>
+                      {/* Seal */}
+                      <div
+                        className="flex-shrink-0 w-16 h-16 rounded-full border-4 border-yellow-400/60 flex flex-col items-center justify-center text-center"
+                        style={{ background: "rgba(255,255,255,0.08)" }}
+                      >
+                        <Shield className="w-5 h-5 text-yellow-300 mb-0.5" />
+                        <span className="text-[8px] text-yellow-200 font-bold leading-tight">
+                          VERIFIED
+                        </span>
+                        <span className="text-[7px] text-green-200 leading-tight">
+                          QA CERTIFIED
+                        </span>
+                      </div>
                     </div>
-                    <h3 className="text-base font-bold text-foreground mt-3">
-                      Certificate of Formulation Development
-                    </h3>
-                    <div className="my-4 h-px bg-primary/30" />
-                    <p className="text-xs text-muted-foreground leading-relaxed">
-                      This certifies that{" "}
-                      <span className="text-foreground font-semibold">
+
+                    {/* Body */}
+                    <div className="bg-white px-8 py-6 text-center">
+                      <p className="text-xs text-gray-500 uppercase tracking-widest mb-3">
+                        This is to certify that
+                      </p>
+                      <p className="text-xl font-bold text-green-900 font-serif mb-1">
                         {ownerName || "[Formulator Name]"}
-                      </span>
+                      </p>
                       {designation && (
-                        <>
-                          ,{" "}
-                          <span className="text-foreground">{designation}</span>
-                          ,
-                        </>
-                      )}{" "}
-                      of{" "}
-                      <span className="text-foreground font-semibold">
-                        {institution || "[Institution]"}
-                      </span>{" "}
-                      has developed the following pharmaceutical formulation
-                      using AyurNexis 3.1 Formulation Lab.
-                    </p>
-                    <div className="mt-4 bg-primary/10 rounded-lg p-3">
-                      <p className="text-sm font-bold text-primary">
-                        {formulationName || `${dosageForm} Formulation`}
+                        <p className="text-sm text-gray-600 italic mb-1">
+                          {designation}
+                        </p>
+                      )}
+                      {institution && (
+                        <p className="text-xs text-gray-500 mb-4">
+                          <span className="font-semibold text-gray-700">
+                            {institution}
+                          </span>
+                        </p>
+                      )}
+                      <p className="text-xs text-gray-500 mb-4 leading-relaxed">
+                        has successfully developed, validated, and documented
+                        the following pharmaceutical formulation
+                        <br />
+                        using AyurNexis 3.1 AI-Enabled Ayurvedic QA Platform in
+                        accordance with pharmacopoeial standards.
                       </p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {dosageForm} | {method}
-                      </p>
+
+                      {/* Formulation box */}
+                      <div className="border-2 border-green-700/30 rounded-lg p-4 mb-4 bg-green-50/50">
+                        <p className="text-base font-bold text-green-800">
+                          {formulationName || `${dosageForm} Formulation`}
+                        </p>
+                        <p className="text-xs text-gray-500 mt-1">
+                          {dosageForm} · {method}
+                        </p>
+                        <p className="text-xs text-gray-400 mt-0.5">
+                          {ingredients.length} Pharmaceutical-Grade Ingredients
+                          · Stability: {advancedStability.stabilityScore}/100
+                        </p>
+                      </div>
+
+                      {/* Signature row */}
+                      <div className="flex items-end justify-between mt-6 gap-4">
+                        <div className="flex-1 text-center">
+                          <div className="h-px bg-gray-300 w-full mb-1" />
+                          <p className="text-[10px] text-gray-400 uppercase tracking-wide">
+                            Formulator Signature
+                          </p>
+                          <p className="text-xs font-semibold text-gray-700 mt-0.5">
+                            {ownerName || "—"}
+                          </p>
+                        </div>
+                        <div className="flex-shrink-0 text-center">
+                          <div
+                            className="w-12 h-12 mx-auto rounded-full border-2 border-yellow-500/50 flex items-center justify-center mb-1"
+                            style={{
+                              background:
+                                "linear-gradient(135deg, #fef9c3, #fde68a)",
+                            }}
+                          >
+                            <span className="text-lg">🏅</span>
+                          </div>
+                        </div>
+                        <div className="flex-1 text-center">
+                          <div className="h-px bg-gray-300 w-full mb-1" />
+                          <p className="text-[10px] text-gray-400 uppercase tracking-wide">
+                            QA Authority
+                          </p>
+                          <p className="text-xs font-semibold text-gray-700 mt-0.5">
+                            AyurNexis QA Board
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="mt-4 flex items-center justify-between text-[10px] text-gray-400">
+                        <span>Date: {today}</span>
+                        <span className="font-mono">
+                          Cert# AN-
+                          {Date.now().toString(36).toUpperCase().slice(-8)}
+                        </span>
+                      </div>
                     </div>
-                  </div>
-                  <div className="text-center mt-4">
-                    <p className="text-xs text-muted-foreground">
-                      Date: {today}
-                    </p>
-                    <div className="mt-3 flex items-center justify-center gap-1">
-                      <div className="h-px w-12 bg-primary/40" />
-                      <Clipboard className="w-3 h-3 text-primary" />
-                      <div className="h-px w-12 bg-primary/40" />
+
+                    {/* Footer tagline */}
+                    <div
+                      className="px-6 py-2 text-center"
+                      style={{
+                        background: "linear-gradient(135deg, #14532d, #065f46)",
+                      }}
+                    >
+                      <p className="text-[9px] text-green-200 tracking-wide">
+                        Powered by AyurNexis 3.1 — AI-Enabled Ayurvedic Quality
+                        Assurance Platform
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -2237,7 +3475,44 @@ export function FormulationLab() {
             {step < 8 && (
               <Button
                 data-ocid="formulation.nav.next_button"
-                onClick={() => setStep((s) => Math.min(8, s + 1))}
+                onClick={() => {
+                  if (step === 7) {
+                    try {
+                      const record = {
+                        id: `form-${Date.now()}`,
+                        name: formulationName || `${dosageForm} Formulation`,
+                        dosageForm,
+                        method,
+                        ingredients: ingredients.map((i) => ({
+                          name: i.name,
+                          category: i.category,
+                          qty: i.quantity,
+                          unit: i.unit,
+                        })),
+                        ingredientCount: ingredients.length,
+                        ownerName,
+                        institution,
+                        designation,
+                        scaleUp,
+                        stabilityScore: advancedStability.stabilityScore,
+                        shelfLife: advancedStability.shelfLifeMonths,
+                        createdAt: new Date().toISOString(),
+                        date: new Date().toISOString(),
+                      };
+                      const existing = JSON.parse(
+                        localStorage.getItem("ayurnexis_formulations") || "[]",
+                      );
+                      existing.unshift(record);
+                      localStorage.setItem(
+                        "ayurnexis_formulations",
+                        JSON.stringify(existing.slice(0, 100)),
+                      );
+                    } catch {
+                      /* ignore */
+                    }
+                  }
+                  setStep((s) => Math.min(8, s + 1));
+                }}
                 className="gap-2"
                 disabled={
                   (step === 2 && !method) ||
@@ -2463,6 +3738,10 @@ export function FormulationLab() {
               {/* Herb Extracts tab */}
               <TabsContent value="herb-extracts" className="h-full mt-0">
                 <ScrollArea className="h-full px-4 py-3">
+                  {/* Botanical Herb Extracts */}
+                  <p className="text-[10px] font-semibold text-green-700 uppercase tracking-widest mb-2 mt-1">
+                    🌿 Botanical Herb Extracts
+                  </p>
                   {herbExtracts
                     .filter(
                       (h) =>
@@ -2488,9 +3767,20 @@ export function FormulationLab() {
                           }`}
                         >
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-foreground truncate">
-                              {he.name}
-                            </p>
+                            <div className="flex items-center gap-1.5 mb-0.5">
+                              <p className="text-sm font-medium text-foreground truncate">
+                                {he.name}
+                              </p>
+                              <span
+                                className="text-[9px] px-1.5 py-0.5 rounded-full font-semibold flex-shrink-0"
+                                style={{
+                                  background: "oklch(0.42 0.14 145 / 0.12)",
+                                  color: "oklch(0.32 0.14 145)",
+                                }}
+                              >
+                                Herb Extract
+                              </span>
+                            </div>
                             <p className="text-[10px] text-muted-foreground">
                               {he.therapeuticCategory} · {he.source}
                             </p>
@@ -2511,6 +3801,96 @@ export function FormulationLab() {
                               size="sm"
                               variant="ghost"
                               onClick={() => addFromDrawer(he, "api")}
+                              className="ml-2 h-7 px-2 shrink-0"
+                            >
+                              <Plus className="w-3 h-3" />
+                            </Button>
+                          )}
+                        </div>
+                      );
+                    })}
+
+                  {/* Functional Excipients section */}
+                  <p className="text-[10px] font-semibold text-blue-700 uppercase tracking-widest mb-2 mt-4">
+                    ⚗️ Functional Excipients
+                  </p>
+                  {extraExcipients
+                    .filter(
+                      (e) =>
+                        !drawerSearch ||
+                        e.name
+                          .toLowerCase()
+                          .includes(drawerSearch.toLowerCase()),
+                    )
+                    .map((exc) => {
+                      const alreadyAdded = ingredients.some(
+                        (i) => i.id === `${exc.id}_excipient`,
+                      );
+                      return (
+                        <div
+                          key={exc.id}
+                          className={`flex items-center justify-between py-2.5 px-3 rounded-lg mb-1.5 border transition-colors ${
+                            alreadyAdded
+                              ? "border-blue-500/30 bg-blue-500/5"
+                              : "border-border hover:border-blue-400/40 hover:bg-muted/30 cursor-pointer"
+                          }`}
+                        >
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5 mb-0.5">
+                              <p className="text-sm font-medium text-foreground truncate">
+                                {exc.name}
+                              </p>
+                              <span
+                                className="text-[9px] px-1.5 py-0.5 rounded-full font-semibold flex-shrink-0"
+                                style={{
+                                  background: "oklch(0.55 0.14 240 / 0.12)",
+                                  color: "oklch(0.40 0.14 240)",
+                                }}
+                              >
+                                Excipient
+                              </span>
+                            </div>
+                            <p className="text-[10px] text-muted-foreground">
+                              {exc.grade} · {exc.source}
+                            </p>
+                            <p className="text-[10px] text-blue-600/70">
+                              {exc.typicalUse}
+                            </p>
+                          </div>
+                          {alreadyAdded ? (
+                            <Badge
+                              variant="outline"
+                              className="ml-2 text-[10px] border-blue-500/40 text-blue-400 shrink-0"
+                            >
+                              Added
+                            </Badge>
+                          ) : (
+                            <Button
+                              data-ocid="formulation.drawer.extra_excipient_add_button"
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => {
+                                const catMap: Record<
+                                  string,
+                                  "fillers" | "glidants" | "lubricants"
+                                > = {
+                                  "mcc-ph102-exc": "fillers",
+                                  "silicon-dioxide-colloidal-exc": "glidants",
+                                  "magnesium-stearate-exc": "lubricants",
+                                };
+                                const excCat = catMap[exc.id] ?? "lubricants";
+                                setIngredients((prev) => [
+                                  ...prev,
+                                  {
+                                    id: `${exc.id}_exc`,
+                                    name: exc.name,
+                                    category: excCat,
+                                    quantity: Number.parseFloat(addQty) || 10,
+                                    unit: addUnit,
+                                  },
+                                ]);
+                                setDrawerOpen(false);
+                              }}
                               className="ml-2 h-7 px-2 shrink-0"
                             >
                               <Plus className="w-3 h-3" />

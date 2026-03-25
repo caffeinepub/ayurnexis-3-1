@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
-import type { backendInterface } from "../backend.d";
+import type { backendInterface } from "../backend";
 import { createActorWithConfig } from "../config";
 import { getSecretParameter } from "../utils/urlParams";
 import { useInternetIdentity } from "./useInternetIdentity";
@@ -16,7 +16,7 @@ export function useActor() {
 
       if (!isAuthenticated) {
         // Return anonymous actor if not authenticated
-        return (await createActorWithConfig()) as unknown as backendInterface;
+        return await createActorWithConfig();
       }
 
       const actorOptions = {
@@ -25,11 +25,9 @@ export function useActor() {
         },
       };
 
-      const actor = (await createActorWithConfig(
-        actorOptions,
-      )) as unknown as backendInterface;
+      const actor = await createActorWithConfig(actorOptions);
       const adminToken = getSecretParameter("caffeineAdminToken") || "";
-      await actor._initializeAccessControlWithSecret(adminToken);
+      await (actor as any)._initializeAccessControlWithSecret(adminToken);
       return actor;
     },
     // Only refetch when identity changes

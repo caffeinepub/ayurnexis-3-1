@@ -7,6 +7,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Toaster } from "@/components/ui/sonner";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
@@ -105,6 +106,37 @@ function AppShell() {
   const [initializing, setInitializing] = useState(false);
   const [_initialized, setInitialized] = useState(false);
   const [search, setSearch] = useState("");
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [profile, setProfile] = useState<{
+    name: string;
+    designation: string;
+    institution: string;
+    email: string;
+  }>(() => {
+    try {
+      return (
+        JSON.parse(localStorage.getItem("ayurnexis_profile") || "null") || {
+          name: "Admin",
+          designation: "System Admin",
+          institution: "AyurNexis Lab",
+          email: "admin@ayurnexis.com",
+        }
+      );
+    } catch {
+      return {
+        name: "Admin",
+        designation: "System Admin",
+        institution: "AyurNexis Lab",
+        email: "admin@ayurnexis.com",
+      };
+    }
+  });
+  const [profileForm, setProfileForm] = useState({
+    name: "",
+    designation: "",
+    institution: "",
+    email: "",
+  });
 
   useEffect(() => {
     if (!actor || isFetching) return;
@@ -369,27 +401,40 @@ function AppShell() {
             <span>Manual</span>
           </button>
 
-          <div
-            className="flex items-center gap-2 pl-3 border-l"
+          <button
+            type="button"
+            className="flex items-center gap-2 pl-3 border-l cursor-pointer bg-transparent"
             style={{ borderColor: "oklch(0.88 0.012 240 / 0.6)" }}
+            onClick={() => {
+              setProfileForm({
+                name: profile.name,
+                designation: profile.designation,
+                institution: profile.institution,
+                email: profile.email,
+              });
+              setProfileOpen(true);
+            }}
+            data-ocid="header.profile.button"
           >
             <div
-              className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold"
+              className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold hover:opacity-80 transition-opacity"
               style={{
                 background: "oklch(0.72 0.130 78 / 0.2)",
                 color: "oklch(0.42 0.14 145)",
               }}
             >
-              A
+              {profile.name.charAt(0).toUpperCase()}
             </div>
             <div className="hidden sm:flex flex-col leading-tight">
               <span className="text-xs font-semibold text-foreground">
-                Admin
+                {profile.name}
               </span>
-              <span className="text-[10px] text-gold">System Admin</span>
+              <span className="text-[10px] text-gold">
+                {profile.designation}
+              </span>
             </div>
             <ChevronDown size={12} className="text-muted-foreground" />
-          </div>
+          </button>
         </header>
 
         {/* Content */}
@@ -513,6 +558,123 @@ function AppShell() {
               ) : (
                 "Initialize System"
               )}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Profile Modal */}
+      <Dialog open={profileOpen} onOpenChange={setProfileOpen}>
+        <DialogContent
+          className="max-w-md"
+          style={{
+            background: "oklch(1.0 0 0)",
+            border: "1px solid oklch(0.88 0.012 240)",
+            color: "oklch(0.14 0.02 250)",
+          }}
+        >
+          <DialogHeader>
+            <div className="flex items-center gap-3 mb-2">
+              <div
+                className="w-12 h-12 rounded-full flex items-center justify-center text-lg font-bold"
+                style={{
+                  background: "oklch(0.72 0.130 78 / 0.15)",
+                  color: "oklch(0.42 0.14 145)",
+                  border: "2px solid oklch(0.72 0.130 78 / 0.3)",
+                }}
+              >
+                {profileForm.name.charAt(0).toUpperCase() || "A"}
+              </div>
+              <div>
+                <DialogTitle className="text-foreground">
+                  Edit Profile
+                </DialogTitle>
+                <DialogDescription className="text-muted-foreground text-xs mt-0.5">
+                  Update your personal and institutional details
+                </DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+          <div className="space-y-4 mt-2">
+            <div>
+              <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                Full Name
+              </Label>
+              <Input
+                data-ocid="profile.name.input"
+                className="mt-1 bg-input/50 border-border/50 text-foreground"
+                value={profileForm.name}
+                onChange={(e) =>
+                  setProfileForm((p) => ({ ...p, name: e.target.value }))
+                }
+                placeholder="Dr. Priya Sharma"
+              />
+            </div>
+            <div>
+              <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                Designation
+              </Label>
+              <Input
+                data-ocid="profile.designation.input"
+                className="mt-1 bg-input/50 border-border/50 text-foreground"
+                value={profileForm.designation}
+                onChange={(e) =>
+                  setProfileForm((p) => ({ ...p, designation: e.target.value }))
+                }
+                placeholder="Senior QA Scientist"
+              />
+            </div>
+            <div>
+              <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                Institution / Organization
+              </Label>
+              <Input
+                data-ocid="profile.institution.input"
+                className="mt-1 bg-input/50 border-border/50 text-foreground"
+                value={profileForm.institution}
+                onChange={(e) =>
+                  setProfileForm((p) => ({ ...p, institution: e.target.value }))
+                }
+                placeholder="PharmaTech Laboratories Pvt. Ltd."
+              />
+            </div>
+            <div>
+              <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                Email Address
+              </Label>
+              <Input
+                data-ocid="profile.email.input"
+                type="email"
+                className="mt-1 bg-input/50 border-border/50 text-foreground"
+                value={profileForm.email}
+                onChange={(e) =>
+                  setProfileForm((p) => ({ ...p, email: e.target.value }))
+                }
+                placeholder="admin@ayurnexis.com"
+              />
+            </div>
+          </div>
+          <div className="flex gap-3 mt-4">
+            <Button
+              data-ocid="profile.save_button"
+              className="flex-1 bg-primary text-primary-foreground font-semibold hover:opacity-90"
+              onClick={() => {
+                setProfile({ ...profileForm });
+                localStorage.setItem(
+                  "ayurnexis_profile",
+                  JSON.stringify(profileForm),
+                );
+                setProfileOpen(false);
+              }}
+            >
+              Save Changes
+            </Button>
+            <Button
+              data-ocid="profile.cancel_button"
+              variant="outline"
+              onClick={() => setProfileOpen(false)}
+            >
+              Cancel
             </Button>
           </div>
         </DialogContent>
