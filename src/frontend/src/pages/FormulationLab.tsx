@@ -47,7 +47,7 @@ import {
   Zap,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   type APIIngredient,
   type ExcipientCategory,
@@ -962,7 +962,19 @@ function StepIndicator({ current }: { current: number }) {
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-export function FormulationLab() {
+export function FormulationLab({
+  prefillData,
+}: {
+  prefillData?: {
+    dosageForm: string;
+    ingredients: Array<{
+      name: string;
+      category: string;
+      quantity: number;
+      unit: string;
+    }>;
+  } | null;
+}) {
   const today = new Date().toLocaleDateString("en-GB", {
     day: "2-digit",
     month: "short",
@@ -981,6 +993,49 @@ export function FormulationLab() {
   // ── Step 3 ────────────────────────────────────────────────────────────────
   const [ingredients, setIngredients] = useState<FormulationIngredient[]>([]);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  // ── Prefill from Formulation Idea ─────────────────────────────────────────
+  useEffect(() => {
+    if (!prefillData) return;
+    setDosageForm(prefillData.dosageForm);
+    setIngredients(
+      prefillData.ingredients.map((ing, idx) => ({
+        id: `prefill-${idx}`,
+        name: ing.name,
+        category:
+          ing.category.toLowerCase().includes("api") ||
+          ing.category.toLowerCase().includes("herb")
+            ? "api"
+            : ((ing.category.toLowerCase().includes("binder")
+                ? "binders"
+                : ing.category.toLowerCase().includes("disintegrant")
+                  ? "disintegrants"
+                  : ing.category.toLowerCase().includes("lubricant")
+                    ? "lubricants"
+                    : ing.category.toLowerCase().includes("filler") ||
+                        ing.category.toLowerCase().includes("diluent")
+                      ? "fillers"
+                      : ing.category.toLowerCase().includes("glidant")
+                        ? "glidants"
+                        : ing.category.toLowerCase().includes("coating")
+                          ? "coatingAgents"
+                          : ing.category.toLowerCase().includes("preservative")
+                            ? "preservatives"
+                            : "fillers") as
+                | "api"
+                | "binders"
+                | "disintegrants"
+                | "lubricants"
+                | "fillers"
+                | "glidants"
+                | "coatingAgents"
+                | "preservatives"),
+        quantity: ing.quantity,
+        unit: ing.unit,
+      })),
+    );
+    setStep(3);
+  }, [prefillData]);
+
   const [drawerSearch, setDrawerSearch] = useState("");
   const [addQty, setAddQty] = useState("50");
   const [addUnit, setAddUnit] = useState("mg");

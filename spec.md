@@ -1,33 +1,35 @@
-# AyurNexis 3.1 — Version 14
+# AyurNexis 3.1
 
 ## Current State
-- FormulationLab (8-step workflow) exists but does NOT save completed formulations to localStorage, so History page shows no formulation records
-- Dashboard 6 KPI cards fetch from backend `getDashboardStats()` which returns 0 because no backend data is seeded at startup — all 4 data-backed KPIs show "0"
-- `herbExtracts` array in formulationData.ts mixes true herb extracts (Ashwagandha, Curcumin, Reishi, Guduchi, Ginger, Green Tea) with pharmaceutical excipients (MCC PH102, Silicon Dioxide Colloidal, Magnesium Stearate) — all shown under one "Herb Extracts" tab in the drawer
-- Certificate preview (step 7) is a simple card with basic text and a divider line — no graphics, no branding assets, no decorative design
-- Profile in header is a static avatar showing "A" / "Admin" — not clickable, not editable
+- Admin password hardcoded as `ayurnexis-admin-2026` in both AccessGate.tsx and AdminDashboard.tsx
+- Predictions & Risk Intelligence modal shows tabs (Overview, Pharmacology, Safety, Batch, Parameters) but data is sparse — no mechanism of action, no adverse effects, no therapeutic index, no batch test specifics
+- Get Formulation Idea uses fully preloaded static disease-drug data (no live API)
+- No formulation uniqueness tracking (any user can see all compositions)
+- No claimed formulation history in Admin Panel
 
 ## Requested Changes (Diff)
 
 ### Add
-- 6+ new pure herb extracts to formulationData.ts: Boswellia serrata extract, Bacopa monnieri extract, Holy Basil (Tulsi) extract, Amla (Emblica) extract, Neem leaf extract, Brahmi extract, Triphala extract
-- New `pureHerbExtracts` export (true botanical extracts only) and rename the 3 excipients (MCC, SiO2, Mg Stearate) to their appropriate arrays
-- Editable Profile modal in App.tsx: clicking the avatar opens a dialog with fields for Name, Designation, Institution, Email — saved to localStorage; avatar shows user initials
-- Save formulation to localStorage (`ayurnexis_formulations`) when user reaches step 8 (export step) with all formulation data: name, dosageForm, method, ingredients, ownerName, institution, date, stability score
-- Dashboard: compute fallback KPI stats from seedBatches data when backend returns totalBatches === 0, so KPIs always show meaningful real data (20 batches, pass/fail rates, avg quality score, etc.)
+- Admin token/password changed to `AYURNEXIS-ADMIN-TOKEN-2026` in both AccessGate.tsx and AdminDashboard.tsx
+- Rich pharmacological data for each ingredient in Predictions modal: mechanism of action, known adverse effects, therapeutic index (value + classification), specific batch test results per ingredient
+- HTTP outcalls via OpenFDA API (`api.fda.gov/drug/label.json?search=indications_and_usage:DISEASE`) called from frontend (since ICP HTTP outcalls is a backend feature requiring canister setup, we will use the OpenFDA public API directly from the frontend via fetch — this is permissible as a client-side call)
+- Formulation claim tracking in localStorage: when user selects a composition, it's locked to their userId with a 7-day expiry
+- Claimed formulations shown in Admin Panel under each user's history section (disease, dosage form, drug type, composition name, date claimed)
 
 ### Modify
-- FormulationLab drawer: split "Herb Extracts" tab into two sub-tabs or two sections: **Herb Extracts** (botanical standardized extracts only) and **Excipient Extras** (functional excipients like MCC, SiO2, Mg Stearate) — label each ingredient's category badge clearly
-- Certificate preview (step 7): redesign with multi-layered decorative border (double gold/green border frame), AyurNexis branded header with leaf/flask icon badge, colored ribbon stripe, watermark text, formulation badge with dosage form icon, signatures section with styled lines, official stamp circle, QA verification badge — premium certificate aesthetic
-- Certificate PDF generation: match the premium design — gold border frames, header logo text, colored sections
-- Dashboard: use computed fallback stats (from seedBatches) when backend stats are 0 so all 6 KPIs always show data
+- `pharmacologicalProfiles.ts` — add mechanismOfAction, adverseEffects[], therapeuticIndex fields to each profile
+- `Predictions.tsx` — PharmacologicalModal tabs now show real data for Pharmacology (mechanism), Safety (adverse effects + therapeutic index), Batch (actual test numbers from seedBatches), Parameters (QA ranges)
+- `GetFormulationIdea.tsx` — add live OpenFDA search step before disease selection; fallback to preloaded data if API fails; add claim-tracking logic on composition selection
+- `AdminDashboard.tsx` — add "Claimed Formulations" section in user detail panel
+- `accessControl.ts` — add claimedFormulations field to UserRegistration, add claimFormulation() and getClaimedFormulations() utils
 
 ### Remove
-- MCC PH102, Silicon Dioxide (Colloidal), Magnesium Stearate from `herbExtracts` array — move them to their correct excipient arrays or a separate `extraExcipients` array
+- Old admin password string `ayurnexis-admin-2026` (replaced with new token)
 
 ## Implementation Plan
-1. **formulationData.ts** — add `pureHerbExtracts` array with 6+ new herb extracts; move excipients to `extraExcipients`; keep `herbExtracts` as alias pointing to `pureHerbExtracts` for backward compat
-2. **FormulationLab.tsx** — import `pureHerbExtracts` and `extraExcipients`; split Herb Extracts drawer tab into 2 sections (Herb Extracts | Excipient Extras); add save-to-localStorage logic when step advances to 8
-3. **Dashboard.tsx** — import seedBatches; compute fallback stats from them when `stats.totalBatches === 0`; wire all 6 KPI cards to fallback values
-4. **Certificate redesign** — completely redesign step 7 certificate preview with premium decorative styling; update PDF generation to match
-5. **App.tsx** — add ProfileModal component (Dialog) with editable fields persisted to localStorage; make header avatar clickable to open it; show user's name initials in avatar
+1. Update admin password/token in accessControl.ts, AccessGate.tsx, AdminDashboard.tsx
+2. Extend accessControl.ts with formulation claim types and functions
+3. Enrich pharmacologicalProfiles.ts with mechanismOfAction, adverseEffects, therapeuticIndex for all ingredients
+4. Update Predictions.tsx modal to display the new rich data fields
+5. Update GetFormulationIdea.tsx with OpenFDA live search + claim-locking on selection
+6. Update AdminDashboard.tsx to show claimed formulations per user

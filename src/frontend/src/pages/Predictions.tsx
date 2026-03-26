@@ -339,6 +339,23 @@ function PharmacologicalModal({
                 {/* Pharmacology */}
                 <TabsContent value="pharmacology">
                   <div className="space-y-4">
+                    {/* Mechanism of Action */}
+                    {profile.mechanismOfAction && (
+                      <div
+                        className="rounded-xl p-4"
+                        style={{
+                          background: "oklch(0.20 0.06 240 / 0.4)",
+                          border: "1px solid oklch(0.50 0.12 240 / 0.3)",
+                        }}
+                      >
+                        <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">
+                          🔬 Mechanism of Action
+                        </h3>
+                        <p className="text-xs text-foreground leading-relaxed">
+                          {profile.mechanismOfAction}
+                        </p>
+                      </div>
+                    )}
                     {/* Phytochemicals */}
                     <div
                       className="rounded-xl p-4"
@@ -452,6 +469,124 @@ function PharmacologicalModal({
                         {profile.riskNotes}
                       </span>
                     </div>
+
+                    {/* Adverse Effects Table */}
+                    {profile.adverseEffects &&
+                      profile.adverseEffects.length > 0 && (
+                        <div
+                          className="rounded-xl p-4"
+                          style={{
+                            background: "oklch(0.22 0.06 24 / 0.12)",
+                            border: "1px solid oklch(0.62 0.20 24 / 0.3)",
+                          }}
+                        >
+                          <h3
+                            className="text-xs font-bold uppercase tracking-wider mb-3"
+                            style={{ color: "oklch(0.62 0.20 24)" }}
+                          >
+                            ⚗ Adverse Effects (Evidence-Based)
+                          </h3>
+                          <table className="w-full text-xs">
+                            <thead>
+                              <tr className="border-b border-border/30">
+                                {["Effect", "Severity", "Frequency"].map(
+                                  (h) => (
+                                    <th
+                                      key={h}
+                                      className="text-left py-1.5 pr-4 text-muted-foreground font-semibold uppercase tracking-wider text-[10px]"
+                                    >
+                                      {h}
+                                    </th>
+                                  ),
+                                )}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {profile.adverseEffects.map((ae) => (
+                                <tr
+                                  key={ae.effect}
+                                  className="border-b border-border/15"
+                                >
+                                  <td className="py-2 pr-4 text-foreground">
+                                    {ae.effect}
+                                  </td>
+                                  <td className="py-2 pr-4">
+                                    <Badge
+                                      style={{
+                                        background:
+                                          ae.severity === "Severe"
+                                            ? "oklch(0.54 0.174 24 / 0.2)"
+                                            : ae.severity === "Moderate"
+                                              ? "oklch(0.78 0.130 87 / 0.2)"
+                                              : "oklch(0.64 0.168 145 / 0.2)",
+                                        color:
+                                          ae.severity === "Severe"
+                                            ? "oklch(0.62 0.20 24)"
+                                            : ae.severity === "Moderate"
+                                              ? "oklch(0.65 0.14 87)"
+                                              : "oklch(0.42 0.14 145)",
+                                        border: "none",
+                                        fontSize: 9,
+                                      }}
+                                    >
+                                      {ae.severity}
+                                    </Badge>
+                                  </td>
+                                  <td className="py-2 text-muted-foreground">
+                                    {ae.frequency}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+
+                    {/* Therapeutic Index */}
+                    {profile.therapeuticIndex && (
+                      <div
+                        className="rounded-xl p-4"
+                        style={{
+                          background: "oklch(0.22 0.052 170 / 0.5)",
+                          border: "1px solid oklch(0.38 0.076 175 / 0.25)",
+                        }}
+                      >
+                        <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3">
+                          📊 Therapeutic Index
+                        </h3>
+                        <div className="flex flex-wrap items-center gap-3 mb-2">
+                          <span className="text-sm font-bold text-foreground">
+                            {profile.therapeuticIndex.value}
+                          </span>
+                          <Badge
+                            style={{
+                              background:
+                                profile.therapeuticIndex.classification ===
+                                "Narrow"
+                                  ? "oklch(0.54 0.174 24 / 0.2)"
+                                  : profile.therapeuticIndex.classification ===
+                                      "Moderate"
+                                    ? "oklch(0.78 0.130 87 / 0.2)"
+                                    : "oklch(0.64 0.168 145 / 0.2)",
+                              color:
+                                profile.therapeuticIndex.classification ===
+                                "Narrow"
+                                  ? "oklch(0.62 0.20 24)"
+                                  : profile.therapeuticIndex.classification ===
+                                      "Moderate"
+                                    ? "oklch(0.65 0.14 87)"
+                                    : "oklch(0.42 0.14 145)",
+                              border: "none",
+                            }}
+                          >
+                            {profile.therapeuticIndex.classification}
+                          </Badge>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          {profile.therapeuticIndex.notes}
+                        </p>
+                      </div>
+                    )}
 
                     {/* Side Effects */}
                     <div

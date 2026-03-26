@@ -19,6 +19,7 @@ import {
   FlaskConical,
   RefreshCw,
   Save,
+  Shield,
   Trash2,
   XCircle,
 } from "lucide-react";
@@ -32,6 +33,7 @@ import {
   useAnalyzeBatch,
   useDeleteBatch,
 } from "../hooks/useQueries";
+import { isAdminAuthed } from "../utils/accessControl";
 
 type SeedBatch = {
   id: bigint;
@@ -64,7 +66,7 @@ type SeedBatch = {
   color: string;
   odor: string;
   pharmacopeiaRef: string;
-  qualityStatus: "Pass" | "Fail" | "Under Review";
+  qualityStatus: "Pass" | "Fail" | "Under Review" | "Approved" | "Rejected";
   inspectorName: string;
   storageCondition: string;
   expiryDate: string;
@@ -848,7 +850,7 @@ type DisplayBatch = {
   color?: string;
   odor?: string;
   pharmacopeiaRef?: string;
-  qualityStatus?: "Pass" | "Fail" | "Under Review";
+  qualityStatus?: "Pass" | "Fail" | "Under Review" | "Approved" | "Rejected";
   inspectorName?: string;
   storageCondition?: string;
   expiryDate?: string;
@@ -939,6 +941,18 @@ function StatusBadge({ status }: { status: string }) {
     return (
       <Badge className="bg-amber-500/20 text-amber-400 border-amber-500/30 border text-xs">
         Under Review
+      </Badge>
+    );
+  if (status === "Approved")
+    return (
+      <Badge className="bg-emerald-600/20 text-emerald-500 border-emerald-600/30 border text-xs font-semibold">
+        ✓ Approved
+      </Badge>
+    );
+  if (status === "Rejected")
+    return (
+      <Badge className="bg-red-600/20 text-red-500 border-red-600/30 border text-xs font-semibold">
+        ✗ Rejected
       </Badge>
     );
   return (
@@ -1366,11 +1380,16 @@ function BatchDetailDialog({
   open,
   onClose,
   onAnalyze,
+  onUpdateStatus,
 }: {
   batch: DisplayBatch | null;
   open: boolean;
   onClose: () => void;
   onAnalyze?: (id: bigint, batchId: string) => void;
+  onUpdateStatus?: (
+    batchId: string,
+    newStatus: "Approved" | "Rejected",
+  ) => void;
 }) {
   if (!batch) return null;
   const status = batch.qualityStatus ?? "Pending";
@@ -1594,6 +1613,58 @@ function BatchDetailDialog({
           </div>
         </ScrollArea>
 
+        {/* Admin Review */}
+        {isAdminAuthed() && (
+          <div
+            className="px-6 py-4 border-t border-border/40"
+            style={{ background: "oklch(0.35 0.08 250 / 0.04)" }}
+          >
+            <div className="flex items-center gap-2 mb-2">
+              <Shield size={14} style={{ color: "oklch(0.35 0.08 250)" }} />
+              <h3
+                className="text-xs font-bold tracking-wider uppercase"
+                style={{ color: "oklch(0.35 0.08 250)" }}
+              >
+                Admin Review
+              </h3>
+            </div>
+            <p className="text-xs text-muted-foreground mb-3">
+              Review all test parameters above before approving.
+            </p>
+            <div className="flex gap-2 flex-wrap">
+              <Button
+                data-ocid="batch.approve.button"
+                size="sm"
+                className="text-xs gap-1.5 font-semibold"
+                style={{
+                  background: "oklch(0.42 0.14 145)",
+                  color: "oklch(1.0 0 0)",
+                }}
+                disabled={status === "Approved"}
+                onClick={() => {
+                  onUpdateStatus?.(batch.batchId, "Approved");
+                  toast.success(`Batch ${batch.batchId} approved`);
+                }}
+              >
+                ✓ Approve Batch
+              </Button>
+              <Button
+                data-ocid="batch.reject.button"
+                size="sm"
+                variant="destructive"
+                className="text-xs gap-1.5 font-semibold"
+                disabled={status === "Rejected"}
+                onClick={() => {
+                  onUpdateStatus?.(batch.batchId, "Rejected");
+                  toast.error(`Batch ${batch.batchId} rejected`);
+                }}
+              >
+                ✗ Reject Batch
+              </Button>
+            </div>
+          </div>
+        )}
+
         {/* Footer */}
         <div className="px-6 py-4 border-t border-border/40 flex items-center justify-between">
           <span className="text-xs text-muted-foreground">
@@ -1641,8 +1712,25 @@ export function BatchRecords({
   const [analysisBatch, setAnalysisBatch] = useState<DisplayBatch | null>(null);
   const [selectedBatch, setSelectedBatch] = useState<DisplayBatch | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [statusOverrides, setStatusOverrides] = useState<
+    Record<string, "Approved" | "Rejected">
+  >({});
 
-  const allBatches: DisplayBatch[] = [...SEED_BATCHES, ...batches];
+  const handleUpdateBatchStatus = (
+    batchId: string,
+    newStatus: "Approved" | "Rejected",
+  ) => {
+    setStatusOverrides((prev) => ({ ...prev, [batchId]: newStatus }));
+    if (selectedBatch && selectedBatch.batchId === batchId) {
+      setSelectedBatch({ ...selectedBatch, qualityStatus: newStatus });
+    }
+  };
+
+  const allBatches: DisplayBatch[] = [...SEED_BATCHES, ...batches].map((b) =>
+    statusOverrides[b.batchId]
+      ? { ...b, qualityStatus: statusOverrides[b.batchId] }
+      : b,
+  );
 
   const filtered = allBatches.filter(
     (b) =>
@@ -1886,6 +1974,7 @@ export function BatchRecords({
         batch={selectedBatch}
         open={dialogOpen}
         onClose={() => setDialogOpen(false)}
+        onUpdateStatus={handleUpdateBatchStatus}
         onAnalyze={handleAnalyze}
       />
 

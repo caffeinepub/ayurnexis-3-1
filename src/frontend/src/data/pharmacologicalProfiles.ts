@@ -37,6 +37,17 @@ export interface PharmacologicalProfile {
     decoction: string;
     duration: string;
   };
+  mechanismOfAction?: string;
+  adverseEffects?: Array<{
+    effect: string;
+    severity: "Mild" | "Moderate" | "Severe";
+    frequency: string;
+  }>;
+  therapeuticIndex?: {
+    value: string;
+    classification: "Narrow" | "Moderate" | "Wide";
+    notes: string;
+  };
   riskLevel: "Low" | "Medium" | "High";
   riskNotes: string;
   storage: string;
@@ -138,6 +149,32 @@ export const pharmacologicalProfiles: PharmacologicalProfile[] = [
       decoction: "20–30ml twice daily",
       duration: "8–12 weeks continuous; 4-week wash-out recommended",
     },
+    mechanismOfAction:
+      "Adaptogenic activity via HPA axis modulation; inhibits NF-kB signaling reducing inflammatory cytokines (IL-6, TNF-α); withanolides (specifically withaferin-A) bind to glucocorticoid receptor enhancing stress resilience; GABAergic activity contributes to anxiolytic effect",
+    adverseEffects: [
+      { effect: "GI upset/nausea", severity: "Mild", frequency: "~10% users" },
+      {
+        effect: "Drowsiness/sedation at high doses",
+        severity: "Mild",
+        frequency: "~5% users",
+      },
+      {
+        effect: "Thyroid hormone elevation (T3/T4)",
+        severity: "Moderate",
+        frequency: "Rare, >600mg/day",
+      },
+      {
+        effect: "Hepatotoxicity (very rare, high-dose prolonged)",
+        severity: "Severe",
+        frequency: "Case reports only",
+      },
+    ],
+    therapeuticIndex: {
+      value: "Wide (>10:1)",
+      classification: "Wide",
+      notes:
+        "Traditional doses (300-600mg/day) have large safety margin; toxic dose in humans estimated >1g/kg",
+    },
     riskLevel: "Low",
     riskNotes:
       "Generally well tolerated. Risk increases at >1g/day or in pregnant/thyroid patients.",
@@ -233,6 +270,30 @@ export const pharmacologicalProfiles: PharmacologicalProfile[] = [
       decoction: "10–20ml twice daily",
       duration: "Up to 8 weeks; longer with medical supervision",
     },
+    mechanismOfAction:
+      "Curcumin inhibits COX-2, LOX, and NF-kB pathway; downregulates pro-inflammatory cytokines TNF-α, IL-1β, IL-6; antioxidant via Nrf2 pathway activation; inhibits platelet aggregation via thromboxane B2 suppression",
+    adverseEffects: [
+      {
+        effect: "GI irritation, acid reflux",
+        severity: "Mild",
+        frequency: "~8%",
+      },
+      {
+        effect: "Increased bleeding risk (anticoagulant effect)",
+        severity: "Moderate",
+        frequency: "With concurrent warfarin",
+      },
+      {
+        effect: "Allergic contact dermatitis",
+        severity: "Mild",
+        frequency: "Rare",
+      },
+    ],
+    therapeuticIndex: {
+      value: "Wide (>20:1)",
+      classification: "Wide",
+      notes: "GRAS status by FDA; high doses (>8g/day) may cause GI distress",
+    },
     riskLevel: "Low",
     riskNotes:
       "Safe at culinary doses. Medicinal doses require caution with anticoagulants.",
@@ -315,6 +376,31 @@ export const pharmacologicalProfiles: PharmacologicalProfile[] = [
       duration:
         "Maximum 4 weeks continuous use; liver function monitoring for longer courses",
     },
+    mechanismOfAction:
+      "Azadirachtin and nimbin inhibit bacterial cell wall synthesis; nimbidin suppresses prostaglandin synthesis (anti-inflammatory); nimbolide induces apoptosis via caspase-3 activation; antifungal via ergosterol biosynthesis disruption",
+    adverseEffects: [
+      {
+        effect: "Hypoglycemia (additive with antidiabetics)",
+        severity: "Moderate",
+        frequency: "With concurrent DM medication",
+      },
+      {
+        effect: "Hepatotoxicity at high oral doses",
+        severity: "Severe",
+        frequency: "Rare, >6g/day",
+      },
+      {
+        effect: "Male infertility (reversible)",
+        severity: "Moderate",
+        frequency: "Experimental, high doses",
+      },
+    ],
+    therapeuticIndex: {
+      value: "Moderate (6:1)",
+      classification: "Moderate",
+      notes:
+        "Leaf extract: up to 1g/day generally safe; seed oil toxic at high doses",
+    },
     riskLevel: "Medium",
     riskNotes:
       "Hepatotoxic potential with prolonged use. Monitor liver enzymes. Avoid in pregnancy.",
@@ -395,6 +481,31 @@ export const pharmacologicalProfiles: PharmacologicalProfile[] = [
       extract: "300–500mg/day",
       decoction: "15–20ml twice daily",
       duration: "6–12 weeks; generally well tolerated long-term",
+    },
+    mechanismOfAction:
+      "Eugenol inhibits COX-2 and PGE2 synthesis; rosmarinic acid scavenges reactive oxygen species; ursolic acid exhibits anti-inflammatory and antitumor activity; adaptogenic via HPA axis normalization",
+    adverseEffects: [
+      {
+        effect: "Hypoglycemia (additive)",
+        severity: "Mild",
+        frequency: "With antidiabetics",
+      },
+      {
+        effect: "Anticoagulant interaction",
+        severity: "Moderate",
+        frequency: "With warfarin",
+      },
+      {
+        effect: "Potential embryotoxicity at very high doses",
+        severity: "Severe",
+        frequency: "Animal studies; caution in pregnancy",
+      },
+    ],
+    therapeuticIndex: {
+      value: "Wide (>15:1)",
+      classification: "Wide",
+      notes:
+        "300-1800mg/day extract well documented; essential oil more potent — use cautiously",
     },
     riskLevel: "Low",
     riskNotes: "Very safe herb. Caution in pregnancy and with anticoagulants.",
@@ -482,6 +593,19 @@ export const pharmacologicalProfiles: PharmacologicalProfile[] = [
       decoction: "20–30ml twice daily",
       duration: "12 weeks minimum for cognitive effects; safe long-term",
     },
+    mechanismOfAction:
+      "Bacosides A and B enhance protein kinase activity in hippocampus; increases serotonin synthesis and 5-HT2A receptor expression; acetylcholinesterase inhibition increases ACh levels; antioxidant protection of synaptic structures",
+    adverseEffects: [
+      { effect: "Nausea, stomach cramps", severity: "Mild", frequency: "~15%" },
+      { effect: "Dry mouth", severity: "Mild", frequency: "~8%" },
+      { effect: "Fatigue at high doses", severity: "Mild", frequency: "~5%" },
+    ],
+    therapeuticIndex: {
+      value: "Moderate (8:1)",
+      classification: "Moderate",
+      notes:
+        "300-450mg/day standard; doses >900mg/day may cause CNS depression",
+    },
     riskLevel: "Low",
     riskNotes: "Well tolerated. GI side effects reduced by taking with meals.",
     storage: "Store below 30°C; protect from humidity and direct light.",
@@ -553,6 +677,31 @@ export const pharmacologicalProfiles: PharmacologicalProfile[] = [
       extract: "500mg–1g/day",
       decoction: "20–30ml twice daily with milk",
       duration: "3–6 months; safe for long-term female health",
+    },
+    mechanismOfAction:
+      "Steroidal saponins (shatavarin I-IV) bind estrogen receptors as phytoestrogens; stimulates mucus secretion in GI protecting mucosal lining; immunomodulation via increased macrophage phagocytosis; galactagogue effect via prolactin stimulation",
+    adverseEffects: [
+      {
+        effect: "Estrogenic effects (avoid in hormone-sensitive cancers)",
+        severity: "Moderate",
+        frequency: "Theoretical",
+      },
+      {
+        effect: "Edema due to fluid retention",
+        severity: "Mild",
+        frequency: "Rare",
+      },
+      {
+        effect: "Allergic rhinitis in sensitive individuals",
+        severity: "Mild",
+        frequency: "<2%",
+      },
+    ],
+    therapeuticIndex: {
+      value: "Wide (>15:1)",
+      classification: "Wide",
+      notes:
+        "Standard doses 500-1000mg/day well tolerated; contraindicated in estrogen-positive tumors",
     },
     riskLevel: "Low",
     riskNotes: "Safe for most women. Caution in estrogen-sensitive conditions.",
@@ -636,6 +785,31 @@ export const pharmacologicalProfiles: PharmacologicalProfile[] = [
       decoction: "10–20ml twice daily",
       duration: "4–6 weeks; long-term safe at culinary doses",
     },
+    mechanismOfAction:
+      "6-gingerol and shogaol inhibit 5-HT3 receptors (antiemetic); COX-2 inhibition reduces prostaglandin synthesis; vanilloid receptor (TRPV1) agonism produces analgesic effect; thromboxane synthetase inhibition (antiplatelet)",
+    adverseEffects: [
+      {
+        effect: "Heartburn/reflux at high doses",
+        severity: "Mild",
+        frequency: "~10%",
+      },
+      {
+        effect: "Increased bleeding risk",
+        severity: "Moderate",
+        frequency: "With warfarin/aspirin",
+      },
+      {
+        effect: "Hypoglycemia (additive)",
+        severity: "Moderate",
+        frequency: "With antidiabetic drugs",
+      },
+    ],
+    therapeuticIndex: {
+      value: "Wide (>20:1)",
+      classification: "Wide",
+      notes:
+        "GRAS; up to 4g/day safe in adults; reduce dose in pregnancy to <1g/day",
+    },
     riskLevel: "Low",
     riskNotes: "Very safe. Caution at >5g/day and with anticoagulants.",
     storage: "Cool, dry, dark place. Avoid refrigeration for powder.",
@@ -716,6 +890,31 @@ export const pharmacologicalProfiles: PharmacologicalProfile[] = [
       decoction: "15–20ml once daily",
       duration: "4–8 weeks; seasonal use recommended in Ayurveda",
     },
+    mechanismOfAction:
+      "Chebulinic acid and chebulagic acid exhibit antioxidant activity via free radical scavenging; tannins inhibit bacterial cell wall synthesis; gallic acid modulates NF-kB pathway reducing inflammation; mild laxative via stimulating intestinal motility",
+    adverseEffects: [
+      {
+        effect: "Loose stools/diarrhea at high doses",
+        severity: "Mild",
+        frequency: "~12%",
+      },
+      {
+        effect: "Hypoglycemia (additive)",
+        severity: "Moderate",
+        frequency: "With antidiabetics",
+      },
+      {
+        effect: "Electrolyte imbalance (chronic laxative use)",
+        severity: "Moderate",
+        frequency: "Prolonged high-dose use",
+      },
+    ],
+    therapeuticIndex: {
+      value: "Wide (>12:1)",
+      classification: "Wide",
+      notes:
+        "Traditional dose 3-6g/day; excessive use may cause electrolyte depletion",
+    },
     riskLevel: "Low",
     riskNotes: "Safe herb. Reduce dose if loose stools occur.",
     storage: "Dry, airtight container; protect from moisture.",
@@ -793,6 +992,26 @@ export const pharmacologicalProfiles: PharmacologicalProfile[] = [
       decoction: "20–30ml twice daily",
       duration: "Long-term safe; Rasayana use 3–6 months",
     },
+    mechanismOfAction:
+      "Vitamin C and tannins scavenge reactive oxygen species; ellagic acid inhibits NF-kB and TNF-α; chromium content enhances insulin sensitivity; ascorbic acid stimulates collagen synthesis; antiviral via inhibition of viral proteases",
+    adverseEffects: [
+      { effect: "GI upset at high doses", severity: "Mild", frequency: "~8%" },
+      {
+        effect: "Kidney stone risk (oxalates)",
+        severity: "Moderate",
+        frequency: "With hyperoxaluria predisposition",
+      },
+      {
+        effect: "Increased bleeding risk",
+        severity: "Mild",
+        frequency: "With antiplatelet drugs",
+      },
+    ],
+    therapeuticIndex: {
+      value: "Wide (>20:1)",
+      classification: "Wide",
+      notes: "3-6g/day well tolerated; one of the safest herbs in Ayurveda",
+    },
     riskLevel: "Low",
     riskNotes: "Excellent safety profile. One of the safest Ayurvedic herbs.",
     storage: "Airtight, cool, dry place. Avoid moisture as tannins degrade.",
@@ -857,6 +1076,31 @@ export const pharmacologicalProfiles: PharmacologicalProfile[] = [
       extract: "250–500mg/day",
       decoction: "15–20ml twice daily",
       duration: "4–6 weeks",
+    },
+    mechanismOfAction:
+      "Ellagic acid and gallic acid exhibit hepatoprotective effects via antioxidant mechanisms; tannins form complexes with proteins inhibiting microbial growth; beta-sitosterol reduces cholesterol absorption; β-glucan modulates immune response",
+    adverseEffects: [
+      {
+        effect: "Constipation in some individuals",
+        severity: "Mild",
+        frequency: "~5%",
+      },
+      {
+        effect: "Sedation at high doses",
+        severity: "Mild",
+        frequency: "Dose-dependent",
+      },
+      {
+        effect: "Drug interactions with CNS depressants",
+        severity: "Moderate",
+        frequency: "Theoretical",
+      },
+    ],
+    therapeuticIndex: {
+      value: "Wide (>10:1)",
+      classification: "Wide",
+      notes:
+        "3-6g/day traditional dose; considered safe for long-term use in Triphala formulations",
     },
     riskLevel: "Low",
     riskNotes: "Safe. Part of Triphala combination.",
@@ -929,6 +1173,26 @@ export const pharmacologicalProfiles: PharmacologicalProfile[] = [
       extract: "500mg–1g/day",
       decoction: "20–30ml twice daily",
       duration: "6–8 weeks",
+    },
+    mechanismOfAction:
+      "Punarnavine exhibits diuretic effect via inhibition of Na+/K+ ATPase in renal tubules; anti-inflammatory via inhibition of prostaglandin and histamine release; hepatoprotective via upregulation of antioxidant enzymes SOD and catalase",
+    adverseEffects: [
+      {
+        effect: "Excessive diuresis leading to dehydration",
+        severity: "Moderate",
+        frequency: "High doses, inadequate fluid intake",
+      },
+      {
+        effect: "Potassium depletion (hypokalemia)",
+        severity: "Moderate",
+        frequency: "Prolonged use",
+      },
+      { effect: "GI discomfort", severity: "Mild", frequency: "~5%" },
+    ],
+    therapeuticIndex: {
+      value: "Moderate (7:1)",
+      classification: "Moderate",
+      notes: "3-6g/day powder; monitor electrolytes with prolonged use",
     },
     riskLevel: "Low",
     riskNotes:
@@ -1007,6 +1271,30 @@ export const pharmacologicalProfiles: PharmacologicalProfile[] = [
       decoction: "20–30ml twice daily",
       duration: "4–8 weeks; safe for seasonal use",
     },
+    mechanismOfAction:
+      "Tinosporin and berberine activate macrophages and NK cells (immunostimulant); berberine inhibits NF-kB reducing TNF-α and IL-6; bitter principles stimulate bile secretion; tinosporin exhibits antidiabetic effect via PPAR-γ activation",
+    adverseEffects: [
+      {
+        effect: "Autoimmune exacerbation (theoretical)",
+        severity: "Moderate",
+        frequency: "In pre-existing autoimmune conditions",
+      },
+      {
+        effect: "Hypoglycemia (additive)",
+        severity: "Moderate",
+        frequency: "With antidiabetic medications",
+      },
+      {
+        effect: "GI discomfort at high doses",
+        severity: "Mild",
+        frequency: "~7%",
+      },
+    ],
+    therapeuticIndex: {
+      value: "Wide (>12:1)",
+      classification: "Wide",
+      notes: "300-900mg/day extract; avoid in autoimmune disorders",
+    },
     riskLevel: "Low",
     riskNotes: "Excellent immune herb. Monitor blood glucose in diabetics.",
     storage: "Cool, dry, airtight container.",
@@ -1082,6 +1370,31 @@ export const pharmacologicalProfiles: PharmacologicalProfile[] = [
       extract: "500mg–1g/day",
       decoction: "20–30ml once daily",
       duration: "Long-term safe; 3–6 month courses typical",
+    },
+    mechanismOfAction:
+      "Synergistic combination of three fruits; gallic acid and ellagitannins reduce oxidative stress via Nrf2 pathway; chebulinic acid and phytosterols modulate gut microbiome; combined action on colon motility via 5-HT receptor modulation",
+    adverseEffects: [
+      {
+        effect: "Loose stools/diarrhea initially",
+        severity: "Mild",
+        frequency: "~20% initially, resolves with continued use",
+      },
+      {
+        effect: "GI cramping at high doses",
+        severity: "Mild",
+        frequency: "~10%",
+      },
+      {
+        effect: "Electrolyte imbalance (chronic high dose)",
+        severity: "Moderate",
+        frequency: "Prolonged use >10g/day",
+      },
+    ],
+    therapeuticIndex: {
+      value: "Wide (>15:1)",
+      classification: "Wide",
+      notes:
+        "3-6g/day standard; considered extremely safe; one of the most studied Ayurvedic formulations",
     },
     riskLevel: "Low",
     riskNotes:
@@ -1160,6 +1473,27 @@ export const pharmacologicalProfiles: PharmacologicalProfile[] = [
       decoction: "Not typically used as decoction",
       duration: "8–12 weeks for chronic conditions",
     },
+    mechanismOfAction:
+      "AKBA (acetyl-keto-boswellic acid) selectively inhibits 5-LOX reducing LTB4; BAs inhibit microsomal prostaglandin E synthase; anti-angiogenic via inhibition of HIF-1α; inhibits complement system activation (anti-inflammatory)",
+    adverseEffects: [
+      {
+        effect: "GI irritation, diarrhea, nausea",
+        severity: "Mild",
+        frequency: "~10%",
+      },
+      { effect: "Skin rash (rare)", severity: "Mild", frequency: "<2%" },
+      {
+        effect: "Interaction with anticoagulants",
+        severity: "Moderate",
+        frequency: "With warfarin",
+      },
+    ],
+    therapeuticIndex: {
+      value: "Wide (>12:1)",
+      classification: "Wide",
+      notes:
+        "300-500mg AKBA-enriched extract TID; well tolerated in clinical trials up to 6 months",
+    },
     riskLevel: "Low",
     riskNotes:
       "Well tolerated. Standardization to AKBA content critical for efficacy.",
@@ -1217,6 +1551,19 @@ export const pharmacologicalProfiles: PharmacologicalProfile[] = [
       extract: "600mg/day ultramicronized (better bioavailability)",
       decoction: "Not applicable",
       duration: "4–8 weeks; long-term safe",
+    },
+    mechanismOfAction:
+      "Endogenous fatty acid amide; activates PPAR-α reducing neuroinflammation; indirect endocannabinoid effect via CB2 receptor modulation; mast cell stabilization reducing histamine release; activates GPR55 and GPR119 receptors",
+    adverseEffects: [
+      { effect: "Mild GI discomfort", severity: "Mild", frequency: "~5%" },
+      { effect: "Headache initially", severity: "Mild", frequency: "~3%" },
+      { effect: "Fatigue", severity: "Mild", frequency: "Rare" },
+    ],
+    therapeuticIndex: {
+      value: "Wide (>20:1)",
+      classification: "Wide",
+      notes:
+        "300-1200mg/day; excellent safety profile in clinical trials; no significant drug interactions documented",
     },
     riskLevel: "Low",
     riskNotes:
@@ -1293,6 +1640,27 @@ export const pharmacologicalProfiles: PharmacologicalProfile[] = [
       extract: "400–800mg/day",
       decoction: "15–20ml twice daily",
       duration: "4–8 weeks; generally safe long-term",
+    },
+    mechanismOfAction:
+      "Isothiocyanates activate Nrf2-ARE pathway inducing antioxidant enzymes; quercetin and kaempferol inhibit COX-2 and NF-kB; moringa lectins enhance immune cell proliferation; chlorogenic acid inhibits glucose-6-phosphatase reducing hepatic glucose output",
+    adverseEffects: [
+      {
+        effect: "Hypoglycemia (additive)",
+        severity: "Moderate",
+        frequency: "With antidiabetic medications",
+      },
+      { effect: "GI upset at high doses", severity: "Mild", frequency: "~5%" },
+      {
+        effect: "Uterotonic effect (avoid in pregnancy)",
+        severity: "Severe",
+        frequency: "Pregnancy risk",
+      },
+    ],
+    therapeuticIndex: {
+      value: "Wide (>15:1)",
+      classification: "Wide",
+      notes:
+        "Leaf powder 2-10g/day; root bark and seeds are more potent and require caution",
     },
     riskLevel: "Low",
     riskNotes: "Very safe at leaf doses. Avoid root/bark in pregnancy.",
@@ -1387,6 +1755,31 @@ export const pharmacologicalProfiles: PharmacologicalProfile[] = [
       extract: "150–300mg/day (glycyrrhizin-reduced DGL preferred)",
       decoction: "10–15ml twice daily",
       duration: "Maximum 4–6 weeks; mandatory wash-out period",
+    },
+    mechanismOfAction:
+      "Glycyrrhizin inhibits 11β-HSD2 increasing cortisol activity (anti-inflammatory); liquiritin activates GABAA receptor (anxiolytic); glycyrrhizic acid inhibits thrombin and platelet aggregation; isoflavones exhibit phytoestrogenic effects",
+    adverseEffects: [
+      {
+        effect: "Hypokalemia and hypertension (pseudoaldosteronism)",
+        severity: "Severe",
+        frequency: "With daily use >100mg glycyrrhizin for >6 weeks",
+      },
+      {
+        effect: "Edema and fluid retention",
+        severity: "Moderate",
+        frequency: "With prolonged use",
+      },
+      {
+        effect: "Interaction with antihypertensives and diuretics",
+        severity: "Moderate",
+        frequency: "Common",
+      },
+    ],
+    therapeuticIndex: {
+      value: "Narrow (2-3:1)",
+      classification: "Narrow",
+      notes:
+        "Max 100mg glycyrrhizin/day; deglycyrrhizinated licorice (DGL) is safer for GI use; avoid in hypertension, cardiac disease",
     },
     riskLevel: "High",
     riskNotes:

@@ -228,7 +228,7 @@ export function UserManual() {
                   color: "oklch(0.72 0.130 78)",
                 }}
               >
-                ayurnexis-admin-2026
+                AYURNEXIS-ADMIN-TOKEN-2026
               </code>
               ) and click{" "}
               <strong className="text-foreground">Initialize System</strong>.
