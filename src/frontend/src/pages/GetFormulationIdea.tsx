@@ -34,10 +34,11 @@ import {
 } from "../data/formulationIdeaData";
 import {
   type FormulationIdea,
+  type MarketedDrugResult,
   getFormulationIdeas,
+  getMarketedDrugs,
   searchDiseases,
 } from "../services/geminiService";
-import { claimFormulation, isFormulationClaimed } from "../utils/accessControl";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -150,7 +151,7 @@ function DiseaseSearch({ onSelect }: { onSelect: (disease: string) => void }) {
   const [aiSearching, setAiSearching] = useState(false);
 
   useEffect(() => {
-    if (query.length < 2) {
+    if (query.length < 1) {
       setAiResults([]);
       return;
     }
@@ -170,7 +171,7 @@ function DiseaseSearch({ onSelect }: { onSelect: (disease: string) => void }) {
       } finally {
         setAiSearching(false);
       }
-    }, 500);
+    }, 300);
   }, [query]);
 
   const handleSelect = (d: string) => {
@@ -414,54 +415,6 @@ function DosageFormStep({
 
 // ─── Step 3: Marketed Drugs ───────────────────────────────────────────────────
 
-// Map dosage form to FDA route
-function mapDosageFormToRoute(dosageForm: string): string[] {
-  const df = dosageForm.toLowerCase();
-  if (
-    df.includes("tablet") ||
-    df.includes("capsule") ||
-    df.includes("syrup") ||
-    df.includes("oral") ||
-    df.includes("solution") ||
-    df.includes("suspension") ||
-    df.includes("powder") ||
-    df.includes("granule")
-  )
-    return ["ORAL"];
-  if (
-    df.includes("topical") ||
-    df.includes("cream") ||
-    df.includes("ointment") ||
-    df.includes("gel") ||
-    df.includes("lotion")
-  )
-    return ["TOPICAL"];
-  if (
-    df.includes("injection") ||
-    df.includes("intravenous") ||
-    df.includes("parenteral") ||
-    df.includes("iv")
-  )
-    return ["INTRAVENOUS", "INJECTION", "INTRAMUSCULAR", "SUBCUTANEOUS"];
-  if (
-    df.includes("inhaler") ||
-    df.includes("inhalation") ||
-    df.includes("nebulizer")
-  )
-    return ["INHALATION", "NASAL"];
-  if (df.includes("suppository") || df.includes("rectal")) return ["RECTAL"];
-  if (df.includes("eye") || df.includes("ophthalmic")) return ["OPHTHALMIC"];
-  if (df.includes("ear")) return ["OTIC"];
-  if (df.includes("patch") || df.includes("transdermal"))
-    return ["TRANSDERMAL"];
-  return ["ORAL"];
-}
-
-interface LiveMarketedDrug extends MarketedDrug {
-  routes?: string[];
-  detectedDrugType?: string;
-}
-
 function MarketedDrugsStep({
   disease,
   drugType,
@@ -475,66 +428,17 @@ function MarketedDrugsStep({
   onNext: () => void;
   onBack: () => void;
 }) {
-  // Collect all static drugs across all drug types
-  const allStaticDrugs: LiveMarketedDrug[] = [];
-  const diseaseData = MARKETED_DRUGS[disease] ?? {};
-  for (const [dType, drugs] of Object.entries(diseaseData)) {
-    for (const d of drugs as MarketedDrug[]) {
-      allStaticDrugs.push({ ...d, detectedDrugType: dType });
-    }
-  }
+  const [drugs, setDrugs] = useState<MarketedDrugResult[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const [liveDrugs, setLiveDrugs] = useState<LiveMarketedDrug[]>([]);
-  const [liveLoading, setLiveLoading] = useState(true);
-  const [liveFetched, setLiveFetched] = useState(false);
-
-  const selectedRoutes = mapDosageFormToRoute(dosageForm);
-
-  // Always fetch from OpenFDA regardless of static data - disease triggers refetch
-  // eslint-disable-next-line
   useEffect(() => {
-    setLiveLoading(true);
-    fetch(
-      `https://api.fda.gov/drug/label.json?search=indications_and_usage:${encodeURIComponent(disease)}&limit=15`,
-    )
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => {
-        if (!data?.results) return;
-        const mapped: LiveMarketedDrug[] = data.results
-          .map((r: any) => ({
-            name:
-              r.openfda?.brand_name?.[0] ||
-              r.openfda?.generic_name?.[0] ||
-              "Unknown",
-            generic: r.openfda?.generic_name?.[0] || "",
-            manufacturer:
-              r.openfda?.manufacturer_name?.[0] || "Unknown Manufacturer",
-            dose: r.openfda?.product_ndc?.[0] || "See label",
-            mechanism: `${r.indications_and_usage?.[0]?.slice(0, 150) ?? ""}…`,
-            routes: (r.openfda?.route ?? []).map((rt: string) =>
-              rt.toUpperCase(),
-            ),
-            detectedDrugType: "Allopathic",
-          }))
-          .filter((d: LiveMarketedDrug) => d.name !== "Unknown");
-        setLiveDrugs(mapped);
-      })
-      .catch(() => {})
-      .finally(() => {
-        setLiveLoading(false);
-        setLiveFetched(true);
-      });
-  }, [disease]);
-
-  // Merge static + live, deduplicate by name
-  const allDrugs: LiveMarketedDrug[] = [...allStaticDrugs];
-  for (const ld of liveDrugs) {
-    if (!allDrugs.find((d) => d.name.toLowerCase() === ld.name.toLowerCase())) {
-      allDrugs.push(ld);
-    }
-  }
-
-  const isLive = liveDrugs.length > 0;
+    setLoading(true);
+    setDrugs([]);
+    getMarketedDrugs(disease, drugType, dosageForm)
+      .then((results) => setDrugs(results))
+      .catch(() => setDrugs([]))
+      .finally(() => setLoading(false));
+  }, [disease, drugType, dosageForm]);
 
   return (
     <motion.div
@@ -547,162 +451,110 @@ function MarketedDrugsStep({
           type="button"
           onClick={onBack}
           className="p-2 rounded-lg hover:bg-muted transition-colors"
-          data-ocid="idea.button"
+          data-ocid="marketed.button"
         >
           <ArrowLeft className="w-4 h-4" />
         </button>
-        <div>
-          <h3 className="font-semibold text-foreground">{disease}</h3>
+        <div className="flex-1">
+          <h3 className="font-semibold text-foreground">
+            Marketed Drug Reference
+          </h3>
           <p className="text-xs text-muted-foreground">
-            {drugType} · {dosageForm}
+            {disease} · {drugType} · {dosageForm}
           </p>
         </div>
+        <Badge
+          variant="outline"
+          className="text-xs bg-violet-100 text-violet-700 border-violet-200"
+        >
+          ✦ AI-Powered
+        </Badge>
       </div>
 
-      <h4 className="font-semibold text-foreground mb-4 flex items-center gap-2">
-        <Package className="w-4 h-4 text-primary" />
-        Marketed Drugs Reference
-        <span className="text-xs text-muted-foreground ml-1">
-          ({allDrugs.length} found)
-        </span>
-        {isLive && (
-          <span
-            className="ml-auto text-xs px-2 py-0.5 rounded-full font-medium"
-            style={{
-              background: "oklch(0.42 0.14 145 / 0.12)",
-              color: "oklch(0.35 0.12 145)",
-            }}
-          >
-            Live FDA Data
-          </span>
-        )}
-      </h4>
-
-      {liveLoading && allDrugs.length === 0 ? (
-        <div className="space-y-3 mb-6">
-          {[1, 2, 3].map((i) => (
-            <Card key={i}>
-              <CardContent className="py-4 space-y-2">
-                <Skeleton className="h-4 w-2/3" />
-                <Skeleton className="h-3 w-1/2" />
-                <Skeleton className="h-3 w-3/4" />
+      {loading ? (
+        <div className="space-y-3">
+          {[1, 2, 3, 4, 5].map((i) => (
+            <Card key={i} className="border-border">
+              <CardContent className="py-4 flex items-center gap-3">
+                <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin shrink-0" />
+                <div className="flex-1">
+                  <div className="h-4 bg-muted rounded animate-pulse mb-2 w-2/3" />
+                  <div className="h-3 bg-muted rounded animate-pulse w-1/2" />
+                </div>
               </CardContent>
             </Card>
           ))}
+          <p className="text-center text-xs text-muted-foreground animate-pulse">
+            Fetching real marketed drugs for {disease}…
+          </p>
         </div>
-      ) : allDrugs.length === 0 && liveFetched ? (
-        <Card className="border-dashed mb-6">
-          <CardContent className="py-8 text-center text-muted-foreground">
-            <Package className="w-8 h-8 mx-auto mb-2 opacity-40" />
-            <p className="text-sm">
-              No marketed drugs data found for this disease.
+      ) : drugs.length === 0 ? (
+        <Card className="border-dashed">
+          <CardContent className="py-12 text-center">
+            <Package className="w-10 h-10 mx-auto mb-3 opacity-30" />
+            <p className="text-sm font-medium text-foreground mb-1">
+              No marketed drugs found
             </p>
-            <p className="text-xs mt-1">
-              You can still explore novel compositions.
+            <p className="text-xs text-muted-foreground">
+              Try a different drug type or dosage form
             </p>
           </CardContent>
         </Card>
       ) : (
-        <div className="space-y-3 mb-6" data-ocid="idea.list">
-          {allDrugs.map((drug, i) => {
-            const drugRoutes = (drug.routes ?? []).map((r) => r.toUpperCase());
-            const dosageFormAvailable = selectedRoutes.some((sr) =>
-              drugRoutes.includes(sr),
-            );
-            const routeLabels =
-              drugRoutes.length > 0
-                ? drugRoutes
-                    .slice(0, 3)
-                    .map((r) => r.charAt(0) + r.slice(1).toLowerCase())
-                : null;
-
-            return (
-              <motion.div
-                key={drug.name + String(i)}
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: Math.min(i, 5) * 0.05 }}
-                data-ocid={`idea.item.${i + 1}`}
-              >
-                <Card className="overflow-hidden">
-                  <CardContent className="py-4">
-                    <div className="flex items-start justify-between gap-3 mb-2 flex-wrap">
-                      <div className="flex-1 min-w-0">
-                        <p className="font-semibold text-foreground">
-                          {drug.name}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {drug.generic}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-1.5 flex-wrap justify-end">
-                        {drug.detectedDrugType && (
-                          <Badge
-                            variant="secondary"
-                            className="text-[10px] shrink-0"
-                          >
-                            {drug.detectedDrugType}
-                          </Badge>
-                        )}
-                        <Badge variant="outline" className="shrink-0 text-xs">
-                          {drug.dose}
-                        </Badge>
-                      </div>
+        <div className="space-y-3">
+          <p className="text-xs text-muted-foreground mb-2">
+            Showing {drugs.length} marketed drugs for{" "}
+            <span className="font-medium text-foreground">{disease}</span>
+          </p>
+          {drugs.map((drug, i) => (
+            <Card
+              key={`${drug.brandName}-${i}`}
+              className="border-border hover:border-primary/30 transition-colors"
+            >
+              <CardContent className="py-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="font-semibold text-foreground text-sm">
+                        {drug.brandName}
+                      </span>
+                      <Badge variant="outline" className="text-[10px]">
+                        {drug.dosageForm}
+                      </Badge>
                     </div>
-                    <p className="text-xs text-muted-foreground mb-2">
-                      <span className="font-medium text-foreground">
-                        Manufacturer:
-                      </span>{" "}
-                      {drug.manufacturer}
+                    <p className="text-xs text-muted-foreground">
+                      Generic:{" "}
+                      <span className="text-foreground">
+                        {drug.genericName}
+                      </span>
                     </p>
-                    <p className="text-xs text-muted-foreground mb-2">
-                      <span className="font-medium text-foreground">
-                        Mechanism:
-                      </span>{" "}
-                      {drug.mechanism}
+                    <p className="text-xs text-muted-foreground">
+                      Manufacturer: {drug.manufacturer}
                     </p>
-                    {/* Dosage form availability */}
-                    <div className="flex flex-wrap gap-1.5 mt-2">
-                      {dosageFormAvailable && (
-                        <span
-                          className="text-[10px] font-semibold px-2 py-0.5 rounded-full flex items-center gap-1"
-                          style={{
-                            background: "oklch(0.42 0.14 145 / 0.12)",
-                            color: "oklch(0.35 0.12 145)",
-                          }}
-                        >
-                          ✓ {dosageForm} dosage form is available
-                        </span>
-                      )}
-                      {routeLabels?.map((rl) => (
-                        <span
-                          key={rl}
-                          className="text-[10px] px-1.5 py-0.5 rounded-full"
-                          style={{
-                            background: "oklch(0.55 0.14 240 / 0.10)",
-                            color: "oklch(0.40 0.12 240)",
-                          }}
-                        >
-                          {rl}
-                        </span>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-              </motion.div>
-            );
-          })}
+                    <p className="text-xs text-primary font-medium mt-1">
+                      Strength: {drug.strength}
+                    </p>
+                  </div>
+                  <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0 mt-0.5" />
+                </div>
+              </CardContent>
+            </Card>
+          ))}
         </div>
       )}
 
-      <Button
-        onClick={onNext}
-        className="w-full gap-2"
-        data-ocid="idea.primary_button"
-      >
-        <Zap className="w-4 h-4" />
-        Explore Novel Compositions
-      </Button>
+      <div className="mt-6 flex gap-2">
+        <Button variant="outline" onClick={onBack} className="flex-1">
+          <ArrowLeft className="w-4 h-4 mr-1" /> Back
+        </Button>
+        <Button
+          onClick={onNext}
+          className="flex-1"
+          data-ocid="marketed.primary_button"
+        >
+          View Novel Compositions <ArrowRight className="w-4 h-4 ml-1" />
+        </Button>
+      </div>
     </motion.div>
   );
 }
@@ -726,6 +578,7 @@ function NovelCompositionsStep({
   const [index, setIndex] = useState(0);
   const [aiComps, setAiComps] = useState<FormulationIdea[] | null>(null);
   const [isLoadingAi, setIsLoadingAi] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
 
   // Fetch AI ideas on mount / when key changes
   // biome-ignore lint/correctness/useExhaustiveDependencies: key is a derived string
@@ -741,6 +594,29 @@ function NovelCompositionsStep({
       .catch(() => setAiComps(null))
       .finally(() => setIsLoadingAi(false));
   }, [key]);
+
+  const generateMore = () => {
+    if (isLoadingMore || (aiComps && aiComps.length >= 20)) return;
+    setIsLoadingMore(true);
+    getFormulationIdeas(disease, dosageForm, drugType)
+      .then((ideas) => {
+        if (ideas && ideas.length > 0) {
+          setAiComps((prev) => {
+            const combined = [...(prev ?? []), ...ideas];
+            // Cap at 20, deduplicate by name
+            const seen = new Set<string>();
+            const unique = combined.filter((c) => {
+              if (seen.has(c.compositionName)) return false;
+              seen.add(c.compositionName);
+              return true;
+            });
+            return unique.slice(0, 20);
+          });
+        }
+      })
+      .catch(() => {})
+      .finally(() => setIsLoadingMore(false));
+  };
 
   // Fallback to static data
   const directComps: NovelComposition[] = NOVEL_COMPOSITIONS[key] ?? [];
@@ -804,18 +680,6 @@ function NovelCompositionsStep({
 
   const total = displayComps.length;
   const comp = displayComps[index] ?? null;
-
-  // Build a stable claim ID using composition name hash (not index)
-  const getClaimId = (c: NovelComposition) => {
-    const nameHash = c.name
-      .toLowerCase()
-      .replace(/\s+/g, "-")
-      .replace(/[^a-z0-9-]/g, "")
-      .slice(0, 40);
-    return `${disease}-${dosageForm}-${drugType}-${nameHash}`
-      .toLowerCase()
-      .replace(/\s+/g, "-");
-  };
 
   return (
     <motion.div
@@ -898,18 +762,6 @@ function NovelCompositionsStep({
                       {isDynamic && !isAiSource && (
                         <Badge className="text-xs bg-violet-100 text-violet-700 border-violet-200">
                           ✦ AI-Generated Composition
-                        </Badge>
-                      )}
-                      {comp && isFormulationClaimed(getClaimId(comp)) && (
-                        <Badge
-                          className="text-xs"
-                          style={{
-                            background: "oklch(0.54 0.174 24 / 0.15)",
-                            color: "oklch(0.54 0.174 24)",
-                            border: "1px solid oklch(0.54 0.174 24 / 0.3)",
-                          }}
-                        >
-                          Claimed
                         </Badge>
                       )}
                     </div>
@@ -1129,19 +981,6 @@ function NovelCompositionsStep({
                 className="flex-1 gap-2"
                 onClick={() => {
                   if (!comp) return;
-                  const claimId = getClaimId(comp);
-                  const claimed = claimFormulation(claimId, {
-                    disease,
-                    dosageForm,
-                    drugType,
-                    compositionName: comp.name,
-                  });
-                  if (!claimed) {
-                    toast.error(
-                      "This composition has been claimed by another user. Try the next one.",
-                    );
-                    return;
-                  }
                   onAdd(comp);
                 }}
                 data-ocid="idea.primary_button"
@@ -1150,6 +989,34 @@ function NovelCompositionsStep({
                 Add to Formulation Lab
               </Button>
             </div>
+            {/* Generate More */}
+            {!isLoadingAi && (aiComps ?? []).length < 20 && (
+              <div className="mt-3">
+                <Button
+                  variant="outline"
+                  className="w-full gap-2"
+                  onClick={generateMore}
+                  disabled={isLoadingMore}
+                  data-ocid="idea.secondary_button"
+                >
+                  {isLoadingMore ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />{" "}
+                      Generating more…
+                    </>
+                  ) : (
+                    <>
+                      <Zap className="w-4 h-4" /> Generate More Formulations
+                    </>
+                  )}
+                </Button>
+                {aiComps && aiComps.length > 0 && (
+                  <p className="text-xs text-muted-foreground text-center mt-1">
+                    {aiComps.length}/20 compositions generated
+                  </p>
+                )}
+              </div>
+            )}
           </motion.div>
         </AnimatePresence>
       )}

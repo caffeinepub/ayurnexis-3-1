@@ -80,13 +80,10 @@ import {
 import { type HerbMonograph, pharmacopeiaData } from "../data/pharmacopeiaData";
 import {
   type FormulationAnalysis,
+  type FormulationSummaryData,
   analyzeFormulation,
+  getFormulationSummary,
 } from "../services/geminiService";
-import {
-  getCurrentUser,
-  getFormulationLockInfo,
-  lockFormulation,
-} from "../utils/accessControl";
 
 // ─── Pharmacopeia Incompatibility Database ────────────────────────────────────
 const INCOMPATIBILITY_DB: Array<{
@@ -2683,6 +2680,22 @@ export function FormulationLab({
         unit: ing.unit,
       })),
     );
+    const defaultMethod = prefillData.dosageForm
+      .toLowerCase()
+      .includes("tablet")
+      ? "Direct Compression"
+      : prefillData.dosageForm.toLowerCase().includes("capsule")
+        ? "Hard Gelatin Capsule (Dry Fill)"
+        : prefillData.dosageForm.toLowerCase().includes("syrup") ||
+            prefillData.dosageForm.toLowerCase().includes("solution")
+          ? "Solution"
+          : prefillData.dosageForm.toLowerCase().includes("injection")
+            ? "Parenteral Solution"
+            : prefillData.dosageForm.toLowerCase().includes("cream") ||
+                prefillData.dosageForm.toLowerCase().includes("topical")
+              ? "Semi-Solid"
+              : "Direct Compression";
+    setMethod(defaultMethod);
     setStep(3);
   }, [prefillData]);
 
@@ -2717,6 +2730,10 @@ export function FormulationLab({
   const [geminiAnalysis, setGeminiAnalysis] =
     useState<FormulationAnalysis | null>(null);
   const [geminiLoading, setGeminiLoading] = useState(false);
+  const [summaryData, setSummaryData] = useState<FormulationSummaryData | null>(
+    null,
+  );
+  const [summaryLoading, setSummaryLoading] = useState(false);
   const geminiTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const geminiCacheRef = useRef<Record<string, FormulationAnalysis>>({});
 
@@ -2757,6 +2774,29 @@ export function FormulationLab({
       }
     }, 1500);
   }, [ingredients]);
+
+  // ── Summary Data Trigger ──────────────────────────────────────────────────
+  // biome-ignore lint/correctness/useExhaustiveDependencies: only trigger when step changes
+  useEffect(() => {
+    if (step !== 5 || ingredients.length === 0 || !dosageForm || !method)
+      return;
+    setSummaryLoading(true);
+    setSummaryData(null);
+    getFormulationSummary(
+      ingredients.map((i) => ({
+        name: i.name,
+        quantity: i.quantity,
+        unit: i.unit,
+        role: i.category,
+      })),
+      dosageForm,
+      method,
+    )
+      .then((data) => setSummaryData(data))
+      .catch(() => setSummaryData(null))
+      .finally(() => setSummaryLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step]);
 
   // ── Derived ───────────────────────────────────────────────────────────────
   const methods = dosageForm ? (DOSAGE_METHODS[dosageForm] ?? []) : [];
@@ -3132,20 +3172,6 @@ export function FormulationLab({
   }
 
   async function handleExport() {
-    // Check if this formulation is locked by another user
-    const currentUserName = getCurrentUser()?.name || "Anonymous";
-    const ingForHash = ingredients.map((i) => ({
-      name: i.name,
-      quantity: i.quantity,
-      unit: i.unit,
-    }));
-    const lockInfo = getFormulationLockInfo(ingForHash);
-    if (lockInfo && lockInfo.lockedBy !== currentUserName) {
-      alert(
-        `This exact formulation (same ingredients & quantities) has already been developed by ${lockInfo.lockedBy}. Change any ingredient quantity to create a unique formulation.`,
-      );
-      return;
-    }
     setExporting(true);
     try {
       // Load jsPDF dynamically (package not in lockfile, use CDN)
@@ -3627,18 +3653,6 @@ export function FormulationLab({
       }
 
       doc.save(`${formulationName || dosageForm || "formulation"}_report.pdf`);
-      // Lock this formulation so other users can't export the exact same one
-      const _currentUserForLock = getCurrentUser()?.name || "Anonymous";
-      const _ingForLock = ingredients.map((i) => ({
-        name: i.name,
-        quantity: i.quantity,
-        unit: i.unit,
-      }));
-      lockFormulation(
-        _ingForLock,
-        _currentUserForLock,
-        formulationName || `${dosageForm} Formulation`,
-      );
     } catch (e) {
       console.error("PDF export error:", e);
     } finally {
@@ -4221,28 +4235,43 @@ export function FormulationLab({
                     </CardContent>
                   </Card>
 
-                  {/* Flags */}
-                  <div className="space-y-2">
-                    {analysisFlags.map((flag) => (
-                      <div
-                        key={flag.message}
-                        className={`flex items-center gap-3 rounded-lg px-4 py-3 border ${
-                          flag.type === "ok"
-                            ? "bg-green-500/10 border-green-500/20 text-green-300"
-                            : flag.type === "warning"
-                              ? "bg-yellow-500/10 border-yellow-500/20 text-yellow-300"
-                              : "bg-red-500/10 border-red-500/20 text-red-300"
-                        }`}
-                      >
-                        {flag.type === "ok" ? (
-                          <CheckCircle className="w-4 h-4 shrink-0" />
-                        ) : (
-                          <AlertTriangle className="w-4 h-4 shrink-0" />
-                        )}
-                        <span className="text-sm">{flag.message}</span>
-                      </div>
-                    ))}
-                  </div>
+                  {/* Gemini Advantages / Disadvantages */}
+                  {geminiLoading ? (
+                    <div className="flex flex-col items-center gap-3 py-8">
+                      <div className="w-7 h-7 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                      <p className="text-xs text-muted-foreground">
+                        Generating AI recommendations…
+                      </p>
+                    </div>
+                  ) : geminiAnalysis ? (
+                    <div className="space-y-3">
+                      {geminiAnalysis.advantages.map((adv) => (
+                        <div
+                          key={adv.substring(0, 30)}
+                          className="flex items-start gap-3 rounded-lg px-4 py-3 border bg-green-500/10 border-green-500/20 text-green-700"
+                        >
+                          <CheckCircle className="w-4 h-4 shrink-0 mt-0.5 text-green-500" />
+                          <span className="text-sm">{adv}</span>
+                        </div>
+                      ))}
+                      {geminiAnalysis.disadvantages.map((dis) => (
+                        <div
+                          key={dis.substring(0, 30)}
+                          className="flex items-start gap-3 rounded-lg px-4 py-3 border bg-yellow-500/10 border-yellow-500/20 text-yellow-700"
+                        >
+                          <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-yellow-500" />
+                          <span className="text-sm">{dis}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center gap-3 py-8">
+                      <div className="w-7 h-7 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                      <p className="text-xs text-muted-foreground">
+                        Add 2+ ingredients for AI recommendations…
+                      </p>
+                    </div>
+                  )}
 
                   {/* Compatibility notes */}
                   {ingredients.length > 0 && (
@@ -4431,11 +4460,35 @@ export function FormulationLab({
                   />
                 </TabsContent>
                 <TabsContent value="full-analytics" className="space-y-4">
-                  <FullCompositionAnalytics
-                    ingredients={ingredients}
-                    dosageForm={dosageForm}
-                    geminiData={geminiAnalysis}
-                  />
+                  {geminiLoading ? (
+                    <div className="flex flex-col items-center gap-4 py-12">
+                      <div className="w-10 h-10 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                      <p className="text-sm font-medium text-foreground text-center">
+                        Generating pharmacopeia-compliant analytical predictions
+                        via AI…
+                      </p>
+                      <p className="text-xs text-muted-foreground text-center">
+                        HPLC · UV · FTIR · DSC · Dissolution profiles
+                      </p>
+                    </div>
+                  ) : !geminiAnalysis && ingredients.length < 2 ? (
+                    <div className="text-center py-12 text-muted-foreground">
+                      <TestTube className="w-10 h-10 mx-auto mb-3 opacity-30" />
+                      <p className="text-sm font-medium">
+                        Add 2+ ingredients to generate predictions
+                      </p>
+                      <p className="text-xs mt-1">
+                        AI will generate real pharmacopeia-compliant analytical
+                        data
+                      </p>
+                    </div>
+                  ) : (
+                    <FullCompositionAnalytics
+                      ingredients={ingredients}
+                      dosageForm={dosageForm}
+                      geminiData={geminiAnalysis}
+                    />
+                  )}
                 </TabsContent>
                 <TabsContent value="reactions" className="space-y-4">
                   {geminiLoading ? (
@@ -4491,14 +4544,21 @@ export function FormulationLab({
                         </Card>
                       ))}
                     </div>
-                  ) : (
+                  ) : ingredients.length < 2 ? (
                     <div className="text-center py-12 text-muted-foreground">
                       <AlertTriangle className="w-10 h-10 mx-auto mb-3 opacity-30" />
                       <p className="text-sm font-medium mb-1">
-                        No reactions predicted
+                        Add 2+ ingredients
                       </p>
                       <p className="text-xs">
-                        Add 2+ ingredients to get AI-powered reaction analysis
+                        AI will predict inter-ingredient reactions
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center gap-3 py-12">
+                      <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                      <p className="text-sm text-muted-foreground">
+                        Analyzing reactions…
                       </p>
                     </div>
                   )}
@@ -4913,6 +4973,103 @@ export function FormulationLab({
                       )}
                     </div>
                   </div>
+                </CardContent>
+              </Card>
+
+              {/* AI Formulation Analysis */}
+              <Card className="border-border">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <Zap className="w-4 h-4 text-primary" />
+                    AI Formulation Analysis
+                    {summaryLoading && (
+                      <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin ml-1" />
+                    )}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {summaryLoading ? (
+                    <div className="space-y-2">
+                      <div className="h-3 bg-muted rounded animate-pulse w-full" />
+                      <div className="h-3 bg-muted rounded animate-pulse w-5/6" />
+                      <div className="h-3 bg-muted rounded animate-pulse w-4/5" />
+                    </div>
+                  ) : summaryData ? (
+                    <>
+                      {/* Clinical Rationale */}
+                      <div>
+                        <p className="text-xs font-semibold text-primary mb-2">
+                          Clinical Rationale
+                        </p>
+                        <p className="text-xs text-muted-foreground leading-relaxed">
+                          {summaryData.narrative}
+                        </p>
+                      </div>
+                      {/* Manufacturing Procedure */}
+                      <div>
+                        <p className="text-xs font-semibold text-foreground mb-2">
+                          Manufacturing Procedure
+                        </p>
+                        <ol className="space-y-1">
+                          {summaryData.procedure.map((step, i) => (
+                            <li
+                              key={step.substring(0, 30)}
+                              className="text-xs text-muted-foreground flex gap-2"
+                            >
+                              <span className="shrink-0 w-5 h-5 rounded-full bg-primary/10 text-primary font-bold flex items-center justify-center text-[10px]">
+                                {i + 1}
+                              </span>
+                              {step}
+                            </li>
+                          ))}
+                        </ol>
+                      </div>
+                      {/* Instruments & Glassware */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="rounded-lg bg-blue-500/5 border border-blue-500/20 p-3">
+                          <p className="text-xs font-semibold text-blue-400 mb-2">
+                            🔬 Instruments Required
+                          </p>
+                          <ul className="space-y-1">
+                            {summaryData.instruments.map((inst) => (
+                              <li
+                                key={inst}
+                                className="text-xs text-muted-foreground flex gap-1.5"
+                              >
+                                <span className="text-blue-400 shrink-0">
+                                  •
+                                </span>
+                                {inst}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                        <div className="rounded-lg bg-purple-500/5 border border-purple-500/20 p-3">
+                          <p className="text-xs font-semibold text-purple-400 mb-2">
+                            🧪 Glassware Required
+                          </p>
+                          <ul className="space-y-1">
+                            {summaryData.glassware.map((gw) => (
+                              <li
+                                key={gw}
+                                className="text-xs text-muted-foreground flex gap-1.5"
+                              >
+                                <span className="text-purple-400 shrink-0">
+                                  •
+                                </span>
+                                {gw}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      Add ingredients and proceed to see AI-powered formulation
+                      analysis.
+                    </p>
+                  )}
                 </CardContent>
               </Card>
 

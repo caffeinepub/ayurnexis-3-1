@@ -146,7 +146,7 @@ export interface FormulationAnalysis {
 // ─── API Functions ────────────────────────────────────────────────────────────
 
 export async function searchDiseases(query: string): Promise<string[]> {
-  const prompt = `List 10 medical diseases or conditions that match or relate to: '${query}'. Return ONLY a JSON array of strings, no explanation. Example: ["Disease 1", "Disease 2"]`;
+  const prompt = `List 20 medical diseases or conditions that match or relate to: '${query}'. Return ONLY a JSON array of 20 strings, no explanation. Example: ["Disease 1", "Disease 2"]`;
   const result = await callGemini(prompt);
   if (!result) return [];
   const parsed = parseJSON<string[]>(result);
@@ -160,7 +160,7 @@ export async function getFormulationIdeas(
   dosageForm: string,
   drugType: string,
 ): Promise<FormulationIdea[]> {
-  const prompt = `Generate 5 novel pharmaceutical formulation ideas for treating ${disease} as a ${dosageForm} using ${drugType} approach. For each, return a JSON array of objects with these exact fields: compositionName (string), ingredients (array of objects with name (string), quantity (number), unit (string), role (string), pharmacologicalEffect (string)), advantages (array of strings), disadvantages (array of strings), stabilityPrediction (string), mechanismOfAction (string), drugInteractions (array of strings), clinicalRationale (string). Return ONLY valid JSON array, no markdown, no explanation.`;
+  const prompt = `Generate exactly 10 novel pharmaceutical formulation ideas for treating ${disease} as a ${dosageForm} using ${drugType} approach. For each, return a JSON array of objects with these exact fields: compositionName (string), ingredients (array of objects with name (string), quantity (number), unit (string), role (string), pharmacologicalEffect (string)), advantages (array of strings), disadvantages (array of strings), stabilityPrediction (string), mechanismOfAction (string), drugInteractions (array of strings), clinicalRationale (string). Return ONLY valid JSON array, no markdown, no explanation.`;
   const result = await callGemini(prompt);
   if (!result) return [];
   const parsed = parseJSON<FormulationIdea[]>(result);
@@ -186,4 +186,52 @@ Return ONLY valid JSON, no markdown.`;
   const result = await callGemini(prompt);
   if (!result) return null;
   return parseJSON<FormulationAnalysis>(result);
+}
+
+// ─── Marketed Drugs ───────────────────────────────────────────────────────────
+
+export interface MarketedDrugResult {
+  brandName: string;
+  genericName: string;
+  manufacturer: string;
+  dosageForm: string;
+  strength: string;
+}
+
+export async function getMarketedDrugs(
+  disease: string,
+  drugType: string,
+  dosageForm: string,
+): Promise<MarketedDrugResult[]> {
+  const prompt = `List 10 real marketed pharmaceutical drugs for treating ${disease} as a ${drugType} ${dosageForm}. Return ONLY a JSON array of objects with fields: brandName (string), genericName (string), manufacturer (string), dosageForm (string), strength (string). Use real drug names, manufacturers, and strengths from pharmacopoeia. Example format: [{"brandName":"Glucophage","genericName":"Metformin HCl","manufacturer":"Merck","dosageForm":"Tablet","strength":"500 mg"}]. Return ONLY valid JSON array, no markdown.`;
+  const result = await callGemini(prompt);
+  if (!result) return [];
+  const parsed = parseJSON<MarketedDrugResult[]>(result);
+  return Array.isArray(parsed) ? parsed : [];
+}
+
+// ─── Formulation Summary ──────────────────────────────────────────────────────
+
+export interface FormulationSummaryData {
+  narrative: string;
+  procedure: string[];
+  instruments: string[];
+  glassware: string[];
+}
+
+export async function getFormulationSummary(
+  ingredients: { name: string; quantity: number; unit: string; role: string }[],
+  dosageForm: string,
+  method: string,
+): Promise<FormulationSummaryData | null> {
+  const prompt = `For a ${dosageForm} pharmaceutical formulation prepared by ${method} method using: ${ingredients.map((i) => `${i.name} ${i.quantity}${i.unit} (${i.role})`).join(", ")}.
+Return a JSON object with:
+- narrative: a 3-4 sentence clinical rationale for this formulation (scientific, pharmacopeia-based)
+- procedure: array of 6-8 step-by-step manufacturing procedure strings (brief, numbered context omitted)
+- instruments: array of 6-10 laboratory instruments required (e.g. "Tablet Compression Machine", "Analytical Balance")
+- glassware: array of 5-8 glassware items required (e.g. "250 mL Beaker", "100 mL Volumetric Flask")
+Return ONLY valid JSON, no markdown.`;
+  const result = await callGemini(prompt);
+  if (!result) return null;
+  return parseJSON<FormulationSummaryData>(result);
 }
