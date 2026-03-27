@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   AlertTriangle,
@@ -135,39 +136,39 @@ function DiseaseSearch({ onSelect }: { onSelect: (disease: string) => void }) {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
-  const [fdaResults, setFdaResults] = useState<string[]>([]);
-  const [fdaConnected, setFdaConnected] = useState(false);
+  const [aiResults, setAiResults] = useState<string[]>([]);
+  const [aiConnected, setAiConnected] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
-  const fdaTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const preloadedFiltered = DISEASES.filter((d) =>
     d.toLowerCase().includes(query.toLowerCase()),
   ).slice(0, 8);
 
-  const filtered = fdaResults.length > 0 ? fdaResults : preloadedFiltered;
+  const filtered = aiResults.length > 0 ? aiResults : preloadedFiltered;
 
-  const [geminiSearching, setGeminiSearching] = useState(false);
+  const [aiSearching, setAiSearching] = useState(false);
 
   useEffect(() => {
-    if (query.length < 3) {
-      setFdaResults([]);
+    if (query.length < 2) {
+      setAiResults([]);
       return;
     }
-    if (fdaTimerRef.current) clearTimeout(fdaTimerRef.current);
-    fdaTimerRef.current = setTimeout(async () => {
-      setGeminiSearching(true);
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(async () => {
+      setAiSearching(true);
       try {
         const results = await searchDiseases(query);
         if (results.length > 0) {
-          setFdaResults(results);
-          setFdaConnected(true);
+          setAiResults(results);
+          setAiConnected(true);
         } else {
-          setFdaResults([]);
+          setAiResults([]);
         }
       } catch {
-        setFdaResults([]);
+        setAiResults([]);
       } finally {
-        setGeminiSearching(false);
+        setAiSearching(false);
       }
     }, 500);
   }, [query]);
@@ -193,10 +194,10 @@ function DiseaseSearch({ onSelect }: { onSelect: (disease: string) => void }) {
           What condition are you formulating for?
         </h2>
         <p className="text-muted-foreground">
-          Search any disease or condition — Gemini AI finds relevant results in
-          real-time
+          Search any disease or condition — AI-Powered intelligent search finds
+          relevant results
         </p>
-        {fdaConnected && (
+        {aiConnected && (
           <div
             className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium mt-2"
             style={{
@@ -206,7 +207,7 @@ function DiseaseSearch({ onSelect }: { onSelect: (disease: string) => void }) {
             }}
           >
             <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse inline-block" />
-            Live Search (Gemini AI)
+            Live Search Active
           </div>
         )}
       </div>
@@ -223,11 +224,11 @@ function DiseaseSearch({ onSelect }: { onSelect: (disease: string) => void }) {
           }}
           onFocus={() => setOpen(true)}
           onBlur={() => setTimeout(() => setOpen(false), 150)}
-          placeholder="Type any disease or condition — powered by Gemini AI…"
+          placeholder="Type any disease or condition (e.g. fever, diabetes, headache)…"
           className="pl-9 pr-10 h-12 text-base"
           data-ocid="idea.input"
         />
-        {geminiSearching && (
+        {aiSearching && (
           <div className="absolute right-3 top-1/2 -translate-y-1/2">
             <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
           </div>
@@ -293,14 +294,16 @@ function DiseaseSearch({ onSelect }: { onSelect: (disease: string) => void }) {
         </p>
         <div className="flex flex-wrap gap-2">
           {[
+            "Fever",
+            "Common Cold",
+            "Cough",
+            "Headache",
             "Diabetes (Type 2)",
             "Hypertension",
-            "Asthma",
             "Anxiety",
             "GERD (Acid Reflux)",
             "Migraine",
             "Insomnia",
-            "Osteoporosis",
           ].map((d) => (
             <button
               type="button"
@@ -411,6 +414,54 @@ function DosageFormStep({
 
 // ─── Step 3: Marketed Drugs ───────────────────────────────────────────────────
 
+// Map dosage form to FDA route
+function mapDosageFormToRoute(dosageForm: string): string[] {
+  const df = dosageForm.toLowerCase();
+  if (
+    df.includes("tablet") ||
+    df.includes("capsule") ||
+    df.includes("syrup") ||
+    df.includes("oral") ||
+    df.includes("solution") ||
+    df.includes("suspension") ||
+    df.includes("powder") ||
+    df.includes("granule")
+  )
+    return ["ORAL"];
+  if (
+    df.includes("topical") ||
+    df.includes("cream") ||
+    df.includes("ointment") ||
+    df.includes("gel") ||
+    df.includes("lotion")
+  )
+    return ["TOPICAL"];
+  if (
+    df.includes("injection") ||
+    df.includes("intravenous") ||
+    df.includes("parenteral") ||
+    df.includes("iv")
+  )
+    return ["INTRAVENOUS", "INJECTION", "INTRAMUSCULAR", "SUBCUTANEOUS"];
+  if (
+    df.includes("inhaler") ||
+    df.includes("inhalation") ||
+    df.includes("nebulizer")
+  )
+    return ["INHALATION", "NASAL"];
+  if (df.includes("suppository") || df.includes("rectal")) return ["RECTAL"];
+  if (df.includes("eye") || df.includes("ophthalmic")) return ["OPHTHALMIC"];
+  if (df.includes("ear")) return ["OTIC"];
+  if (df.includes("patch") || df.includes("transdermal"))
+    return ["TRANSDERMAL"];
+  return ["ORAL"];
+}
+
+interface LiveMarketedDrug extends MarketedDrug {
+  routes?: string[];
+  detectedDrugType?: string;
+}
+
 function MarketedDrugsStep({
   disease,
   drugType,
@@ -424,7 +475,66 @@ function MarketedDrugsStep({
   onNext: () => void;
   onBack: () => void;
 }) {
-  const drugs: MarketedDrug[] = MARKETED_DRUGS[disease]?.[drugType] ?? [];
+  // Collect all static drugs across all drug types
+  const allStaticDrugs: LiveMarketedDrug[] = [];
+  const diseaseData = MARKETED_DRUGS[disease] ?? {};
+  for (const [dType, drugs] of Object.entries(diseaseData)) {
+    for (const d of drugs as MarketedDrug[]) {
+      allStaticDrugs.push({ ...d, detectedDrugType: dType });
+    }
+  }
+
+  const [liveDrugs, setLiveDrugs] = useState<LiveMarketedDrug[]>([]);
+  const [liveLoading, setLiveLoading] = useState(true);
+  const [liveFetched, setLiveFetched] = useState(false);
+
+  const selectedRoutes = mapDosageFormToRoute(dosageForm);
+
+  // Always fetch from OpenFDA regardless of static data - disease triggers refetch
+  // eslint-disable-next-line
+  useEffect(() => {
+    setLiveLoading(true);
+    fetch(
+      `https://api.fda.gov/drug/label.json?search=indications_and_usage:${encodeURIComponent(disease)}&limit=15`,
+    )
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (!data?.results) return;
+        const mapped: LiveMarketedDrug[] = data.results
+          .map((r: any) => ({
+            name:
+              r.openfda?.brand_name?.[0] ||
+              r.openfda?.generic_name?.[0] ||
+              "Unknown",
+            generic: r.openfda?.generic_name?.[0] || "",
+            manufacturer:
+              r.openfda?.manufacturer_name?.[0] || "Unknown Manufacturer",
+            dose: r.openfda?.product_ndc?.[0] || "See label",
+            mechanism: `${r.indications_and_usage?.[0]?.slice(0, 150) ?? ""}…`,
+            routes: (r.openfda?.route ?? []).map((rt: string) =>
+              rt.toUpperCase(),
+            ),
+            detectedDrugType: "Allopathic",
+          }))
+          .filter((d: LiveMarketedDrug) => d.name !== "Unknown");
+        setLiveDrugs(mapped);
+      })
+      .catch(() => {})
+      .finally(() => {
+        setLiveLoading(false);
+        setLiveFetched(true);
+      });
+  }, [disease]);
+
+  // Merge static + live, deduplicate by name
+  const allDrugs: LiveMarketedDrug[] = [...allStaticDrugs];
+  for (const ld of liveDrugs) {
+    if (!allDrugs.find((d) => d.name.toLowerCase() === ld.name.toLowerCase())) {
+      allDrugs.push(ld);
+    }
+  }
+
+  const isLive = liveDrugs.length > 0;
 
   return (
     <motion.div
@@ -452,14 +562,40 @@ function MarketedDrugsStep({
       <h4 className="font-semibold text-foreground mb-4 flex items-center gap-2">
         <Package className="w-4 h-4 text-primary" />
         Marketed Drugs Reference
+        <span className="text-xs text-muted-foreground ml-1">
+          ({allDrugs.length} found)
+        </span>
+        {isLive && (
+          <span
+            className="ml-auto text-xs px-2 py-0.5 rounded-full font-medium"
+            style={{
+              background: "oklch(0.42 0.14 145 / 0.12)",
+              color: "oklch(0.35 0.12 145)",
+            }}
+          >
+            Live FDA Data
+          </span>
+        )}
       </h4>
 
-      {drugs.length === 0 ? (
+      {liveLoading && allDrugs.length === 0 ? (
+        <div className="space-y-3 mb-6">
+          {[1, 2, 3].map((i) => (
+            <Card key={i}>
+              <CardContent className="py-4 space-y-2">
+                <Skeleton className="h-4 w-2/3" />
+                <Skeleton className="h-3 w-1/2" />
+                <Skeleton className="h-3 w-3/4" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      ) : allDrugs.length === 0 && liveFetched ? (
         <Card className="border-dashed mb-6">
           <CardContent className="py-8 text-center text-muted-foreground">
             <Package className="w-8 h-8 mx-auto mb-2 opacity-40" />
             <p className="text-sm">
-              No marketed drugs data for this combination.
+              No marketed drugs data found for this disease.
             </p>
             <p className="text-xs mt-1">
               You can still explore novel compositions.
@@ -468,45 +604,94 @@ function MarketedDrugsStep({
         </Card>
       ) : (
         <div className="space-y-3 mb-6" data-ocid="idea.list">
-          {drugs.map((drug, i) => (
-            <motion.div
-              key={drug.name}
-              initial={{ opacity: 0, x: -10 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: i * 0.05 }}
-              data-ocid={`idea.item.${i + 1}`}
-            >
-              <Card className="overflow-hidden">
-                <CardContent className="py-4">
-                  <div className="flex items-start justify-between gap-3 mb-2">
-                    <div>
-                      <p className="font-semibold text-foreground">
-                        {drug.name}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {drug.generic}
-                      </p>
+          {allDrugs.map((drug, i) => {
+            const drugRoutes = (drug.routes ?? []).map((r) => r.toUpperCase());
+            const dosageFormAvailable = selectedRoutes.some((sr) =>
+              drugRoutes.includes(sr),
+            );
+            const routeLabels =
+              drugRoutes.length > 0
+                ? drugRoutes
+                    .slice(0, 3)
+                    .map((r) => r.charAt(0) + r.slice(1).toLowerCase())
+                : null;
+
+            return (
+              <motion.div
+                key={drug.name + String(i)}
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: Math.min(i, 5) * 0.05 }}
+                data-ocid={`idea.item.${i + 1}`}
+              >
+                <Card className="overflow-hidden">
+                  <CardContent className="py-4">
+                    <div className="flex items-start justify-between gap-3 mb-2 flex-wrap">
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-foreground">
+                          {drug.name}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {drug.generic}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                        {drug.detectedDrugType && (
+                          <Badge
+                            variant="secondary"
+                            className="text-[10px] shrink-0"
+                          >
+                            {drug.detectedDrugType}
+                          </Badge>
+                        )}
+                        <Badge variant="outline" className="shrink-0 text-xs">
+                          {drug.dose}
+                        </Badge>
+                      </div>
                     </div>
-                    <Badge variant="outline" className="shrink-0 text-xs">
-                      {drug.dose}
-                    </Badge>
-                  </div>
-                  <p className="text-xs text-muted-foreground mb-1">
-                    <span className="font-medium text-foreground">
-                      Manufacturer:
-                    </span>{" "}
-                    {drug.manufacturer}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    <span className="font-medium text-foreground">
-                      Mechanism:
-                    </span>{" "}
-                    {drug.mechanism}
-                  </p>
-                </CardContent>
-              </Card>
-            </motion.div>
-          ))}
+                    <p className="text-xs text-muted-foreground mb-2">
+                      <span className="font-medium text-foreground">
+                        Manufacturer:
+                      </span>{" "}
+                      {drug.manufacturer}
+                    </p>
+                    <p className="text-xs text-muted-foreground mb-2">
+                      <span className="font-medium text-foreground">
+                        Mechanism:
+                      </span>{" "}
+                      {drug.mechanism}
+                    </p>
+                    {/* Dosage form availability */}
+                    <div className="flex flex-wrap gap-1.5 mt-2">
+                      {dosageFormAvailable && (
+                        <span
+                          className="text-[10px] font-semibold px-2 py-0.5 rounded-full flex items-center gap-1"
+                          style={{
+                            background: "oklch(0.42 0.14 145 / 0.12)",
+                            color: "oklch(0.35 0.12 145)",
+                          }}
+                        >
+                          ✓ {dosageForm} dosage form is available
+                        </span>
+                      )}
+                      {routeLabels?.map((rl) => (
+                        <span
+                          key={rl}
+                          className="text-[10px] px-1.5 py-0.5 rounded-full"
+                          style={{
+                            background: "oklch(0.55 0.14 240 / 0.10)",
+                            color: "oklch(0.40 0.12 240)",
+                          }}
+                        >
+                          {rl}
+                        </span>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            );
+          })}
         </div>
       )}
 
@@ -539,24 +724,22 @@ function NovelCompositionsStep({
 }) {
   const key = `${disease}|${dosageForm}|${drugType}`;
   const [index, setIndex] = useState(0);
-  const [geminiComps, setGeminiComps] = useState<FormulationIdea[] | null>(
-    null,
-  );
-  const [isLoadingGemini, setIsLoadingGemini] = useState(false);
+  const [aiComps, setAiComps] = useState<FormulationIdea[] | null>(null);
+  const [isLoadingAi, setIsLoadingAi] = useState(false);
 
-  // Fetch Gemini ideas on mount / when key changes
+  // Fetch AI ideas on mount / when key changes
   // biome-ignore lint/correctness/useExhaustiveDependencies: key is a derived string
   useEffect(() => {
     setIndex(0);
-    setGeminiComps(null);
-    setIsLoadingGemini(true);
+    setAiComps(null);
+    setIsLoadingAi(true);
     getFormulationIdeas(disease, dosageForm, drugType)
       .then((ideas) => {
-        if (ideas && ideas.length > 0) setGeminiComps(ideas);
-        else setGeminiComps(null);
+        if (ideas && ideas.length > 0) setAiComps(ideas);
+        else setAiComps(null);
       })
-      .catch(() => setGeminiComps(null))
-      .finally(() => setIsLoadingGemini(false));
+      .catch(() => setAiComps(null))
+      .finally(() => setIsLoadingAi(false));
   }, [key]);
 
   // Fallback to static data
@@ -572,10 +755,10 @@ function NovelCompositionsStep({
       ? generateDynamicCompositions(disease, dosageForm, drugType)
       : [];
 
-  // Convert Gemini ideas to NovelComposition format for display
-  const geminiConverted: NovelComposition[] | null = geminiComps
-    ? geminiComps.map((idea, idx) => ({
-        id: `GEMINI-${String(idx + 1).padStart(3, "0")}`,
+  // Convert AI ideas to NovelComposition format for display
+  const aiConverted: NovelComposition[] | null = aiComps
+    ? aiComps.map((idea, idx) => ({
+        id: `AI-COMP-${Date.now()}-${String(idx + 1).padStart(3, "0")}`,
         name: idea.compositionName,
         ingredients: idea.ingredients.map((ing) => ({
           name: ing.name,
@@ -592,7 +775,7 @@ function NovelCompositionsStep({
           ? "24 months"
           : "18 months",
         storageCondition:
-          "Store at 25°C/60% RH, protect from light and moisture",
+          "Store at 25\u00b0C/60% RH, protect from light and moisture",
         drugInteractions: idea.drugInteractions,
         dosageForm: dosageForm,
         analyticalData: {
@@ -604,23 +787,35 @@ function NovelCompositionsStep({
     : null;
 
   const displayComps =
-    geminiConverted && geminiConverted.length > 0
-      ? geminiConverted
+    aiConverted && aiConverted.length > 0
+      ? aiConverted
       : directComps.length > 0
         ? directComps
         : fallbackComps.length > 0
           ? fallbackComps
           : dynamicComps;
 
-  const isGeminiSource = !!(geminiConverted && geminiConverted.length > 0);
+  const isAiSource = !!(aiConverted && aiConverted.length > 0);
   const isDynamic =
-    !isGeminiSource &&
+    !isAiSource &&
     dynamicComps.length > 0 &&
     directComps.length === 0 &&
     fallbackComps.length === 0;
 
   const total = displayComps.length;
   const comp = displayComps[index] ?? null;
+
+  // Build a stable claim ID using composition name hash (not index)
+  const getClaimId = (c: NovelComposition) => {
+    const nameHash = c.name
+      .toLowerCase()
+      .replace(/\s+/g, "-")
+      .replace(/[^a-z0-9-]/g, "")
+      .slice(0, 40);
+    return `${disease}-${dosageForm}-${drugType}-${nameHash}`
+      .toLowerCase()
+      .replace(/\s+/g, "-");
+  };
 
   return (
     <motion.div
@@ -650,17 +845,17 @@ function NovelCompositionsStep({
         )}
       </div>
 
-      {isLoadingGemini ? (
+      {isLoadingAi ? (
         <Card className="border-primary/20 bg-primary/5">
           <CardContent className="py-12 text-center">
             <div className="flex flex-col items-center gap-3">
               <div className="w-10 h-10 border-2 border-primary border-t-transparent rounded-full animate-spin" />
               <p className="font-medium text-foreground">
-                Generating novel formulations with AI…
+                Generating novel formulations with AyurNexis AI…
               </p>
               <p className="text-sm text-muted-foreground">
-                Gemini is analyzing {disease} treatment options for {dosageForm}{" "}
-                ({drugType})
+                Analyzing {disease} treatment options for {dosageForm} (
+                {drugType})
               </p>
             </div>
           </CardContent>
@@ -668,12 +863,12 @@ function NovelCompositionsStep({
       ) : !comp ? (
         <Card className="border-dashed">
           <CardContent className="py-12 text-center">
-            <FlaskConical className="w-10 h-10 mx-auto mb-3 text-muted-foreground opacity-40" />
+            <FlaskConical className="w-10 h-10 mx-auto mb-3 text-muted-foreground opacity-40 animate-pulse" />
             <p className="font-medium text-foreground mb-1">
-              No novel compositions found
+              Generating compositions…
             </p>
             <p className="text-sm text-muted-foreground">
-              Try a different dosage form or drug type combination.
+              Fetching novel formulations for {disease}
             </p>
           </CardContent>
         </Card>
@@ -695,21 +890,17 @@ function NovelCompositionsStep({
                       <Badge className="text-xs" variant="outline">
                         {comp.id}
                       </Badge>
-                      {isGeminiSource && (
+                      {isAiSource && (
                         <Badge className="text-xs bg-violet-100 text-violet-700 border-violet-200">
-                          ✦ Gemini AI — Real-time Generated
+                          ✦ AyurNexis AI — Real-time Generated
                         </Badge>
                       )}
-                      {isDynamic && !isGeminiSource && (
+                      {isDynamic && !isAiSource && (
                         <Badge className="text-xs bg-violet-100 text-violet-700 border-violet-200">
                           ✦ AI-Generated Composition
                         </Badge>
                       )}
-                      {isFormulationClaimed(
-                        `${disease}-${dosageForm}-${drugType}-${index}`
-                          .toLowerCase()
-                          .replace(/\s+/g, "-"),
-                      ) && (
+                      {comp && isFormulationClaimed(getClaimId(comp)) && (
                         <Badge
                           className="text-xs"
                           style={{
@@ -937,11 +1128,9 @@ function NovelCompositionsStep({
               <Button
                 className="flex-1 gap-2"
                 onClick={() => {
-                  const formulationId =
-                    `${disease}-${dosageForm}-${drugType}-${index}`
-                      .toLowerCase()
-                      .replace(/\s+/g, "-");
-                  const claimed = claimFormulation(formulationId, {
+                  if (!comp) return;
+                  const claimId = getClaimId(comp);
+                  const claimed = claimFormulation(claimId, {
                     disease,
                     dosageForm,
                     drugType,
@@ -1059,7 +1248,7 @@ export function GetFormulationIdea({ onAddToFormulationLab }: Props) {
 
         {/* Footer */}
         <p className="text-center text-xs text-muted-foreground mt-6">
-          © {new Date().getFullYear()}. Built with love using{" "}
+          \u00a9 {new Date().getFullYear()}. Built with love using{" "}
           <a
             href={`https://caffeine.ai?utm_source=caffeine-footer&utm_medium=referral&utm_content=${encodeURIComponent(window.location.hostname)}`}
             className="text-primary hover:underline"

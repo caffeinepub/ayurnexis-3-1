@@ -4,12 +4,14 @@ import {
   AlertTriangle,
   Beaker,
   CheckCircle2,
+  ExternalLink,
   Leaf,
   Package,
+  TrendingDown,
   TrendingUp,
   Zap,
 } from "lucide-react";
-import { motion } from "motion/react";
+import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Bar,
@@ -47,7 +49,313 @@ const TOOLTIP_STYLE = {
   fontSize: 12,
 };
 
-// ─── FDA News Ticker ──────────────────────────────────────────────────────────
+// ─── Live FDA Drug KPI Card ─────────────────────────────────────────────────────
+
+interface FdaDrugEntry {
+  name: string;
+  url: string;
+  date: string;
+  type: "approved" | "recalled";
+}
+
+function usePanelCycle(items: FdaDrugEntry[]) {
+  const [index, setIndex] = useState(0);
+  const [progress, setProgress] = useState(0);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const progressRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    if (items.length === 0) return;
+    setIndex(0);
+    setProgress(0);
+  }, [items]);
+
+  useEffect(() => {
+    if (items.length === 0) return;
+    if (intervalRef.current) clearInterval(intervalRef.current);
+    if (progressRef.current) clearInterval(progressRef.current);
+    let prog = 0;
+    progressRef.current = setInterval(() => {
+      prog += 2;
+      setProgress(prog > 100 ? 100 : prog);
+    }, 100);
+    intervalRef.current = setInterval(() => {
+      prog = 0;
+      setProgress(0);
+      setIndex((i) => (i + 1) % items.length);
+    }, 5000);
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+      if (progressRef.current) clearInterval(progressRef.current);
+    };
+  }, [items]);
+
+  return { index, setIndex, progress, setProgress };
+}
+
+function DrugPanel({
+  items,
+  type,
+}: {
+  items: FdaDrugEntry[];
+  type: "approved" | "recalled";
+}) {
+  const { index, setIndex, progress, setProgress } = usePanelCycle(items);
+  const isApproved = type === "approved";
+  const color = isApproved ? "oklch(0.42 0.14 145)" : "oklch(0.54 0.174 24)";
+  const colorDim = isApproved
+    ? "oklch(0.42 0.14 145 / 0.06)"
+    : "oklch(0.54 0.174 24 / 0.06)";
+  const colorBorder = isApproved
+    ? "oklch(0.42 0.14 145 / 0.25)"
+    : "oklch(0.54 0.174 24 / 0.25)";
+  const textColor = isApproved ? "oklch(0.35 0.12 145)" : "oklch(0.48 0.15 24)";
+
+  const current = items[index] ?? null;
+
+  return (
+    <div
+      className="rounded-xl p-3 border flex flex-col gap-2"
+      style={{ borderColor: colorBorder, background: colorDim }}
+    >
+      <div className="flex items-center gap-1.5 mb-1">
+        {isApproved ? (
+          <TrendingUp size={13} style={{ color }} />
+        ) : (
+          <TrendingDown size={13} style={{ color }} />
+        )}
+        <span className="text-xs font-bold" style={{ color }}>
+          {isApproved ? "Approved Drugs" : "Recalled / Delisted"}
+        </span>
+        {items.length > 0 && (
+          <span className="ml-auto text-[10px] text-muted-foreground font-mono">
+            {items.length > 0 ? index + 1 : 0}/{items.length}
+          </span>
+        )}
+      </div>
+
+      {items.length === 0 ? (
+        <div className="space-y-1.5 py-2">
+          <Skeleton className="h-3 w-3/4" />
+          <Skeleton className="h-2.5 w-1/2" />
+        </div>
+      ) : (
+        <>
+          <AnimatePresence mode="wait">
+            {current && (
+              <motion.div
+                key={`${current.name}-${index}`}
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                transition={{ duration: 0.3 }}
+              >
+                <div className="flex items-center gap-1.5 mb-1">
+                  <span
+                    className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
+                    style={{
+                      background: isApproved
+                        ? "oklch(0.42 0.14 145 / 0.15)"
+                        : "oklch(0.54 0.174 24 / 0.15)",
+                      color: textColor,
+                    }}
+                  >
+                    {isApproved ? "Approved" : "Recalled"}
+                  </span>
+                  <span className="ml-auto text-[10px] text-muted-foreground">
+                    {current.date}
+                  </span>
+                </div>
+                <a
+                  href={current.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs font-bold hover:underline flex items-center gap-1 group leading-tight"
+                  style={{ color: textColor }}
+                  data-ocid="dashboard.link"
+                >
+                  {current.name}
+                  <ExternalLink
+                    size={10}
+                    className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                  />
+                </a>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Dot indicators */}
+          <div className="flex gap-1 mt-1 flex-wrap">
+            {items.slice(0, 10).map((item, i) => (
+              <button
+                key={item.name + String(i)}
+                type="button"
+                onClick={() => {
+                  setIndex(i);
+                  setProgress(0);
+                }}
+                className="rounded-full transition-all duration-300"
+                style={{
+                  width: i === index ? "12px" : "5px",
+                  height: "5px",
+                  background: i === index ? color : "oklch(0.80 0 0)",
+                }}
+                data-ocid="dashboard.toggle"
+              />
+            ))}
+          </div>
+
+          {/* Progress bar */}
+          <div
+            className="w-full h-0.5 rounded-full overflow-hidden"
+            style={{ background: "oklch(0.92 0 0)" }}
+          >
+            <div
+              className="h-full rounded-full transition-all duration-100"
+              style={{ width: `${progress}%`, background: color }}
+            />
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function FdaLiveDrugKpi() {
+  const [approvedItems, setApprovedItems] = useState<FdaDrugEntry[]>([]);
+  const [recalledItems, setRecalledItems] = useState<FdaDrugEntry[]>([]);
+  const prevApprovedRef = useRef<Set<string>>(new Set());
+  const prevRecalledRef = useRef<Set<string>>(new Set());
+
+  async function fetchItems() {
+    try {
+      const [approvedRes, recalledRes] = await Promise.all([
+        fetch(
+          "https://api.fda.gov/drug/drugsfda.json?search=submissions.submission_status:AP&sort=submissions.submission_status_date:desc&limit=10",
+        ).catch(() => null),
+        fetch(
+          "https://api.fda.gov/drug/enforcement.json?search=status:Ongoing&sort=report_date:desc&limit=10",
+        ).catch(() => null),
+      ]);
+
+      if (approvedRes?.ok) {
+        const data = await approvedRes.json();
+        const list: FdaDrugEntry[] = [];
+        for (const r of data?.results ?? []) {
+          const name =
+            r.products?.[0]?.brand_name ||
+            r.openfda?.brand_name?.[0] ||
+            r.sponsor_name ||
+            "Unknown Drug";
+          const appNum = r.application_number || "";
+          const url = appNum
+            ? `https://www.accessdata.fda.gov/scripts/cder/daf/index.cfm?event=overview.process&ApplNo=${appNum.replace(/[^0-9]/g, "")}`
+            : "https://www.fda.gov/drugs/development-approval-process-drugs";
+          const rawDate =
+            r.submissions?.find((s: any) => s.submission_status === "AP")
+              ?.submission_status_date ||
+            r.submissions?.[0]?.submission_status_date ||
+            "";
+          const date = rawDate
+            ? `${rawDate.slice(0, 4)}-${rawDate.slice(4, 6)}-${rawDate.slice(6, 8)}`
+            : "Recent";
+          list.push({
+            name: name.length > 45 ? `${name.slice(0, 45)}…` : name,
+            url,
+            date,
+            type: "approved",
+          });
+        }
+        setApprovedItems((prev) => {
+          const prevNames = prevApprovedRef.current;
+          const newEntries = list.filter((e) => !prevNames.has(e.name));
+          if (newEntries.length === 0 && prev.length > 0) return prev;
+          const updated = [...newEntries, ...prev].slice(0, 10);
+          prevApprovedRef.current = new Set(updated.map((e) => e.name));
+          return updated;
+        });
+      }
+
+      if (recalledRes?.ok) {
+        const data = await recalledRes.json();
+        const list: FdaDrugEntry[] = [];
+        for (const r of data?.results ?? []) {
+          const name =
+            r.product_description || r.recalling_firm || "Unknown Product";
+          const reportId = r.recall_number || "";
+          const url = reportId
+            ? `https://www.accessdata.fda.gov/scripts/ires/index.cfm?action=Search.OccurrenceSearch&id=${reportId}`
+            : "https://www.fda.gov/safety/recalls-market-withdrawals-safety-alerts";
+          const rawDate = r.report_date || "";
+          const date = rawDate
+            ? `${rawDate.slice(0, 4)}-${rawDate.slice(4, 6)}-${rawDate.slice(6, 8)}`
+            : "Recent";
+          list.push({
+            name: name.length > 45 ? `${name.slice(0, 45)}…` : name,
+            url,
+            date,
+            type: "recalled",
+          });
+        }
+        setRecalledItems((prev) => {
+          const prevNames = prevRecalledRef.current;
+          const newEntries = list.filter((e) => !prevNames.has(e.name));
+          if (newEntries.length === 0 && prev.length > 0) return prev;
+          const updated = [...newEntries, ...prev].slice(0, 10);
+          prevRecalledRef.current = new Set(updated.map((e) => e.name));
+          return updated;
+        });
+      }
+    } catch {
+      // silently ignore
+    }
+  }
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: fetchItems is stable
+  useEffect(() => {
+    fetchItems();
+    const poll = setInterval(fetchItems, 60000);
+    return () => clearInterval(poll);
+  }, []);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5 }}
+      className="glass-card rounded-xl p-5 border"
+      style={{ borderColor: "oklch(0.42 0.14 145 / 0.3)" }}
+      data-ocid="dashboard.card"
+    >
+      <div className="flex items-center gap-3 mb-4">
+        <div
+          className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold"
+          style={{
+            background: "oklch(0.42 0.14 145 / 0.12)",
+            color: "oklch(0.42 0.14 145)",
+            border: "1px solid oklch(0.42 0.14 145 / 0.3)",
+          }}
+        >
+          <span
+            className="w-1.5 h-1.5 rounded-full animate-pulse"
+            style={{ background: "oklch(0.42 0.14 145)" }}
+          />
+          LIVE
+        </div>
+        <h2 className="text-sm font-semibold text-foreground">
+          FDA Drug Status Updates
+        </h2>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <DrugPanel items={approvedItems} type="approved" />
+        <DrugPanel items={recalledItems} type="recalled" />
+      </div>
+    </motion.div>
+  );
+}
+
+// ─── FDA News Ticker ────────────────────────────────────────────────────────────────
 
 const FALLBACK_HEADLINES = [
   "FDA approves new treatment for metastatic non-small cell lung cancer | Safety Update",
@@ -87,7 +395,7 @@ function FdaNewsTicker() {
               r?.patient?.reaction?.[0]?.reactionmeddrapt || "Adverse Event";
             const date = r?.receiptdate?.slice(0, 4) || "";
             items.push(
-              `Safety Report: ${drug} — ${reaction} ${date ? `(${date})` : ""}`,
+              `Safety Report: ${drug} \u2014 ${reaction} ${date ? `(${date})` : ""}`,
             );
           }
         }
@@ -101,7 +409,7 @@ function FdaNewsTicker() {
               "Drug";
             const time = r?.effective_time?.slice(0, 4) || "";
             items.push(
-              `Label Update: ${name} — Prescribing information updated${time ? ` (${time})` : ""}`,
+              `Label Update: ${name} \u2014 Prescribing information updated${time ? ` (${time})` : ""}`,
             );
           }
         }
@@ -290,7 +598,6 @@ export function Dashboard() {
         batch: t.batchId,
       }));
     }
-    // Fallback trend from seed batches
     return SEED_BATCHES.slice(0, 12).map((b, i) => ({
       name: `B${i + 1}`,
       score:
@@ -318,7 +625,6 @@ export function Dashboard() {
         batches: Number(s.totalBatches),
       }));
     }
-    // Fallback: compute from seed batches by supplier
     const map: Record<
       string,
       { pass: number; total: number; scores: number[] }
@@ -351,6 +657,9 @@ export function Dashboard() {
 
   return (
     <div className="space-y-6 p-6">
+      {/* ─── TOP KPI: Live FDA Drug Status ─── */}
+      <FdaLiveDrugKpi />
+
       {/* FDA News Ticker */}
       <FdaNewsTicker />
 

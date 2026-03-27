@@ -14,6 +14,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Activity,
+  Award,
   Beaker,
   ClipboardList,
   Download,
@@ -22,6 +23,7 @@ import {
   Inbox,
   Microscope,
   Search,
+  Tag,
   TrendingUp,
 } from "lucide-react";
 import { motion } from "motion/react";
@@ -40,6 +42,16 @@ interface SavedFormulation {
   createdAt: string;
   ingredientCount: number;
   ownerName: string;
+  institution?: string;
+  designation?: string;
+  stabilityScore?: number;
+  shelfLife?: number;
+  ingredients?: {
+    name: string;
+    qty: number;
+    unit: string;
+    category?: string;
+  }[];
 }
 
 function StatusBadge({ status }: { status: string }) {
@@ -109,6 +121,404 @@ function downloadCSV(filename: string, rows: string[][], headers: string[]) {
   a.download = filename;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+async function generateHistoryCertPDF(
+  f: SavedFormulation,
+  idx: number,
+): Promise<void> {
+  const _jsPDFMod = await (Function(
+    'return import("https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js")',
+  )() as Promise<any>);
+  const jsPDF = _jsPDFMod.default ?? _jsPDFMod.jsPDF;
+  const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+  const pageW = doc.internal.pageSize.getWidth();
+
+  doc.setFillColor(255, 255, 255);
+  doc.rect(0, 0, pageW, 297, "F");
+  for (let i = -297; i < pageW + 297; i += 8) {
+    doc.setDrawColor(235, 245, 235);
+    doc.setLineWidth(0.3);
+    doc.line(i, 0, i + 297, 297);
+  }
+  doc.setDrawColor(180, 130, 30);
+  doc.setLineWidth(3);
+  doc.rect(6, 6, pageW - 12, 285, "S");
+  doc.setDrawColor(20, 83, 45);
+  doc.setLineWidth(1);
+  doc.rect(12, 12, pageW - 24, 273, "S");
+  for (const [cx, cy] of [
+    [12, 12],
+    [pageW - 12, 12],
+    [12, 285],
+    [pageW - 12, 285],
+  ] as [number, number][]) {
+    doc.setFontSize(11);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(180, 130, 30);
+    doc.text("◆", cx, cy + 1, { align: "center" });
+  }
+  doc.setFillColor(20, 83, 45);
+  doc.rect(12, 12, pageW - 24, 32, "F");
+  doc.setFontSize(13);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(255, 255, 255);
+  doc.text("AyurNexis 3.1", 22, 26);
+  doc.setFontSize(7);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(167, 243, 208);
+  doc.text("AI-Enabled Ayurvedic QA Platform", 22, 33);
+  doc.setFontSize(7);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(255, 220, 100);
+  doc.text("ISO 9001:2015 | IP 2022", pageW - 22, 26, { align: "right" });
+  doc.setFontSize(6);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(167, 243, 208);
+  doc.text("Pharmacopeia Compliant", pageW - 22, 33, { align: "right" });
+
+  doc.setFontSize(15);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(20, 83, 45);
+  doc.text("CERTIFICATE OF FORMULATION EXCELLENCE", pageW / 2, 58, {
+    align: "center",
+  });
+  doc.setDrawColor(180, 130, 30);
+  doc.setLineWidth(0.7);
+  doc.line(25, 63, pageW - 25, 63);
+  doc.setFontSize(9);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(80, 80, 80);
+  doc.text("THIS IS TO CERTIFY THAT", pageW / 2, 72, { align: "center" });
+  doc.setFontSize(17);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(20, 83, 45);
+  doc.text((f.ownerName || "Formulator").toUpperCase(), pageW / 2, 83, {
+    align: "center",
+  });
+  if (f.designation) {
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "italic");
+    doc.setTextColor(80, 80, 80);
+    doc.text(f.designation, pageW / 2, 91, { align: "center" });
+  }
+  if (f.institution) {
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(100, 100, 100);
+    doc.text(f.institution, pageW / 2, 99, { align: "center" });
+  }
+  doc.setFontSize(9);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(80, 80, 80);
+  doc.text(
+    "has successfully developed, validated, and documented the following pharmaceutical",
+    pageW / 2,
+    110,
+    { align: "center" },
+  );
+  doc.text(
+    "formulation using AyurNexis 3.1 AI-Enabled Ayurvedic Quality Assurance Platform.",
+    pageW / 2,
+    117,
+    { align: "center" },
+  );
+
+  doc.setFillColor(240, 253, 244);
+  doc.setDrawColor(20, 83, 45);
+  doc.setLineWidth(0.5);
+  doc.rect(22, 123, pageW - 44, 32, "FD");
+  doc.setFontSize(13);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(20, 83, 45);
+  doc.text(
+    (f.name || `${f.dosageForm} Formulation`).toUpperCase(),
+    pageW / 2,
+    135,
+    { align: "center" },
+  );
+  doc.setFontSize(9);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(80, 80, 80);
+  const dateStr = f.createdAt
+    ? new Date(f.createdAt).toLocaleDateString("en-IN", {
+        day: "2-digit",
+        month: "long",
+        year: "numeric",
+      })
+    : new Date().toLocaleDateString("en-IN", {
+        day: "2-digit",
+        month: "long",
+        year: "numeric",
+      });
+  doc.text(
+    `${f.dosageForm}  ·  ${f.method}  ·  ${f.ingredientCount ?? f.ingredients?.length ?? 0} Ingredients  ·  ${dateStr}`,
+    pageW / 2,
+    145,
+    { align: "center" },
+  );
+
+  const ings = f.ingredients ?? [];
+  if (ings.length > 0) {
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(20, 83, 45);
+    doc.text("Composition", 22, 165);
+    doc.setFillColor(20, 83, 45);
+    doc.rect(22, 167, pageW - 44, 7, "F");
+    doc.setFontSize(7.5);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(255, 255, 255);
+    doc.text("Ingredient", 25, 172.5);
+    doc.text("Qty", 125, 172.5, { align: "right" });
+    doc.text("Unit", 145, 172.5, { align: "right" });
+    const maxRows = Math.min(ings.length, 8);
+    for (let i = 0; i < maxRows; i++) {
+      const row = ings[i];
+      const ry = 174 + i * 7;
+      if (i % 2 === 0) {
+        doc.setFillColor(248, 252, 248);
+        doc.rect(22, ry, pageW - 44, 7, "F");
+      }
+      doc.setFontSize(7.5);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(40, 40, 40);
+      doc.text(
+        row.name.length > 55 ? `${row.name.slice(0, 55)}…` : row.name,
+        25,
+        ry + 5,
+      );
+      doc.text(String(row.qty), 125, ry + 5, { align: "right" });
+      doc.text(row.unit, 145, ry + 5, { align: "right" });
+    }
+  }
+
+  const stabScore = f.stabilityScore ?? 75;
+  const shelfLife = f.shelfLife ?? 24;
+  const overallScore = stabScore;
+  const approved = overallScore >= 70;
+
+  const metricsY =
+    ings.length > 0 ? 174 + Math.min(ings.length, 8) * 7 + 8 : 170;
+  doc.setFillColor(248, 252, 248);
+  doc.setDrawColor(20, 83, 45);
+  doc.setLineWidth(0.3);
+  doc.rect(22, metricsY, (pageW - 48) / 2, 22, "FD");
+  doc.rect(22 + (pageW - 48) / 2 + 4, metricsY, (pageW - 48) / 2, 22, "FD");
+  const col1x = 22 + (pageW - 48) / 4;
+  const col2x = 22 + ((pageW - 48) * 3) / 4 + 4;
+  doc.setFontSize(7);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(80, 80, 80);
+  doc.text("Stability Score", col1x, metricsY + 7, { align: "center" });
+  doc.text(`${stabScore}/100`, col1x, metricsY + 14, { align: "center" });
+  doc.setFontSize(6.5);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(100, 100, 100);
+  doc.text(`Shelf Life: ${shelfLife} months`, col1x, metricsY + 19, {
+    align: "center",
+  });
+  doc.setFontSize(7);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(80, 80, 80);
+  doc.text("Overall Score", col2x, metricsY + 7, { align: "center" });
+  doc.text(`${overallScore}/100`, col2x, metricsY + 14, { align: "center" });
+  doc.setFontSize(6.5);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(100, 100, 100);
+  doc.text(
+    approved ? "Pharmacopeia Compliant" : "Below Threshold",
+    col2x,
+    metricsY + 19,
+    { align: "center" },
+  );
+
+  const bannerY = metricsY + 27;
+  doc.setFillColor(approved ? 20 : 180, approved ? 83 : 30, approved ? 45 : 30);
+  doc.rect(22, bannerY, pageW - 44, 13, "F");
+  doc.setFontSize(10);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(255, 255, 255);
+  doc.text(
+    approved
+      ? "✓  APPROVED FOR PLATFORM RELEASE"
+      : "✗  NOT APPROVED — QUALITY SCORE BELOW THRESHOLD",
+    pageW / 2,
+    bannerY + 9,
+    { align: "center" },
+  );
+
+  const sigY = bannerY + 22;
+  const sigCols = [pageW * 0.2, pageW / 2, pageW * 0.8];
+  const sigLabels = ["Formulator", "QA Head", "Platform Authority"];
+  doc.setDrawColor(150, 150, 150);
+  doc.setLineWidth(0.3);
+  for (let s = 0; s < 3; s++) {
+    doc.line(sigCols[s] - 22, sigY, sigCols[s] + 22, sigY);
+    doc.setFontSize(7.5);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(100, 100, 100);
+    doc.text(sigLabels[s], sigCols[s], sigY + 6, { align: "center" });
+    if (s === 0 && f.ownerName)
+      doc.text(f.ownerName, sigCols[s], sigY + 11, { align: "center" });
+  }
+
+  const certNum = f.id || `AYN-CERT-${idx + 1}`;
+  doc.setFillColor(20, 83, 45);
+  doc.rect(12, 276, pageW - 24, 9, "F");
+  doc.setFontSize(6.5);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(167, 243, 208);
+  doc.text(`Certificate No.: ${certNum}`, 20, 281.5);
+  doc.text(`Issue Date: ${dateStr}`, pageW / 2, 281.5, { align: "center" });
+  doc.text("AyurNexis 3.1 | ayurnexis.platform", pageW - 20, 281.5, {
+    align: "right",
+  });
+
+  doc.save(`${f.name || f.dosageForm || "formulation"}_certificate.pdf`);
+}
+
+async function generateHistoryLabelPDF(f: SavedFormulation): Promise<void> {
+  const _jsPDFMod = await (Function(
+    'return import("https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js")',
+  )() as Promise<any>);
+  const jsPDF = _jsPDFMod.default ?? _jsPDFMod.jsPDF;
+  const doc = new jsPDF({
+    orientation: "landscape",
+    unit: "mm",
+    format: [148, 105],
+  });
+  const W = 148;
+  const H = 105;
+
+  doc.setFillColor(255, 255, 255);
+  doc.rect(0, 0, W, H, "F");
+  doc.setDrawColor(20, 83, 45);
+  doc.setLineWidth(1.5);
+  doc.rect(4, 4, W - 8, H - 8, "S");
+  doc.setLineWidth(0.4);
+  doc.rect(7, 7, W - 14, H - 14, "S");
+  doc.setFillColor(20, 83, 45);
+  doc.rect(7, 7, W - 14, 20, "F");
+  const prodName = (f.name || `${f.dosageForm} Formulation`).toUpperCase();
+  doc.setFontSize(14);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(255, 255, 255);
+  doc.text(
+    prodName.length > 35 ? `${prodName.slice(0, 35)}…` : prodName,
+    W / 2,
+    16,
+    { align: "center" },
+  );
+  doc.setFontSize(7);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(167, 243, 208);
+  doc.text("Manufactured by AyurNexis Formulation Lab", W / 2, 22, {
+    align: "center",
+  });
+
+  doc.setFillColor(255, 220, 100);
+  doc.rect(10, 30, 35, 7, "F");
+  doc.setFontSize(7.5);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(80, 40, 0);
+  doc.text((f.dosageForm || "").toUpperCase(), 27.5, 35.5, { align: "center" });
+
+  const ings = f.ingredients ?? [];
+  if (ings.length > 0) {
+    doc.setFontSize(8);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(20, 83, 45);
+    doc.text("Composition:", 10, 44);
+    doc.setFillColor(20, 83, 45);
+    doc.rect(10, 45, W - 20, 5.5, "F");
+    doc.setFontSize(6.5);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(255, 255, 255);
+    doc.text("Ingredient", 12, 49);
+    doc.text("Qty", 100, 49, { align: "right" });
+    doc.text("Unit", 118, 49, { align: "right" });
+    const maxRows = Math.min(ings.length, 6);
+    for (let i = 0; i < maxRows; i++) {
+      const row = ings[i];
+      const ry = 50.5 + i * 6;
+      if (i % 2 === 0) {
+        doc.setFillColor(245, 252, 245);
+        doc.rect(10, ry, W - 20, 6, "F");
+      }
+      doc.setFontSize(6.5);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(30, 30, 30);
+      doc.text(
+        row.name.length > 52 ? `${row.name.slice(0, 52)}…` : row.name,
+        12,
+        ry + 4.2,
+      );
+      doc.text(String(row.qty), 100, ry + 4.2, { align: "right" });
+      doc.text(row.unit, 118, ry + 4.2, { align: "right" });
+    }
+  }
+
+  const stabScore = f.stabilityScore ?? 75;
+  const overallScore = stabScore;
+  const approved = overallScore >= 70;
+  const dateStr = f.createdAt
+    ? new Date(f.createdAt).toLocaleDateString("en-IN", {
+        day: "2-digit",
+        month: "long",
+        year: "numeric",
+      })
+    : new Date().toLocaleDateString("en-IN", {
+        day: "2-digit",
+        month: "long",
+        year: "numeric",
+      });
+  const bottomY =
+    ings.length > 0 ? 50.5 + Math.min(ings.length, 6) * 6 + 5 : 44;
+
+  doc.setFontSize(6.5);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(40, 40, 40);
+  doc.text(
+    "Storage: Store at 25°C ± 2°C / 60% RH. Keep in cool dry place, away from light.",
+    10,
+    bottomY,
+  );
+  doc.text(
+    `Formulator: ${f.ownerName || "—"}${f.institution ? `  |  ${f.institution}` : ""}`,
+    10,
+    bottomY + 5,
+  );
+  doc.text(`Date: ${dateStr}`, 10, bottomY + 10);
+
+  const approvalY = H - 20;
+  doc.setFillColor(approved ? 20 : 180, approved ? 83 : 30, approved ? 45 : 30);
+  doc.rect(7, approvalY, W - 14, 9, "F");
+  doc.setFontSize(8);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(255, 255, 255);
+  doc.text(
+    approved
+      ? "✓ APPROVED FOR PLATFORM RELEASE"
+      : "✗ NOT APPROVED FOR MARKET RELEASE",
+    W / 2,
+    approvalY + 6,
+    { align: "center" },
+  );
+
+  doc.setFillColor(240, 253, 244);
+  doc.rect(7, H - 11, W - 14, 4, "F");
+  doc.setFontSize(5.5);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(80, 120, 80);
+  doc.text(
+    `Score: ${overallScore}/100  |  AyurNexis 3.1 — AI-Enabled Ayurvedic QA Platform`,
+    W / 2,
+    H - 8,
+    { align: "center" },
+  );
+
+  doc.save(`${f.name || f.dosageForm || "formulation"}_label.pdf`);
 }
 
 export function HistoryPage() {
@@ -705,6 +1115,9 @@ function FormulationTable({
   formulations: SavedFormulation[];
   formatDate: (d: any) => string;
 }) {
+  const [certLoading, setCertLoading] = useState<string | null>(null);
+  const [labelLoading, setLabelLoading] = useState<string | null>(null);
+
   if (formulations.length === 0)
     return <EmptyState label="No formulation sessions saved yet" />;
   return (
@@ -717,6 +1130,8 @@ function FormulationTable({
           <TableHead className="text-xs">Method</TableHead>
           <TableHead className="text-xs">Ingredients</TableHead>
           <TableHead className="text-xs">Owner</TableHead>
+          <TableHead className="text-xs">Certificate</TableHead>
+          <TableHead className="text-xs">Label</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -740,10 +1155,58 @@ function FormulationTable({
               {f.method}
             </TableCell>
             <TableCell className="text-xs text-center">
-              {f.ingredientCount ?? "—"}
+              {f.ingredientCount ?? f.ingredients?.length ?? "—"}
             </TableCell>
             <TableCell className="text-xs text-muted-foreground">
               {f.ownerName || "—"}
+            </TableCell>
+            <TableCell>
+              <button
+                type="button"
+                title="Download Certificate"
+                data-ocid={`history.formulation.certificate.${idx + 1}`}
+                disabled={certLoading === (f.id ?? String(idx))}
+                className="p-1.5 rounded hover:bg-emerald-50 text-emerald-700 disabled:opacity-50 transition-colors"
+                onClick={async () => {
+                  const key = f.id ?? String(idx);
+                  setCertLoading(key);
+                  try {
+                    await generateHistoryCertPDF(f, idx);
+                  } finally {
+                    setCertLoading(null);
+                  }
+                }}
+              >
+                {certLoading === (f.id ?? String(idx)) ? (
+                  <div className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <Award size={14} />
+                )}
+              </button>
+            </TableCell>
+            <TableCell>
+              <button
+                type="button"
+                title="Download Label"
+                data-ocid={`history.formulation.label.${idx + 1}`}
+                disabled={labelLoading === (f.id ?? String(idx))}
+                className="p-1.5 rounded hover:bg-blue-50 text-blue-700 disabled:opacity-50 transition-colors"
+                onClick={async () => {
+                  const key = f.id ?? String(idx);
+                  setLabelLoading(key);
+                  try {
+                    await generateHistoryLabelPDF(f);
+                  } finally {
+                    setLabelLoading(null);
+                  }
+                }}
+              >
+                {labelLoading === (f.id ?? String(idx)) ? (
+                  <div className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <Tag size={14} />
+                )}
+              </button>
             </TableCell>
           </TableRow>
         ))}

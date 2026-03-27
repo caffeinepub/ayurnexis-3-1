@@ -1,41 +1,31 @@
 # AyurNexis 3.1
 
 ## Current State
-- Get Formulation Idea page uses OpenFDA API for disease search; novel compositions are preloaded static suggestions
-- Formulation Lab predictive data (compatibility matrix, stability, HPLC/UV/FTIR/DSC/dissolution) is algorithmic/static
-- Dashboard has 6 KPI cards with no live news feed
+- FormulationLab has a Download PDF button that includes certificate in the PDF, but a standalone certificate download is broken
+- No label download button in FormulationLab
+- HistoryPage formulation table shows records but no certificate/label re-download
+- Dashboard FdaLiveDrugKpi shows 1 item at a time cycling through 10, needs 2 side-by-side
+- GetFormulationIdea MarketedDrugsStep only shows drugs for selected drugType, not all drugs for the disease, and doesn't show available dosage forms
 
 ## Requested Changes (Diff)
 
 ### Add
-- **Gemini API service** (`src/frontend/src/services/geminiService.ts`): reusable module that calls `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent` with the API key `AIzaSyCkAAD9UcBo5KH1edlmz4vs61rAPJpRHQU`. Returns structured JSON parsed from Gemini's response.
-- **FDA News Ticker** on Dashboard: a horizontally scrolling news ticker strip at the very top of the Dashboard (above KPI cards). Fetches FDA news from `https://www.fda.gov/news-events/rss-feeds` (or use OpenFDA API endpoint for recent drug events), parses headlines + links, auto-scrolls left continuously. Each headline is clickable and opens the FDA source URL in a new tab. Shows "FDA LIVE" badge. Falls back to preloaded headlines if fetch fails.
+- FormulationLab: standalone "Download Certificate" button and separate "Download Label" button (in addition to existing PDF report button)
+- FormulationLab: drug label generation logic (similar to certificate) included in export
+- HistoryPage: for formulation records, add two icon buttons per row: Download Certificate and Download Label (regenerates them from saved formulation data)
+- Dashboard FdaLiveDrugKpi: show 2 items side by side (approved on left, recalled/delisted on right), each cycling through their respective last 10 updates every 5 seconds
+- GetFormulationIdea MarketedDrugsStep: fetch ALL drugs for the disease regardless of drugType, show available dosage forms as badges on each drug card with text "This dosage form is available" when the selected dosageForm matches
 
 ### Modify
-- **Get Formulation Idea page** (`GetFormulationIdea.tsx`):
-  - Disease search: send user's typed query to Gemini API asking it to return a list of matching diseases/conditions as JSON. Replace current OpenFDA autocomplete with Gemini-powered search (any disease, rare or common).
-  - Novel formulations: after selecting disease + dosage form + drug type, call Gemini API to generate up to 10 novel formulation compositions. Prompt must request structured JSON with: compositionName, ingredients (name, quantity, role, pharmacologicalEffect), advantages[], disadvantages[], stabilityPrediction, mechanismOfAction, drugInteractions[], clinicalRationale. Show a loading spinner while Gemini responds. Display results in the existing composition card UI.
-  
-- **Formulation Lab** (`FormulationLab.tsx`):
-  - After ingredients are added (Step 2+), call Gemini API to generate:
-    1. Compatibility matrix data: for each ingredient pair, return compatible/incompatible/conditional + reason
-    2. Stability assessment: physical stability, chemical stability, predicted shelf life, ICH Q1A classification
-    3. Advantages & disadvantages of the full composition
-    4. Inter-ingredient reactions (specific chemical/pharmacological interactions)
-    5. Full Composition Analytics: predicted HPLC peaks (retention time, peak area, constituent), UV λmax, FTIR functional groups + wavenumbers, DSC thermal events, dissolution profile (% at 15/30/45/60/90 min)
-  - Replace existing static/algorithmic predictive data with Gemini-generated real data
-  - Show a loading state while Gemini processes
-  - Cache the Gemini response per ingredient set (memoize by sorted ingredient names) to avoid redundant API calls
+- Certificate format: make it more advanced — add watermark/seal graphic element, formulation composition table inside certificate, pharmacopeia compliance badge, QR-like pattern, color-coded approval status section (green=approved, red=not approved), professional multi-section layout
+- MarketedDrugsStep: expand OpenFDA fetch to get more results (limit=15), filter/show all regardless of drug type, add dosage form availability tags
 
 ### Remove
-- Static/algorithmic compatibility pair lookup table (replaced by Gemini)
-- Static stability score calculation (replaced by Gemini)
+- Nothing removed
 
 ## Implementation Plan
-1. Create `src/frontend/src/services/geminiService.ts` with typed helper functions:
-   - `searchDiseases(query: string): Promise<string[]>`
-   - `getFormulationIdeas(disease: string, dosageForm: string, drugType: string): Promise<FormulationIdea[]>`
-   - `analyzeFormulation(ingredients: Ingredient[]): Promise<FormulationAnalysis>`
-2. Update `GetFormulationIdea.tsx` to use `searchDiseases()` for autocomplete and `getFormulationIdeas()` for composition suggestions
-3. Update `FormulationLab.tsx` to call `analyzeFormulation()` when ingredients change (debounced, 1s), replacing static analysis with Gemini results
-4. Add FDA news ticker component to `Dashboard.tsx` at the top, fetch from FDA API (CORS-friendly endpoint), auto-scroll CSS animation
+1. **Certificate + Label PDF functions**: Extract `generateCertificatePDF(formulation)` and `generateLabelPDF(formulation)` as standalone async functions that use jsPDF, callable from both FormulationLab steps and HistoryPage
+2. **FormulationLab step 7 (certificate preview)**: Add "Download Certificate" and "Download Label" buttons alongside existing PDF button
+3. **HistoryPage FormulationTable**: Add Certificate and Label download icon buttons per row; store enough data in SavedFormulation to regenerate (ownerName, institution, designation, formulationName, dosageForm, method, ingredients, stabilityScore, approved status)
+4. **Dashboard FdaLiveDrugKpi**: Split display into 2 columns — left shows approved drugs cycling, right shows recalled drugs cycling. Each side independently advances every 5 seconds through its own 10-item list
+5. **GetFormulationIdea MarketedDrugsStep**: Remove drugType filter from fetch, fetch all drugs for disease, show dosage form availability badge when drug's route matches selected dosageForm

@@ -23,6 +23,7 @@ import { Textarea } from "@/components/ui/textarea";
 // jspdf loaded dynamically in handleExport
 import {
   AlertTriangle,
+  Award,
   Beaker,
   BookOpen,
   CheckCircle,
@@ -38,6 +39,7 @@ import {
   Plus,
   Shield,
   Syringe,
+  Tag,
   TestTube,
   Thermometer,
   Trash2,
@@ -2165,6 +2167,451 @@ function PredictedAnalyticalData({
   );
 }
 
+// ─── Standalone Certificate PDF Generator ────────────────────────────────────
+async function generateCertificatePDF(data: {
+  formulationName: string;
+  dosageForm: string;
+  method: string;
+  ownerName: string;
+  institution: string;
+  designation: string;
+  ingredients: { name: string; qty: number; unit: string }[];
+  stabilityScore: number;
+  shelfLifeMonths: number;
+  overallScore: number;
+  approved: boolean;
+  certNum: string;
+  date: string;
+}): Promise<void> {
+  const _jsPDFMod = await (Function(
+    'return import("https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js")',
+  )() as Promise<any>);
+  const jsPDF = _jsPDFMod.default ?? _jsPDFMod.jsPDF;
+  const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+  const pageW = doc.internal.pageSize.getWidth();
+
+  // Background white with diagonal pattern
+  doc.setFillColor(255, 255, 255);
+  doc.rect(0, 0, pageW, 297, "F");
+  // Diagonal lines pattern
+  doc.setDrawColor(235, 245, 235);
+  doc.setLineWidth(0.3);
+  for (let i = -297; i < pageW + 297; i += 8) {
+    doc.line(i, 0, i + 297, 297);
+  }
+
+  // Outer gold border (3px)
+  doc.setDrawColor(180, 130, 30);
+  doc.setLineWidth(3);
+  doc.rect(6, 6, pageW - 12, 285, "S");
+  // Inner green border (1px)
+  doc.setDrawColor(20, 83, 45);
+  doc.setLineWidth(1);
+  doc.rect(12, 12, pageW - 24, 273, "S");
+
+  // Corner diamond ornaments
+  for (const [cx, cy] of [
+    [12, 12],
+    [pageW - 12, 12],
+    [12, 285],
+    [pageW - 12, 285],
+  ] as [number, number][]) {
+    doc.setFontSize(11);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(180, 130, 30);
+    doc.text("◆", cx, cy + 1, { align: "center" });
+  }
+
+  // Full-width dark green header band
+  doc.setFillColor(20, 83, 45);
+  doc.rect(12, 12, pageW - 24, 32, "F");
+  // Logo left
+  doc.setFontSize(13);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(255, 255, 255);
+  doc.text("AyurNexis 3.1", 22, 26);
+  doc.setFontSize(7);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(167, 243, 208);
+  doc.text("AI-Enabled Ayurvedic QA Platform", 22, 33);
+  // ISO badge right
+  doc.setFontSize(7);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(255, 220, 100);
+  doc.text("ISO 9001:2015 | IP 2022", pageW - 22, 26, { align: "right" });
+  doc.setFontSize(6);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(167, 243, 208);
+  doc.text("Pharmacopeia Compliant", pageW - 22, 33, { align: "right" });
+
+  // Title
+  doc.setFontSize(15);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(20, 83, 45);
+  doc.text("CERTIFICATE OF FORMULATION EXCELLENCE", pageW / 2, 58, {
+    align: "center",
+  });
+
+  // Gold divider
+  doc.setDrawColor(180, 130, 30);
+  doc.setLineWidth(0.7);
+  doc.line(25, 63, pageW - 25, 63);
+
+  // Certification body text
+  doc.setFontSize(9);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(80, 80, 80);
+  doc.text("THIS IS TO CERTIFY THAT", pageW / 2, 72, { align: "center" });
+
+  doc.setFontSize(17);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(20, 83, 45);
+  doc.text(data.ownerName.toUpperCase(), pageW / 2, 83, { align: "center" });
+
+  if (data.designation) {
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "italic");
+    doc.setTextColor(80, 80, 80);
+    doc.text(data.designation, pageW / 2, 91, { align: "center" });
+  }
+  if (data.institution) {
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(100, 100, 100);
+    doc.text(data.institution, pageW / 2, 99, { align: "center" });
+  }
+
+  doc.setFontSize(9);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(80, 80, 80);
+  doc.text(
+    "has successfully developed, validated, and documented the following pharmaceutical",
+    pageW / 2,
+    110,
+    { align: "center" },
+  );
+  doc.text(
+    "formulation using AyurNexis 3.1 AI-Enabled Ayurvedic Quality Assurance Platform.",
+    pageW / 2,
+    117,
+    { align: "center" },
+  );
+
+  // Formulation details box with green background
+  doc.setFillColor(240, 253, 244);
+  doc.setDrawColor(20, 83, 45);
+  doc.setLineWidth(0.5);
+  doc.rect(22, 123, pageW - 44, 32, "FD");
+  doc.setFontSize(13);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(20, 83, 45);
+  doc.text(
+    (data.formulationName || `${data.dosageForm} Formulation`).toUpperCase(),
+    pageW / 2,
+    135,
+    { align: "center" },
+  );
+  doc.setFontSize(9);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(80, 80, 80);
+  doc.text(
+    `${data.dosageForm}  ·  ${data.method}  ·  ${data.ingredients.length} Ingredients  ·  ${data.date}`,
+    pageW / 2,
+    145,
+    { align: "center" },
+  );
+
+  // Composition table
+  doc.setFontSize(9);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(20, 83, 45);
+  doc.text("Composition", 22, 165);
+  doc.setDrawColor(20, 83, 45);
+  doc.setLineWidth(0.3);
+  // Table header
+  doc.setFillColor(20, 83, 45);
+  doc.rect(22, 167, pageW - 44, 7, "F");
+  doc.setFontSize(7.5);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(255, 255, 255);
+  doc.text("Ingredient", 25, 172.5);
+  doc.text("Qty", 125, 172.5, { align: "right" });
+  doc.text("Unit", 145, 172.5, { align: "right" });
+  // Table rows
+  const maxRows = Math.min(data.ingredients.length, 8);
+  for (let i = 0; i < maxRows; i++) {
+    const row = data.ingredients[i];
+    const ry = 174 + i * 7;
+    if (i % 2 === 0) {
+      doc.setFillColor(248, 252, 248);
+      doc.rect(22, ry, pageW - 44, 7, "F");
+    }
+    doc.setFontSize(7.5);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(40, 40, 40);
+    const nm = row.name.length > 55 ? `${row.name.slice(0, 55)}…` : row.name;
+    doc.text(nm, 25, ry + 5);
+    doc.text(String(row.qty), 125, ry + 5, { align: "right" });
+    doc.text(row.unit, 145, ry + 5, { align: "right" });
+  }
+  if (data.ingredients.length > 8) {
+    doc.setFontSize(7);
+    doc.setTextColor(100, 100, 100);
+    doc.text(
+      `+${data.ingredients.length - 8} more ingredients`,
+      25,
+      174 + 8 * 7 + 4,
+    );
+  }
+
+  // Quality metrics - two column
+  const metricsY = 174 + maxRows * 7 + (data.ingredients.length > 8 ? 12 : 8);
+  doc.setFillColor(248, 252, 248);
+  doc.setDrawColor(20, 83, 45);
+  doc.setLineWidth(0.3);
+  doc.rect(22, metricsY, (pageW - 48) / 2, 22, "FD");
+  doc.rect(22 + (pageW - 48) / 2 + 4, metricsY, (pageW - 48) / 2, 22, "FD");
+  doc.setFontSize(7);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(80, 80, 80);
+  const col1x = 22 + (pageW - 48) / 4;
+  const col2x = 22 + ((pageW - 48) * 3) / 4 + 4;
+  doc.text("Stability Score", col1x, metricsY + 7, { align: "center" });
+  doc.text(`${data.stabilityScore}/100`, col1x, metricsY + 14, {
+    align: "center",
+  });
+  doc.setFontSize(6.5);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(100, 100, 100);
+  doc.text(`Shelf Life: ${data.shelfLifeMonths} months`, col1x, metricsY + 19, {
+    align: "center",
+  });
+  doc.setFontSize(7);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(80, 80, 80);
+  doc.text("Overall Score", col2x, metricsY + 7, { align: "center" });
+  doc.text(`${data.overallScore}/100`, col2x, metricsY + 14, {
+    align: "center",
+  });
+  doc.setFontSize(6.5);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(100, 100, 100);
+  doc.text(
+    data.approved ? "Pharmacopeia Compliant" : "Below Threshold",
+    col2x,
+    metricsY + 19,
+    { align: "center" },
+  );
+
+  // Approval status banner
+  const bannerY = metricsY + 27;
+  if (data.approved) {
+    doc.setFillColor(20, 83, 45);
+  } else {
+    doc.setFillColor(180, 30, 30);
+  }
+  doc.rect(22, bannerY, pageW - 44, 13, "F");
+  doc.setFontSize(10);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(255, 255, 255);
+  const bannerText = data.approved
+    ? "✓  APPROVED FOR PLATFORM RELEASE"
+    : "✗  NOT APPROVED — QUALITY SCORE BELOW THRESHOLD";
+  doc.text(bannerText, pageW / 2, bannerY + 9, { align: "center" });
+
+  // Three signature lines
+  const sigY = bannerY + 22;
+  const sigCols = [pageW * 0.2, pageW / 2, pageW * 0.8];
+  const sigLabels = ["Formulator", "QA Head", "Platform Authority"];
+  doc.setDrawColor(150, 150, 150);
+  doc.setLineWidth(0.3);
+  for (let s = 0; s < 3; s++) {
+    doc.line(sigCols[s] - 22, sigY, sigCols[s] + 22, sigY);
+    doc.setFontSize(7.5);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(100, 100, 100);
+    doc.text(sigLabels[s], sigCols[s], sigY + 6, { align: "center" });
+    if (s === 0)
+      doc.text(data.ownerName, sigCols[s], sigY + 11, { align: "center" });
+  }
+
+  // Footer
+  doc.setFillColor(20, 83, 45);
+  doc.rect(12, 276, pageW - 24, 9, "F");
+  doc.setFontSize(6.5);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(167, 243, 208);
+  doc.text(`Certificate No.: ${data.certNum}`, 20, 281.5);
+  doc.text(`Issue Date: ${data.date}`, pageW / 2, 281.5, { align: "center" });
+  doc.text("AyurNexis 3.1 | ayurnexis.platform", pageW - 20, 281.5, {
+    align: "right",
+  });
+
+  doc.save(
+    `${data.formulationName || data.dosageForm || "formulation"}_certificate.pdf`,
+  );
+}
+
+// ─── Standalone Drug Label PDF Generator ─────────────────────────────────────
+async function generateLabelPDF(data: {
+  formulationName: string;
+  dosageForm: string;
+  ownerName: string;
+  institution: string;
+  ingredients: { name: string; qty: number; unit: string }[];
+  overallScore: number;
+  approved: boolean;
+  date: string;
+}): Promise<void> {
+  const _jsPDFMod = await (Function(
+    'return import("https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js")',
+  )() as Promise<any>);
+  const jsPDF = _jsPDFMod.default ?? _jsPDFMod.jsPDF;
+  // Landscape label format
+  const doc = new jsPDF({
+    orientation: "landscape",
+    unit: "mm",
+    format: [148, 105],
+  });
+  const W = 148;
+  const H = 105;
+
+  // White background
+  doc.setFillColor(255, 255, 255);
+  doc.rect(0, 0, W, H, "F");
+  // Outer green border
+  doc.setDrawColor(20, 83, 45);
+  doc.setLineWidth(1.5);
+  doc.rect(4, 4, W - 8, H - 8, "S");
+  // Inner thin border
+  doc.setLineWidth(0.4);
+  doc.rect(7, 7, W - 14, H - 14, "S");
+
+  // Header band
+  doc.setFillColor(20, 83, 45);
+  doc.rect(7, 7, W - 14, 20, "F");
+  // Product name
+  doc.setFontSize(14);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(255, 255, 255);
+  const prodName = (
+    data.formulationName || `${data.dosageForm} Formulation`
+  ).toUpperCase();
+  doc.text(
+    prodName.length > 35 ? `${prodName.slice(0, 35)}…` : prodName,
+    W / 2,
+    16,
+    { align: "center" },
+  );
+  doc.setFontSize(7);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(167, 243, 208);
+  doc.text("Manufactured by AyurNexis Formulation Lab", W / 2, 22, {
+    align: "center",
+  });
+
+  // Dosage form badge
+  doc.setFillColor(255, 220, 100);
+  doc.rect(10, 30, 35, 7, "F");
+  doc.setFontSize(7.5);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(80, 40, 0);
+  doc.text(data.dosageForm.toUpperCase(), 27.5, 35.5, { align: "center" });
+
+  // Composition table
+  doc.setFontSize(8);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(20, 83, 45);
+  doc.text("Composition:", 10, 44);
+  doc.setFillColor(20, 83, 45);
+  doc.rect(10, 45, W - 20, 5.5, "F");
+  doc.setFontSize(6.5);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(255, 255, 255);
+  doc.text("Ingredient", 12, 49);
+  doc.text("Qty", 100, 49, { align: "right" });
+  doc.text("Unit", 118, 49, { align: "right" });
+  const maxRows = Math.min(data.ingredients.length, 6);
+  for (let i = 0; i < maxRows; i++) {
+    const row = data.ingredients[i];
+    const ry = 50.5 + i * 6;
+    if (i % 2 === 0) {
+      doc.setFillColor(245, 252, 245);
+      doc.rect(10, ry, W - 20, 6, "F");
+    }
+    doc.setFontSize(6.5);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(30, 30, 30);
+    doc.text(
+      row.name.length > 52 ? `${row.name.slice(0, 52)}…` : row.name,
+      12,
+      ry + 4.2,
+    );
+    doc.text(String(row.qty), 100, ry + 4.2, { align: "right" });
+    doc.text(row.unit, 118, ry + 4.2, { align: "right" });
+  }
+  if (data.ingredients.length > 6) {
+    doc.setFontSize(6);
+    doc.setTextColor(100, 100, 100);
+    doc.text(`+${data.ingredients.length - 6} more`, 12, 50.5 + 6 * 6 + 3);
+  }
+
+  const bottomY = 50.5 + maxRows * 6 + (data.ingredients.length > 6 ? 8 : 5);
+
+  // Storage and expiry info
+  doc.setFontSize(6.5);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(40, 40, 40);
+  doc.text(
+    "Storage: Store at 25°C ± 2°C / 60% RH. Keep in cool dry place, away from light.",
+    10,
+    bottomY,
+  );
+  doc.text(
+    `Formulator: ${data.ownerName}${data.institution ? `  |  ${data.institution}` : ""}`,
+    10,
+    bottomY + 5,
+  );
+  doc.text(`Date: ${data.date}`, 10, bottomY + 10);
+
+  // Approval status banner
+  const approvalY = H - 20;
+  doc.setFillColor(
+    data.approved ? 20 : 180,
+    data.approved ? 83 : 30,
+    data.approved ? 45 : 30,
+  );
+  doc.rect(7, approvalY, W - 14, 9, "F");
+  doc.setFontSize(8);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(255, 255, 255);
+  doc.text(
+    data.approved
+      ? "✓ APPROVED FOR PLATFORM RELEASE"
+      : "✗ NOT APPROVED FOR MARKET RELEASE",
+    W / 2,
+    approvalY + 6,
+    { align: "center" },
+  );
+
+  // Footer
+  doc.setFillColor(240, 253, 244);
+  doc.rect(7, H - 11, W - 14, 4, "F");
+  doc.setFontSize(5.5);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(80, 120, 80);
+  doc.text(
+    `Score: ${data.overallScore}/100  |  AyurNexis 3.1 — AI-Enabled Ayurvedic QA Platform`,
+    W / 2,
+    H - 8,
+    { align: "center" },
+  );
+
+  doc.save(
+    `${data.formulationName || data.dosageForm || "formulation"}_label.pdf`,
+  );
+}
+
 export function FormulationLab({
   prefillData,
 }: {
@@ -2260,6 +2707,8 @@ export function FormulationLab({
 
   // ── Step 8 ────────────────────────────────────────────────────────────────
   const [exporting, setExporting] = useState(false);
+  const [certExporting, setCertExporting] = useState(false);
+  const [labelExporting, setLabelExporting] = useState(false);
   const [hoveredCell, setHoveredCell] = useState<{
     i: number;
     j: number;
@@ -2307,7 +2756,6 @@ export function FormulationLab({
         setGeminiLoading(false);
       }
     }, 1500);
-    // biome-ignore lint/correctness/useExhaustiveDependencies: refs don't need to be in deps
   }, [ingredients]);
 
   // ── Derived ───────────────────────────────────────────────────────────────
@@ -4815,6 +5263,325 @@ export function FormulationLab({
                   </div>
                 </div>
               </div>
+
+              {/* Drug Label */}
+              {(() => {
+                const overallScore = Math.round(
+                  (compatibilityScore + advancedStability.stabilityScore) / 2,
+                );
+                const isApproved = overallScore >= 70;
+                const today = new Date().toLocaleDateString("en-IN", {
+                  day: "2-digit",
+                  month: "long",
+                  year: "numeric",
+                });
+                const mfgDate = new Date().toLocaleDateString("en-IN", {
+                  month: "short",
+                  year: "numeric",
+                });
+                const expDate = new Date(
+                  Date.now() +
+                    advancedStability.shelfLifeMonths *
+                      30 *
+                      24 *
+                      60 *
+                      60 *
+                      1000,
+                ).toLocaleDateString("en-IN", {
+                  month: "short",
+                  year: "numeric",
+                });
+                const batchNo = `AN-${Date.now().toString(36).toUpperCase().slice(-6)}`;
+                return (
+                  <div className="mt-6">
+                    <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
+                      <span
+                        className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-bold"
+                        style={{
+                          background: isApproved
+                            ? "oklch(0.42 0.14 145 / 0.12)"
+                            : "oklch(0.54 0.174 24 / 0.12)",
+                          color: isApproved
+                            ? "oklch(0.42 0.14 145)"
+                            : "oklch(0.54 0.174 24)",
+                          border: isApproved
+                            ? "1px solid oklch(0.42 0.14 145 / 0.3)"
+                            : "1px solid oklch(0.54 0.174 24 / 0.3)",
+                        }}
+                      >
+                        {isApproved ? "✓ APPROVED" : "✗ NOT APPROVED"}
+                      </span>
+                      Drug Label
+                    </h3>
+                    <div
+                      className="rounded-xl overflow-hidden"
+                      style={{
+                        border: "2px solid #1a1a1a",
+                        fontFamily: "Georgia, serif",
+                        background: "#ffffff",
+                        color: "#000000",
+                      }}
+                      data-ocid="formulation.cert.card"
+                    >
+                      {/* Label Header */}
+                      <div
+                        className="px-6 py-4"
+                        style={{ background: "#1a1a1a", color: "#ffffff" }}
+                      >
+                        <div className="flex items-start justify-between gap-4">
+                          <div>
+                            <p
+                              className="text-[10px] font-bold tracking-widest uppercase mb-1"
+                              style={{ color: "#aaa" }}
+                            >
+                              Rx Only — For Pharmaceutical Use
+                            </p>
+                            <h3
+                              className="text-xl font-bold tracking-wide"
+                              style={{ fontFamily: "Arial, sans-serif" }}
+                            >
+                              {formulationName || `${dosageForm} Formulation`}
+                            </h3>
+                            <p
+                              className="text-sm mt-0.5"
+                              style={{ color: "#ccc" }}
+                            >
+                              {dosageForm} &middot; {method}
+                            </p>
+                          </div>
+                          <div
+                            className="text-right text-xs"
+                            style={{ color: "#aaa" }}
+                          >
+                            <div>Batch: {batchNo}</div>
+                            <div>Mfg: {mfgDate}</div>
+                            <div>Exp: {expDate}</div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Approval Status Box */}
+                      <div
+                        className="mx-6 my-4 rounded-lg px-4 py-3"
+                        style={{
+                          background: isApproved ? "#dcfce7" : "#fee2e2",
+                          border: isApproved
+                            ? "2px solid #16a34a"
+                            : "2px solid #dc2626",
+                        }}
+                      >
+                        <div className="flex items-center gap-2">
+                          <span
+                            className="text-lg font-bold"
+                            style={{
+                              color: isApproved ? "#15803d" : "#b91c1c",
+                            }}
+                          >
+                            {isApproved ? "✓" : "✗"}
+                          </span>
+                          <div>
+                            <p
+                              className="text-sm font-bold"
+                              style={{
+                                color: isApproved ? "#14532d" : "#7f1d1d",
+                              }}
+                            >
+                              {isApproved
+                                ? "APPROVED FOR MARKET RELEASE — Certified by AyurNexis Platform"
+                                : `NOT APPROVED FOR MARKET RELEASE — Quality score ${overallScore}/100 does not meet minimum threshold of 70`}
+                            </p>
+                            {!isApproved && (
+                              <p
+                                className="text-xs mt-1"
+                                style={{ color: "#991b1b" }}
+                              >
+                                Deficiencies:{" "}
+                                {[
+                                  compatibilityScore < 70 &&
+                                    `Compatibility score ${compatibilityScore}/100 (min 70)`,
+                                  advancedStability.stabilityScore < 70 &&
+                                    `Stability score ${advancedStability.stabilityScore}/100 (min 70)`,
+                                ]
+                                  .filter(Boolean)
+                                  .join(" | ") ||
+                                  "Overall quality below threshold"}
+                              </p>
+                            )}
+                            {isApproved && (
+                              <p
+                                className="text-xs mt-0.5"
+                                style={{ color: "#166534" }}
+                              >
+                                Certified on {today} &middot; AyurNexis QA Board
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Composition Table */}
+                      <div className="px-6 pb-2">
+                        <p
+                          className="text-xs font-bold uppercase tracking-widest mb-2"
+                          style={{
+                            color: "#333",
+                            borderBottom: "1px solid #333",
+                            paddingBottom: 4,
+                          }}
+                        >
+                          Composition (per unit dose)
+                        </p>
+                        <table
+                          style={{
+                            width: "100%",
+                            fontSize: 11,
+                            borderCollapse: "collapse",
+                          }}
+                        >
+                          <thead>
+                            <tr style={{ background: "#f3f4f6" }}>
+                              <th
+                                style={{
+                                  padding: "4px 8px",
+                                  textAlign: "left",
+                                  border: "1px solid #d1d5db",
+                                }}
+                              >
+                                Ingredient
+                              </th>
+                              <th
+                                style={{
+                                  padding: "4px 8px",
+                                  textAlign: "left",
+                                  border: "1px solid #d1d5db",
+                                }}
+                              >
+                                Role
+                              </th>
+                              <th
+                                style={{
+                                  padding: "4px 8px",
+                                  textAlign: "right",
+                                  border: "1px solid #d1d5db",
+                                }}
+                              >
+                                Qty
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {ingredients.map((ing) => (
+                              <tr
+                                key={ing.id}
+                                style={{ borderBottom: "1px solid #e5e7eb" }}
+                              >
+                                <td
+                                  style={{
+                                    padding: "3px 8px",
+                                    fontWeight: 600,
+                                    border: "1px solid #e5e7eb",
+                                  }}
+                                >
+                                  {ing.name}
+                                </td>
+                                <td
+                                  style={{
+                                    padding: "3px 8px",
+                                    color: "#555",
+                                    border: "1px solid #e5e7eb",
+                                  }}
+                                >
+                                  {ing.category}
+                                </td>
+                                <td
+                                  style={{
+                                    padding: "3px 8px",
+                                    textAlign: "right",
+                                    fontFamily: "monospace",
+                                    border: "1px solid #e5e7eb",
+                                  }}
+                                >
+                                  {ing.quantity} {ing.unit}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {/* Dosage & Storage */}
+                      <div
+                        className="grid grid-cols-2 gap-0 px-6 py-3"
+                        style={{ borderTop: "1px solid #ccc" }}
+                      >
+                        <div
+                          style={{
+                            borderRight: "1px solid #ccc",
+                            paddingRight: 12,
+                          }}
+                        >
+                          <p
+                            className="text-[10px] font-bold uppercase tracking-wider mb-1"
+                            style={{ color: "#333" }}
+                          >
+                            Dosage Instructions
+                          </p>
+                          <p className="text-xs">
+                            {dosageForm === "Tablet" || dosageForm === "Capsule"
+                              ? "1-2 units orally, twice daily after meals, or as directed by physician."
+                              : dosageForm === "Syrup" ||
+                                  dosageForm === "Suspension"
+                                ? "5-10 mL orally, twice daily, shake well before use."
+                                : dosageForm === "Injection"
+                                  ? "As directed by physician. For parenteral administration only."
+                                  : "Apply as directed. For external use only (if topical)."}
+                          </p>
+                        </div>
+                        <div style={{ paddingLeft: 12 }}>
+                          <p
+                            className="text-[10px] font-bold uppercase tracking-wider mb-1"
+                            style={{ color: "#333" }}
+                          >
+                            Storage Conditions
+                          </p>
+                          <p className="text-xs">
+                            {
+                              "Store below 25°C in a dry place. Keep away from light and moisture. Keep out of reach of children."
+                            }
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Footer */}
+                      <div
+                        className="px-6 py-3 flex items-center justify-between"
+                        style={{
+                          background: "#f9fafb",
+                          borderTop: "1px solid #ccc",
+                          fontSize: 10,
+                        }}
+                      >
+                        <div>
+                          <div className="font-bold">
+                            Manufacturer: AyurNexis Formulation Lab
+                          </div>
+                          <div style={{ color: "#555" }}>
+                            Formulated by: {ownerName || "AyurNexis Platform"}{" "}
+                            &middot; {institution || "Formulation Laboratory"}
+                          </div>
+                        </div>
+                        <div className="text-right" style={{ color: "#555" }}>
+                          <div>Overall Score: {overallScore}/100</div>
+                          <div>
+                            Shelf Life: {advancedStability.shelfLifeMonths}{" "}
+                            months
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
             </motion.div>
           )}
 
@@ -4874,7 +5641,7 @@ export function FormulationLab({
                         , Certificate
                       </p>
                     </div>
-                    <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+                    <div className="flex flex-col sm:flex-row items-center justify-center gap-3 flex-wrap">
                       <Button
                         data-ocid="formulation.export.primary_button"
                         size="lg"
@@ -4890,6 +5657,128 @@ export function FormulationLab({
                         ) : (
                           <>
                             <Download className="w-4 h-4" /> Download PDF Report
+                          </>
+                        )}
+                      </Button>
+                      <Button
+                        data-ocid="formulation.certificate.button"
+                        size="lg"
+                        variant="outline"
+                        disabled={
+                          ingredients.length === 0 ||
+                          !ownerName ||
+                          certExporting
+                        }
+                        title={
+                          !ownerName || ingredients.length === 0
+                            ? "Add ownership details in Step 7"
+                            : "Download Certificate"
+                        }
+                        className="gap-2"
+                        onClick={async () => {
+                          setCertExporting(true);
+                          try {
+                            const overallScore = Math.round(
+                              (compatibilityScore +
+                                advancedStability.stabilityScore) /
+                                2,
+                            );
+                            await generateCertificatePDF({
+                              formulationName:
+                                formulationName || `${dosageForm} Formulation`,
+                              dosageForm: dosageForm ?? "",
+                              method: method ?? "",
+                              ownerName,
+                              institution,
+                              designation,
+                              ingredients: ingredients.map((i) => ({
+                                name: i.name,
+                                qty: i.quantity,
+                                unit: i.unit,
+                              })),
+                              stabilityScore: advancedStability.stabilityScore,
+                              shelfLifeMonths:
+                                advancedStability.shelfLifeMonths,
+                              overallScore,
+                              approved: overallScore >= 70,
+                              certNum: `AN-${Date.now().toString(36).toUpperCase().slice(-8)}`,
+                              date: new Date().toLocaleDateString("en-IN", {
+                                day: "2-digit",
+                                month: "long",
+                                year: "numeric",
+                              }),
+                            });
+                          } finally {
+                            setCertExporting(false);
+                          }
+                        }}
+                      >
+                        {certExporting ? (
+                          <>
+                            <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                            Generating...
+                          </>
+                        ) : (
+                          <>
+                            <Award className="w-4 h-4" /> Download Certificate
+                          </>
+                        )}
+                      </Button>
+                      <Button
+                        data-ocid="formulation.label.button"
+                        size="lg"
+                        variant="outline"
+                        disabled={
+                          ingredients.length === 0 ||
+                          !ownerName ||
+                          labelExporting
+                        }
+                        title={
+                          !ownerName || ingredients.length === 0
+                            ? "Add ownership details in Step 7"
+                            : "Download Label"
+                        }
+                        className="gap-2"
+                        onClick={async () => {
+                          setLabelExporting(true);
+                          try {
+                            const overallScore = Math.round(
+                              (compatibilityScore +
+                                advancedStability.stabilityScore) /
+                                2,
+                            );
+                            await generateLabelPDF({
+                              formulationName:
+                                formulationName || `${dosageForm} Formulation`,
+                              dosageForm: dosageForm ?? "",
+                              ownerName,
+                              institution,
+                              ingredients: ingredients.map((i) => ({
+                                name: i.name,
+                                qty: i.quantity,
+                                unit: i.unit,
+                              })),
+                              overallScore,
+                              approved: overallScore >= 70,
+                              date: new Date().toLocaleDateString("en-IN", {
+                                day: "2-digit",
+                                month: "long",
+                                year: "numeric",
+                              }),
+                            });
+                          } finally {
+                            setLabelExporting(false);
+                          }
+                        }}
+                      >
+                        {labelExporting ? (
+                          <>
+                            <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                            Generating...
+                          </>
+                        ) : (
+                          <>
+                            <Tag className="w-4 h-4" /> Download Label
                           </>
                         )}
                       </Button>

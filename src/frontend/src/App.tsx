@@ -899,79 +899,424 @@ function AppShell() {
 }
 
 function ConfigPage() {
+  const [thresholds, setThresholds] = useState({
+    moisture: 12,
+    totalAsh: 5,
+    extractiveValue: 10,
+    heavyMetals: 10,
+    microbialCount: 1000,
+  });
+  const [analysisSettings, setAnalysisSettings] = useState({
+    anomalySensitivity: 60,
+    moistureWeight: 20,
+    ashWeight: 20,
+    extractiveWeight: 20,
+    heavyMetalsWeight: 20,
+    microbialWeight: 20,
+  });
+  const [formulationSettings, setFormulationSettings] = useState({
+    defaultDosageForm: "Tablet",
+    defaultDrugType: "Allopathic",
+  });
+  const [displaySettings, setDisplaySettings] = useState({
+    units: "SI",
+    referenceSource: "IP 2022",
+  });
+  const [saved, setSaved] = useState(false);
+
+  const handleSave = () => {
+    try {
+      localStorage.setItem(
+        "ayurnexis_config",
+        JSON.stringify({
+          thresholds,
+          analysisSettings,
+          formulationSettings,
+          displaySettings,
+        }),
+      );
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const fieldClass =
+    "mt-1 w-full px-3 py-1.5 rounded-lg border text-xs text-foreground bg-background focus:outline-none focus:border-primary";
+  const labelClass =
+    "text-xs font-medium text-muted-foreground uppercase tracking-wide";
+  const sectionClass = "glass-card rounded-xl p-5 space-y-4";
+  const titleClass = "text-sm font-semibold text-gold flex items-center gap-2";
+
   return (
-    <div className="p-6">
+    <div className="p-6 max-w-4xl mx-auto">
       <div className="flex items-center gap-2 mb-1">
         <Settings size={16} className="text-gold" />
         <span className="text-xs text-muted-foreground uppercase tracking-widest font-semibold">
           System Configuration
         </span>
       </div>
-      <h1 className="text-2xl font-bold text-foreground">Configuration</h1>
-      <p className="text-muted-foreground text-sm mt-1">
-        System parameters, thresholds, and user role management
-      </p>
-      <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-        {[
-          {
-            title: "Quality Thresholds",
-            desc: "Configure accept/reject scoring thresholds per parameter",
-            params: [
-              "Moisture ≤ 10%",
-              "Ash ≤ 5%",
-              "Extractive ≥ 20%",
-              "Heavy Metals ≤ 2ppm",
-              "Microbial ≤ 500 CFU/g",
-            ],
-          },
-          {
-            title: "ML Model Parameters",
-            desc: "Decision-tree ML model configuration",
-            params: [
-              "Model: Rule-Based + Decision Tree",
-              "Training: Historical batch data",
-              "Features: 5 physicochemical params",
-              "Scoring: 0-100 normalized",
-              "Confidence threshold: 60%",
-            ],
-          },
-          {
-            title: "Role Access Control",
-            desc: "User role permissions matrix",
-            params: [
-              "Admin: Full access",
-              "QA Manager: Dashboard, Reports, Approval",
-              "Lab Technician: Data Entry, Analysis",
-              "Guest: View-only dashboard",
-            ],
-          },
-          {
-            title: "Notification Settings",
-            desc: "Alert thresholds and notification rules",
-            params: [
-              "Anomaly alert: Score < 40",
-              "High-risk flag: Score < 50",
-              "Deviation report: Auto-generated",
-              "Daily summary: 08:00 IST",
-            ],
-          },
-        ].map(({ title, desc, params }) => (
-          <div key={title} className="glass-card rounded-xl p-5">
-            <h3 className="text-sm font-semibold text-gold mb-1">{title}</h3>
-            <p className="text-xs text-muted-foreground mb-3">{desc}</p>
-            <ul className="space-y-1.5">
-              {params.map((p) => (
-                <li
-                  key={p}
-                  className="text-xs text-foreground flex items-center gap-2"
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">Configuration</h1>
+          <p className="text-muted-foreground text-sm mt-0.5">
+            Customize quality thresholds, analysis parameters, and display
+            preferences
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={handleSave}
+          className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-colors"
+          style={{
+            background: saved
+              ? "oklch(0.42 0.14 145 / 0.15)"
+              : "oklch(0.42 0.14 145)",
+            color: saved ? "oklch(0.42 0.14 145)" : "white",
+            border: saved ? "1px solid oklch(0.42 0.14 145 / 0.4)" : "none",
+          }}
+          data-ocid="config.save_button"
+        >
+          {saved ? "✓ Saved!" : "Save Changes"}
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+        {/* Quality Thresholds */}
+        <div className={sectionClass}>
+          <h3 className={titleClass}>
+            <span className="w-2 h-2 rounded-full bg-green-400 inline-block" />
+            Quality Thresholds
+          </h3>
+          <p className="text-xs text-muted-foreground -mt-2">
+            Batch accept/reject limits per parameter (max acceptable values)
+          </p>
+          {(
+            [
+              {
+                key: "moisture",
+                label: "Moisture (%)",
+                min: 0,
+                max: 25,
+                step: 0.5,
+                suffix: "%",
+              },
+              {
+                key: "totalAsh",
+                label: "Total Ash (%)",
+                min: 0,
+                max: 15,
+                step: 0.5,
+                suffix: "%",
+              },
+              {
+                key: "extractiveValue",
+                label: "Extractive Value (%) — min",
+                min: 0,
+                max: 40,
+                step: 1,
+                suffix: "%",
+              },
+              {
+                key: "heavyMetals",
+                label: "Heavy Metals (ppm)",
+                min: 0,
+                max: 50,
+                step: 1,
+                suffix: " ppm",
+              },
+              {
+                key: "microbialCount",
+                label: "Microbial Count (CFU/g)",
+                min: 0,
+                max: 10000,
+                step: 100,
+                suffix: " CFU/g",
+              },
+            ] as const
+          ).map(({ key, label, min, max, step, suffix }) => (
+            <div key={key}>
+              <p className={labelClass}>{label}</p>
+              <div className="flex items-center gap-3 mt-1">
+                <input
+                  type="range"
+                  min={min}
+                  max={max}
+                  step={step}
+                  value={thresholds[key]}
+                  onChange={(e) =>
+                    setThresholds((p) => ({
+                      ...p,
+                      [key]: Number(e.target.value),
+                    }))
+                  }
+                  className="flex-1 accent-primary"
+                  data-ocid="config.input"
+                />
+                <span
+                  className="text-xs font-mono font-semibold w-20 text-right"
+                  style={{ color: "oklch(0.42 0.14 145)" }}
                 >
-                  <div className="w-1 h-1 rounded-full bg-primary flex-shrink-0" />
-                  {p}
-                </li>
-              ))}
-            </ul>
+                  {thresholds[key]}
+                  {suffix}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Analysis Settings */}
+        <div className={sectionClass}>
+          <h3 className={titleClass}>
+            <span className="w-2 h-2 rounded-full bg-blue-400 inline-block" />
+            Analysis Settings
+          </h3>
+          <p className="text-xs text-muted-foreground -mt-2">
+            Scoring weights and anomaly detection sensitivity
+          </p>
+          <div>
+            <p className={labelClass}>Anomaly Detection Sensitivity (%)</p>
+            <div className="flex items-center gap-3 mt-1">
+              <input
+                type="range"
+                min={30}
+                max={90}
+                step={5}
+                value={analysisSettings.anomalySensitivity}
+                onChange={(e) =>
+                  setAnalysisSettings((p) => ({
+                    ...p,
+                    anomalySensitivity: Number(e.target.value),
+                  }))
+                }
+                className="flex-1 accent-primary"
+                data-ocid="config.input"
+              />
+              <span
+                className="text-xs font-mono font-semibold w-12 text-right"
+                style={{ color: "oklch(0.42 0.14 145)" }}
+              >
+                {analysisSettings.anomalySensitivity}%
+              </span>
+            </div>
           </div>
-        ))}
+          <div>
+            <p className={labelClass}>Scoring Weights (must sum to 100)</p>
+            <div className="mt-2 space-y-2">
+              {(
+                [
+                  { key: "moistureWeight", label: "Moisture" },
+                  { key: "ashWeight", label: "Total Ash" },
+                  { key: "extractiveWeight", label: "Extractive" },
+                  { key: "heavyMetalsWeight", label: "Heavy Metals" },
+                  { key: "microbialWeight", label: "Microbial" },
+                ] as const
+              ).map(({ key, label }) => (
+                <div key={key} className="flex items-center gap-3">
+                  <span className="text-xs text-muted-foreground w-28">
+                    {label}
+                  </span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={50}
+                    value={analysisSettings[key]}
+                    onChange={(e) =>
+                      setAnalysisSettings((p) => ({
+                        ...p,
+                        [key]: Number(e.target.value),
+                      }))
+                    }
+                    className={fieldClass}
+                    style={{ width: 64 }}
+                    data-ocid="config.input"
+                  />
+                  <span className="text-xs text-muted-foreground">pts</span>
+                </div>
+              ))}
+            </div>
+            <div
+              className="mt-1 text-xs"
+              style={{
+                color:
+                  Object.values({
+                    a: analysisSettings.moistureWeight,
+                    b: analysisSettings.ashWeight,
+                    c: analysisSettings.extractiveWeight,
+                    d: analysisSettings.heavyMetalsWeight,
+                    e: analysisSettings.microbialWeight,
+                  }).reduce((a, b) => a + b, 0) === 100
+                    ? "oklch(0.42 0.14 145)"
+                    : "oklch(0.54 0.174 24)",
+              }}
+            >
+              Total:{" "}
+              {analysisSettings.moistureWeight +
+                analysisSettings.ashWeight +
+                analysisSettings.extractiveWeight +
+                analysisSettings.heavyMetalsWeight +
+                analysisSettings.microbialWeight}{" "}
+              / 100
+            </div>
+          </div>
+        </div>
+
+        {/* Formulation Settings */}
+        <div className={sectionClass}>
+          <h3 className={titleClass}>
+            <span className="w-2 h-2 rounded-full bg-purple-400 inline-block" />
+            Formulation Settings
+          </h3>
+          <p className="text-xs text-muted-foreground -mt-2">
+            Default values for the Formulation Lab
+          </p>
+          <div>
+            <p className={labelClass}>Default Dosage Form</p>
+            <select
+              className={fieldClass}
+              value={formulationSettings.defaultDosageForm}
+              onChange={(e) =>
+                setFormulationSettings((p) => ({
+                  ...p,
+                  defaultDosageForm: e.target.value,
+                }))
+              }
+              data-ocid="config.select"
+            >
+              {[
+                "Tablet",
+                "Capsule",
+                "Syrup",
+                "Suspension",
+                "Cream/Ointment",
+                "Powder",
+                "Injection",
+                "Gel",
+                "Granules",
+                "Sachet",
+              ].map((f) => (
+                <option key={f} value={f}>
+                  {f}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <p className={labelClass}>Default Drug Type</p>
+            <select
+              className={fieldClass}
+              value={formulationSettings.defaultDrugType}
+              onChange={(e) =>
+                setFormulationSettings((p) => ({
+                  ...p,
+                  defaultDrugType: e.target.value,
+                }))
+              }
+              data-ocid="config.select"
+            >
+              {[
+                "Allopathic",
+                "Herbal",
+                "Ayurvedic",
+                "Homeopathic",
+                "Combination",
+              ].map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* Display Preferences */}
+        <div className={sectionClass}>
+          <h3 className={titleClass}>
+            <span className="w-2 h-2 rounded-full bg-amber-400 inline-block" />
+            Display Preferences
+          </h3>
+          <p className="text-xs text-muted-foreground -mt-2">
+            Units and pharmacopeia reference source
+          </p>
+          <div>
+            <p className={labelClass}>Units System</p>
+            <div className="flex gap-3 mt-1">
+              {["SI", "Imperial"].map((u) => (
+                <button
+                  type="button"
+                  key={u}
+                  onClick={() =>
+                    setDisplaySettings((p) => ({ ...p, units: u }))
+                  }
+                  className="flex-1 px-3 py-2 rounded-lg text-xs font-medium transition-colors border"
+                  style={{
+                    background:
+                      displaySettings.units === u
+                        ? "oklch(0.42 0.14 145 / 0.12)"
+                        : "transparent",
+                    color:
+                      displaySettings.units === u
+                        ? "oklch(0.42 0.14 145)"
+                        : "oklch(0.45 0.015 240)",
+                    borderColor:
+                      displaySettings.units === u
+                        ? "oklch(0.42 0.14 145 / 0.4)"
+                        : "oklch(0.88 0.012 240)",
+                  }}
+                  data-ocid="config.toggle"
+                >
+                  {u}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <p className={labelClass}>Primary Reference Source</p>
+            <div className="grid grid-cols-3 gap-2 mt-1">
+              {["IP 2022", "BP 2023", "WHO"].map((src) => (
+                <button
+                  type="button"
+                  key={src}
+                  onClick={() =>
+                    setDisplaySettings((p) => ({ ...p, referenceSource: src }))
+                  }
+                  className="px-2 py-2 rounded-lg text-xs font-medium transition-colors border"
+                  style={{
+                    background:
+                      displaySettings.referenceSource === src
+                        ? "oklch(0.42 0.14 145 / 0.12)"
+                        : "transparent",
+                    color:
+                      displaySettings.referenceSource === src
+                        ? "oklch(0.42 0.14 145)"
+                        : "oklch(0.45 0.015 240)",
+                    borderColor:
+                      displaySettings.referenceSource === src
+                        ? "oklch(0.42 0.14 145 / 0.4)"
+                        : "oklch(0.88 0.012 240)",
+                  }}
+                  data-ocid="config.toggle"
+                >
+                  {src}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div
+            className="mt-2 p-3 rounded-lg text-xs"
+            style={{
+              background: "oklch(0.42 0.14 145 / 0.06)",
+              border: "1px solid oklch(0.42 0.14 145 / 0.2)",
+            }}
+          >
+            <span className="font-semibold text-foreground">Current:</span>{" "}
+            <span className="text-muted-foreground">
+              {displaySettings.units} units · {displaySettings.referenceSource}{" "}
+              reference
+            </span>
+          </div>
+        </div>
       </div>
     </div>
   );

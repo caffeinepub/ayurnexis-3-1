@@ -84,6 +84,25 @@ export const DISEASES: string[] = [
   "Fungal Infections",
   "Bacterial Conjunctivitis",
   "Allergic Rhinitis",
+  "Fever",
+  "Common Cold",
+  "Cough",
+  "Sore Throat",
+  "Flu (Influenza)",
+  "Headache",
+  "Nausea & Vomiting",
+  "Diarrhea",
+  "Constipation",
+  "Indigestion",
+  "Acidity (Hyperacidity)",
+  "Bloating & Gas",
+  "Fatigue",
+  "Back Pain",
+  "Joint Pain",
+  "Skin Rash",
+  "Allergy",
+  "Cold & Flu",
+  "Nasal Congestion",
 ];
 
 // ─── Marketed Drugs ──────────────────────────────────────────────────────────
@@ -2924,8 +2943,182 @@ export function generateDynamicCompositions(
     STANDARD_EXCIPIENTS[dosageForm] || STANDARD_EXCIPIENTS.Tablet;
 
   if (ingredientOptions.length === 0) {
-    // Generic fallback
-    return [];
+    // Generic fallback based on drug type
+    const genericBase: NovelComposition[] = [];
+    const excipientList =
+      excipients.length > 0
+        ? excipients
+        : [
+            {
+              name: "Microcrystalline Cellulose",
+              category: "fillers",
+              quantity: 200,
+              unit: "mg",
+              role: "Filler",
+            },
+            {
+              name: "Magnesium Stearate",
+              category: "lubricants",
+              quantity: 5,
+              unit: "mg",
+              role: "Lubricant",
+            },
+            {
+              name: "Croscarmellose Sodium",
+              category: "disintegrants",
+              quantity: 30,
+              unit: "mg",
+              role: "Disintegrant",
+            },
+          ];
+
+    const apisByType: Record<
+      string,
+      { name: string; qty: number; unit: string; mechanism: string }[]
+    > = {
+      Allopathic: [
+        {
+          name: "Paracetamol",
+          qty: 500,
+          unit: "mg",
+          mechanism: `Analgesic and antipyretic for ${disease} symptom management via COX inhibition`,
+        },
+        {
+          name: "Ibuprofen",
+          qty: 400,
+          unit: "mg",
+          mechanism: `Anti-inflammatory NSAID for ${disease} via prostaglandin synthesis inhibition`,
+        },
+        {
+          name: "Metformin HCl",
+          qty: 500,
+          unit: "mg",
+          mechanism: `Biguanide therapeutic agent for ${disease} via AMPK activation`,
+        },
+      ],
+      Herbal: [
+        {
+          name: "Turmeric Extract (95% Curcumin)",
+          qty: 200,
+          unit: "mg",
+          mechanism: `Anti-inflammatory phytochemical for ${disease} via NF-κB inhibition`,
+        },
+        {
+          name: "Ginger Root Extract",
+          qty: 250,
+          unit: "mg",
+          mechanism: `Herbal adaptogen for ${disease} via COX-2 downregulation`,
+        },
+        {
+          name: "Boswellia Serrata Extract",
+          qty: 150,
+          unit: "mg",
+          mechanism: `Ayurvedic anti-inflammatory for ${disease} via 5-LOX inhibition`,
+        },
+      ],
+      Ayurvedic: [
+        {
+          name: "Ashwagandha Extract (Withania somnifera)",
+          qty: 300,
+          unit: "mg",
+          mechanism: `Rasayana herb for ${disease} via cortisol modulation and adaptogenic activity`,
+        },
+        {
+          name: "Guduchi (Tinospora cordifolia) Extract",
+          qty: 250,
+          unit: "mg",
+          mechanism: `Immunomodulatory herb for ${disease} via macrophage activation`,
+        },
+        {
+          name: "Triphala Churna",
+          qty: 500,
+          unit: "mg",
+          mechanism: `Tridoshic Ayurvedic formulation supporting ${disease} management`,
+        },
+      ],
+      Homeopathic: [
+        {
+          name: "Belladonna 30C",
+          qty: 3,
+          unit: "pellets",
+          mechanism: `Homeopathic preparation for ${disease} based on law of similars`,
+        },
+        {
+          name: "Arsenicum Album 30C",
+          qty: 3,
+          unit: "pellets",
+          mechanism: `Constitutional homeopathic remedy for ${disease} symptom complex`,
+        },
+        {
+          name: "Nux Vomica 30C",
+          qty: 3,
+          unit: "pellets",
+          mechanism: `Homeopathic detoxification remedy for ${disease}`,
+        },
+      ],
+      Combination: [
+        {
+          name: "Paracetamol",
+          qty: 325,
+          unit: "mg",
+          mechanism: `Analgesic component for ${disease} symptom relief`,
+        },
+        {
+          name: "Turmeric Extract (95% Curcumin)",
+          qty: 100,
+          unit: "mg",
+          mechanism: `Anti-inflammatory complement for ${disease} via dual COX/NF-κB inhibition`,
+        },
+        {
+          name: "Ashwagandha Extract",
+          qty: 150,
+          unit: "mg",
+          mechanism: `Adaptogenic support for ${disease} recovery`,
+        },
+      ],
+    };
+
+    const apis = apisByType[drugType] || apisByType.Allopathic;
+
+    for (let i = 0; i < Math.min(apis.length, 3); i++) {
+      const api = apis[i];
+      genericBase.push({
+        id: `GEN-${disease.slice(0, 3).toUpperCase()}-${drugType.slice(0, 3).toUpperCase()}-${String(i + 1).padStart(3, "0")}`,
+        name: `${api.name} ${dosageForm} — ${disease} Formula ${i + 1}`,
+        dosageForm,
+        ingredients: [
+          {
+            name: api.name,
+            category: "api" as const,
+            quantity: api.qty,
+            unit: api.unit,
+            role: "Active Pharmaceutical Ingredient",
+          },
+          ...excipientList,
+        ],
+        pharmacologicalEffects: api.mechanism,
+        advantages: [
+          `Evidence-based ${drugType.toLowerCase()} approach for ${disease}`,
+          "Standard excipient system ensures manufacturing scalability",
+          `${dosageForm} format for convenient administration`,
+          "Cost-effective formulation using pharmacopeia-grade materials",
+        ],
+        disadvantages: [
+          "Generic formulation may require optimization for specific patient populations",
+          "Bioavailability may vary depending on patient physiology",
+        ],
+        stabilityPrediction:
+          "Stable at 25°C/60% RH for 24 months per ICH Q1A(R2)",
+        shelfLife: "24 months",
+        storageCondition:
+          "Store below 25°C, protected from moisture and direct light.",
+        drugInteractions: [
+          `Monitor for interactions with concurrent ${disease} medications`,
+          "Assess renal and hepatic function prior to long-term use",
+        ],
+      });
+    }
+    return genericBase;
   }
 
   const primary = ingredientOptions[0];
