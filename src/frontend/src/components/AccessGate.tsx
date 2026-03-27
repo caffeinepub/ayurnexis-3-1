@@ -8,12 +8,14 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Leaf, Lock, Shield, X } from "lucide-react";
+import { CheckCircle, Leaf, Lock, RefreshCw, Shield, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { createActorWithConfig } from "../config";
 import { useActor } from "../hooks/useActor";
 import {
+  getCodeRemainingDays,
   getCurrentAccessLevel,
   getCurrentUser,
   registerUser,
@@ -47,12 +49,30 @@ export function AccessGate({ children }: AccessGateProps) {
   const [codeEmail, setCodeEmail] = useState("");
   const [codeValue, setCodeValue] = useState("");
   const [codeError, setCodeError] = useState("");
+  // Activation popup
+  const [showActivationPopup, setShowActivationPopup] = useState(false);
+  const [activationDays, setActivationDays] = useState(0);
+  // Expiry warning popup
+  const [showExpiryWarning, setShowExpiryWarning] = useState(false);
+  const [expiryRemainingDays, setExpiryRemainingDays] = useState(0);
   const codeInputs = useRef<(HTMLInputElement | null)[]>([]);
   const { actor, isFetching: actorLoading } = useActor();
 
   useEffect(() => {
     // Sync access level on mount
-    setAccessLevelState(getCurrentAccessLevel());
+    const level = getCurrentAccessLevel();
+    setAccessLevelState(level);
+    // Check expiry warning: if user has full access and <=2 days remaining
+    if (level === "full") {
+      const user = getCurrentUser();
+      if (user?.id) {
+        const remaining = getCodeRemainingDays(user.id);
+        if (remaining > 0 && remaining <= 2) {
+          setExpiryRemainingDays(remaining);
+          setShowExpiryWarning(true);
+        }
+      }
+    }
   }, []);
 
   const handleRegister = async () => {
@@ -80,13 +100,14 @@ export function AccessGate({ children }: AccessGateProps) {
       toast.success(
         "Registration submitted! You can now browse in read-only mode. Contact admin for your access code.",
       );
-      // Sync to backend with silent retries (critical for cross-device admin visibility)
-      if (actor) {
+      // Sync to backend — create a fresh actor directly so it doesn't depend on hook state
+      (async () => {
         let synced = false;
         for (let attempt = 0; attempt < 3 && !synced; attempt++) {
           try {
-            if (attempt > 0) await new Promise((r) => setTimeout(r, 1500));
-            await (actor as any).submitAccessRequest(
+            if (attempt > 0) await new Promise((r) => setTimeout(r, 2000));
+            const freshActor = actor || (await createActorWithConfig());
+            await (freshActor as any).submitAccessRequest(
               newUser.id,
               regName.trim(),
               regInstitution.trim(),
@@ -95,6 +116,7 @@ export function AccessGate({ children }: AccessGateProps) {
               BigInt(Date.now()),
             );
             synced = true;
+            console.log("Registration synced to backend successfully");
           } catch (err) {
             console.warn(
               `Backend registration attempt ${attempt + 1} failed:`,
@@ -102,7 +124,12 @@ export function AccessGate({ children }: AccessGateProps) {
             );
           }
         }
-      }
+        if (!synced) {
+          console.error(
+            "Failed to sync registration to backend after 3 attempts",
+          );
+        }
+      })();
     } catch (err) {
       console.error("Registration failed:", err);
       toast.error("Failed to register. Please try again.");
@@ -122,10 +149,11 @@ export function AccessGate({ children }: AccessGateProps) {
     }
     try {
       let granted = false;
-      // Try backend first if actor is available
-      if (actor) {
+      // Try backend first — use hook actor or create fresh one
+      try {
+        const verifyActor = actor || (await createActorWithConfig());
         try {
-          const result = await (actor as any).verifyUserCode(
+          const result = await (verifyActor as any).verifyUserCode(
             codeEmail.trim(),
             codeValue,
           );
@@ -141,7 +169,9 @@ export function AccessGate({ children }: AccessGateProps) {
             setAccessLevel("full");
             setAccessLevelState("full");
             setShowCodeDialog(false);
-            toast.success("Full access granted! Welcome to AyurNexis 3.1");
+            const remDays = getCodeRemainingDays(userId);
+            setActivationDays(remDays);
+            setShowActivationPopup(true);
             granted = true;
           }
         } catch (backendErr) {
@@ -150,6 +180,10 @@ export function AccessGate({ children }: AccessGateProps) {
             backendErr,
           );
         }
+      } catch (_actorErr) {
+        console.warn(
+          "Could not create actor for code verification, using local fallback",
+        );
       }
       // Fallback: check localStorage
       if (!granted) {
@@ -161,7 +195,11 @@ export function AccessGate({ children }: AccessGateProps) {
           setAccessLevel("full");
           setAccessLevelState("full");
           setShowCodeDialog(false);
-          toast.success("Full access granted! Welcome to AyurNexis 3.1");
+          const remDays = localResult.userId
+            ? getCodeRemainingDays(localResult.userId)
+            : (localResult.expiryDays ?? 30);
+          setActivationDays(remDays);
+          setShowActivationPopup(true);
           granted = true;
         }
       }
@@ -657,6 +695,107 @@ export function AccessGate({ children }: AccessGateProps) {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Plan Activated Popup */}
+      {showActivationPopup && (
+        <div
+          className="fixed inset-0 z-[200] flex items-center justify-center p-4"
+          style={{ background: "rgba(0,0,0,0.45)" }}
+        >
+          <div
+            className="relative rounded-2xl p-6 max-w-sm w-full text-center shadow-2xl"
+            style={{
+              background: "oklch(1.0 0 0)",
+              border: "2px solid oklch(0.42 0.14 145 / 0.4)",
+            }}
+          >
+            <div className="flex justify-center mb-3">
+              <div
+                className="w-14 h-14 rounded-full flex items-center justify-center"
+                style={{ background: "oklch(0.42 0.14 145 / 0.1)" }}
+              >
+                <CheckCircle
+                  size={28}
+                  style={{ color: "oklch(0.42 0.14 145)" }}
+                />
+              </div>
+            </div>
+            <h2 className="text-lg font-bold text-foreground mb-1">
+              Plan Activated!
+            </h2>
+            <p className="text-sm text-muted-foreground mb-2">
+              Your plan is activated for{" "}
+              <span
+                className="font-bold"
+                style={{ color: "oklch(0.42 0.14 145)" }}
+              >
+                {activationDays} {activationDays === 1 ? "day" : "days"}
+              </span>
+              .
+            </p>
+            <p className="text-xs text-muted-foreground mb-4">
+              Welcome to AyurNexis 3.1 — Full access granted.
+            </p>
+            <Button
+              className="w-full font-semibold"
+              style={{ background: "oklch(0.42 0.14 145)", color: "white" }}
+              onClick={() => setShowActivationPopup(false)}
+            >
+              Get Started
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Expiry Warning Popup */}
+      {showExpiryWarning && (
+        <div
+          className="fixed inset-0 z-[200] flex items-center justify-center p-4"
+          style={{ background: "rgba(0,0,0,0.45)" }}
+        >
+          <div
+            className="relative rounded-2xl p-6 max-w-sm w-full text-center shadow-2xl"
+            style={{
+              background: "oklch(1.0 0 0)",
+              border: "2px solid oklch(0.72 0.130 78 / 0.5)",
+            }}
+          >
+            <div className="flex justify-center mb-3">
+              <div
+                className="w-14 h-14 rounded-full flex items-center justify-center"
+                style={{ background: "oklch(0.72 0.130 78 / 0.12)" }}
+              >
+                <RefreshCw size={26} style={{ color: "oklch(0.50 0.12 78)" }} />
+              </div>
+            </div>
+            <h2 className="text-lg font-bold text-foreground mb-1">
+              Plan Expiring Soon
+            </h2>
+            <p className="text-sm text-muted-foreground mb-2">
+              Your plan is going to expire in{" "}
+              <span
+                className="font-bold"
+                style={{ color: "oklch(0.50 0.12 78)" }}
+              >
+                {expiryRemainingDays}{" "}
+                {expiryRemainingDays === 1 ? "day" : "days"}
+              </span>
+              .
+            </p>
+            <p className="text-xs text-muted-foreground mb-4">
+              Please contact your administrator to renew your access code before
+              it expires.
+            </p>
+            <Button
+              className="w-full font-semibold"
+              style={{ background: "oklch(0.50 0.12 78)", color: "white" }}
+              onClick={() => setShowExpiryWarning(false)}
+            >
+              OK, I'll Renew
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

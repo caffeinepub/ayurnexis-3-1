@@ -18,6 +18,7 @@ export interface UserRegistration {
   status: "pending" | "approved" | "revoked";
   accessCode?: string;
   codeGeneratedAt?: number;
+  codeExpiryDays?: number; // admin-set expiry in days
   approvedAt?: number;
   activityLog?: ActivityEntry[];
   claimedFormulations?: ClaimedFormulation[];
@@ -89,22 +90,37 @@ export function verifyAccessCode(userId: string, code: string): boolean {
   if (user.status !== "approved") return false;
   if (user.accessCode !== code) return false;
   if (!user.codeGeneratedAt) return false;
-  const thirtyDays = 30 * 24 * 60 * 60 * 1000;
-  if (Date.now() - user.codeGeneratedAt > thirtyDays) return false;
+  const days = user.codeExpiryDays ?? 30;
+  const expiryMs = days * 24 * 60 * 60 * 1000;
+  if (Date.now() - user.codeGeneratedAt > expiryMs) return false;
   return true;
+}
+
+export function getCodeRemainingDays(userId: string): number {
+  const users = getAllUsers();
+  const user = users.find((u) => u.id === userId);
+  if (!user || !user.codeGeneratedAt) return 0;
+  const days = user.codeExpiryDays ?? 30;
+  const expiresAt = user.codeGeneratedAt + days * 24 * 60 * 60 * 1000;
+  const remaining = Math.ceil((expiresAt - Date.now()) / (24 * 60 * 60 * 1000));
+  return Math.max(0, remaining);
 }
 
 export function verifyAccessCodeByEmail(
   email: string,
   code: string,
-): { success: boolean; userId?: string } {
+): { success: boolean; userId?: string; expiryDays?: number } {
   const users = getAllUsers();
   const user = users.find((u) => u.email.toLowerCase() === email.toLowerCase());
   if (!user) return { success: false };
   if (verifyAccessCode(user.id, code)) {
     localStorage.setItem(CURRENT_USER_KEY, user.id);
     localStorage.setItem(ACCESS_LEVEL_KEY, "full");
-    return { success: true, userId: user.id };
+    return {
+      success: true,
+      userId: user.id,
+      expiryDays: user.codeExpiryDays ?? 30,
+    };
   }
   return { success: false };
 }
@@ -134,7 +150,6 @@ export function logActivity(action: string, module: string): void {
   const entry: ActivityEntry = { action, module, timestamp: Date.now() };
   if (!users[userIdx].activityLog) users[userIdx].activityLog = [];
   users[userIdx].activityLog!.push(entry);
-  // Keep last 100 entries
   if (users[userIdx].activityLog!.length > 100) {
     users[userIdx].activityLog = users[userIdx].activityLog!.slice(-100);
   }
@@ -157,20 +172,20 @@ export function revokeUser(userId: string): void {
   users[idx].status = "revoked";
   users[idx].accessCode = undefined;
   saveAllUsers(users);
-  // If this is the current user, downgrade to readonly
   const currentId = localStorage.getItem(CURRENT_USER_KEY);
   if (currentId === userId) {
     localStorage.setItem(ACCESS_LEVEL_KEY, "readonly");
   }
 }
 
-export function generateCodeForUser(userId: string): string {
+export function generateCodeForUser(userId: string, expiryDays = 30): string {
   const users = getAllUsers();
   const idx = users.findIndex((u) => u.id === userId);
   if (idx < 0) return "";
   const code = generateCode();
   users[idx].accessCode = code;
   users[idx].codeGeneratedAt = Date.now();
+  users[idx].codeExpiryDays = expiryDays;
   saveAllUsers(users);
   return code;
 }
@@ -246,6 +261,7 @@ export function backendUserToLocal(r: any): UserRegistration {
     status: r.status as "pending" | "approved" | "revoked",
     accessCode: getOptStr(r.accessCode),
     codeGeneratedAt: getOptNum(r.codeGeneratedAt),
+    codeExpiryDays: getOptNum(r.codeExpiryDays) ?? 30,
     approvedAt: getOptNum(r.approvedAt),
     activityLog: [],
     claimedFormulations: [],
@@ -259,7 +275,6 @@ export function mergeBackendUsers(backendUsers: any[]): void {
     const converted = backendUserToLocal(bu);
     const existing = userMap.get(converted.id);
     if (existing) {
-      // Backend takes precedence for status/code fields, preserve local activity/claims
       userMap.set(converted.id, {
         ...converted,
         activityLog: existing.activityLog || [],

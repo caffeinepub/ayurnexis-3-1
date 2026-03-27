@@ -29,6 +29,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { createActorWithConfig } from "../config";
 import { useActor } from "../hooks/useActor";
 import {
   type UserRegistration,
@@ -146,9 +147,10 @@ function CodeModal({
   code: string;
   onClose: () => void;
 }) {
+  const validDays = user.codeExpiryDays ?? 30;
   const expiry = user.codeGeneratedAt
     ? new Date(
-        user.codeGeneratedAt + 30 * 24 * 60 * 60 * 1000,
+        user.codeGeneratedAt + validDays * 24 * 60 * 60 * 1000,
       ).toLocaleDateString("en-IN", {
         day: "2-digit",
         month: "short",
@@ -211,7 +213,8 @@ function CodeModal({
             }}
           >
             <Key size={12} />
-            Valid for 30 days · Expires {expiry}
+            Valid for {validDays} {validDays === 1 ? "day" : "days"} · Expires{" "}
+            {expiry}
           </div>
           <Button
             data-ocid="admin.code_modal.close_button"
@@ -235,10 +238,13 @@ function UserCard({
   const [generatedCode, setGeneratedCode] = useState("");
   const [showCodeModal, setShowCodeModal] = useState(false);
   const [localUser, setLocalUser] = useState(user);
+  const [showDaysInput, setShowDaysInput] = useState(false);
+  const [expiryDays, setExpiryDays] = useState(30);
   const { actor } = useActor();
 
+  const days = localUser.codeExpiryDays ?? 30;
   const codeExpiry = localUser.codeGeneratedAt
-    ? new Date(localUser.codeGeneratedAt + 30 * 24 * 60 * 60 * 1000)
+    ? new Date(localUser.codeGeneratedAt + days * 24 * 60 * 60 * 1000)
     : null;
   const isCodeExpired = codeExpiry ? codeExpiry < new Date() : false;
 
@@ -293,11 +299,13 @@ function UserCard({
   };
 
   const handleGenerateCode = async () => {
-    const localCode = generateCodeForUser(localUser.id);
+    const localCode = generateCodeForUser(localUser.id, expiryDays);
+    setShowDaysInput(false);
     setLocalUser((u) => ({
       ...u,
       accessCode: localCode,
       codeGeneratedAt: Date.now(),
+      codeExpiryDays: expiryDays,
     }));
     setGeneratedCode(localCode);
     setShowCodeModal(true);
@@ -449,16 +457,53 @@ function UserCard({
         )}
         {localUser.status === "approved" && (
           <>
-            <Button
-              data-ocid="admin.users.generate_code_button"
-              size="sm"
-              className="h-7 text-xs px-3"
-              style={{ background: "oklch(0.42 0.14 145)", color: "white" }}
-              onClick={handleGenerateCode}
-            >
-              <Key size={12} className="mr-1" />
-              {localUser.accessCode ? "Regenerate Code" : "Generate Code"}
-            </Button>
+            {showDaysInput ? (
+              <div className="flex items-center gap-2 flex-wrap">
+                <input
+                  type="number"
+                  min={1}
+                  max={365}
+                  value={expiryDays}
+                  onChange={(e) =>
+                    setExpiryDays(
+                      Math.max(1, Math.min(365, Number(e.target.value))),
+                    )
+                  }
+                  className="h-7 w-20 text-xs rounded-md border px-2 outline-none"
+                  style={{ border: "1px solid oklch(0.42 0.14 145 / 0.4)" }}
+                  placeholder="Days"
+                />
+                <span className="text-xs text-muted-foreground">days</span>
+                <Button
+                  data-ocid="admin.users.generate_code_button"
+                  size="sm"
+                  className="h-7 text-xs px-3"
+                  style={{ background: "oklch(0.42 0.14 145)", color: "white" }}
+                  onClick={handleGenerateCode}
+                >
+                  <Key size={12} className="mr-1" /> Confirm
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 text-xs px-2"
+                  onClick={() => setShowDaysInput(false)}
+                >
+                  Cancel
+                </Button>
+              </div>
+            ) : (
+              <Button
+                data-ocid="admin.users.generate_code_button"
+                size="sm"
+                className="h-7 text-xs px-3"
+                style={{ background: "oklch(0.42 0.14 145)", color: "white" }}
+                onClick={() => setShowDaysInput(true)}
+              >
+                <Key size={12} className="mr-1" />
+                {localUser.accessCode ? "Regenerate Code" : "Generate Code"}
+              </Button>
+            )}
             <Button
               data-ocid="admin.users.delete_button"
               size="sm"
@@ -603,27 +648,24 @@ export function AdminDashboard() {
     const localUsers = getAllUsers();
     setUsers(localUsers);
 
-    if (!actor) {
-      setBackendSyncing(isFetching);
-      return;
-    }
-
     setBackendSyncing(true);
     setLoading(true);
     // Silent retry — up to 3 attempts, 2s apart. No error shown to user.
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
-        const records = await actor.getAccessRequests(ADMIN_PASSWORD);
-        if (Array.isArray(records) && records.length > 0) {
+        if (attempt > 0) await new Promise((r) => setTimeout(r, 2000));
+        // Use hook actor if available, otherwise create a fresh one
+        const adminActor = actor || (await createActorWithConfig());
+        const records = await (adminActor as any).getAccessRequests(
+          ADMIN_PASSWORD,
+        );
+        if (Array.isArray(records)) {
           mergeBackendUsers(records);
           setUsers(getAllUsers());
         }
         break; // success — exit retry loop
       } catch (err) {
         console.warn(`Backend sync attempt ${attempt + 1} failed:`, err);
-        if (attempt < 2) {
-          await new Promise((r) => setTimeout(r, 2000));
-        }
       }
     }
     setBackendSyncing(false);
