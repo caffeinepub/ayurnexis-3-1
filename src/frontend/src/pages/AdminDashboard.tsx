@@ -590,7 +590,6 @@ export function AdminDashboard() {
     "all" | "pending" | "approved" | "revoked"
   >("all");
   const { actor, isFetching } = useActor();
-  const [loadError, setLoadError] = useState<string | null>(null);
 
   // Load localStorage users immediately on mount (synchronous, no backend needed)
   useEffect(() => {
@@ -603,39 +602,32 @@ export function AdminDashboard() {
     // Always show localStorage users first
     const localUsers = getAllUsers();
     setUsers(localUsers);
-    setLoadError(null);
 
     if (!actor) {
-      if (isFetching) {
-        // Actor is still loading — not a failure, just waiting
-        setBackendSyncing(true);
-      } else {
-        // Actor finished loading but is still null — genuine failure
-        setLoadError("Could not reach backend. Showing locally cached users.");
-        setBackendSyncing(false);
-      }
+      setBackendSyncing(isFetching);
       return;
     }
 
-    // Actor is available — sync with backend
     setBackendSyncing(true);
     setLoading(true);
-    try {
-      const records = await actor.getAccessRequests(ADMIN_PASSWORD);
-      if (Array.isArray(records) && records.length > 0) {
-        mergeBackendUsers(records);
-        setUsers(getAllUsers());
+    // Silent retry — up to 3 attempts, 2s apart. No error shown to user.
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const records = await actor.getAccessRequests(ADMIN_PASSWORD);
+        if (Array.isArray(records) && records.length > 0) {
+          mergeBackendUsers(records);
+          setUsers(getAllUsers());
+        }
+        break; // success — exit retry loop
+      } catch (err) {
+        console.warn(`Backend sync attempt ${attempt + 1} failed:`, err);
+        if (attempt < 2) {
+          await new Promise((r) => setTimeout(r, 2000));
+        }
       }
-      // If backend returns empty but localStorage has users, keep localStorage users
-      setBackendSyncing(false);
-      setLoadError(null);
-    } catch (err) {
-      console.error("Backend sync failed:", err);
-      setLoadError("Showing locally cached users. Backend sync failed.");
-      setBackendSyncing(false);
-    } finally {
-      setLoading(false);
     }
+    setBackendSyncing(false);
+    setLoading(false);
   };
 
   // Re-run when actor loads or fetching state changes
@@ -802,8 +794,8 @@ export function AdminDashboard() {
 
         <Separator />
 
-        {/* Backend syncing indicator — subtle, not an error */}
-        {backendSyncing && !loadError && (
+        {/* Backend syncing indicator */}
+        {backendSyncing && (
           <div
             className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs"
             style={{
@@ -813,30 +805,7 @@ export function AdminDashboard() {
             }}
           >
             <Loader2 size={12} className="animate-spin" />
-            Syncing with backend…
-          </div>
-        )}
-
-        {/* Load error banner — only shown when actor is loaded and backend call threw */}
-        {loadError && (
-          <div
-            className="p-3 rounded-lg flex items-center justify-between gap-3"
-            style={{
-              background: "oklch(0.88 0.10 78 / 0.15)",
-              border: "1px solid oklch(0.72 0.13 78 / 0.3)",
-            }}
-          >
-            <span className="text-sm" style={{ color: "oklch(0.40 0.10 78)" }}>
-              {loadError}
-            </span>
-            <button
-              type="button"
-              onClick={refreshUsers}
-              className="text-xs font-semibold px-3 py-1 rounded-lg flex-shrink-0"
-              style={{ background: "oklch(0.68 0.13 78)", color: "white" }}
-            >
-              Retry
-            </button>
+            Syncing with server…
           </div>
         )}
 

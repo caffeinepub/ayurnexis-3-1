@@ -80,20 +80,28 @@ export function AccessGate({ children }: AccessGateProps) {
       toast.success(
         "Registration submitted! You can now browse in read-only mode. Contact admin for your access code.",
       );
-      // Fire-and-forget backend sync (non-blocking)
+      // Sync to backend with silent retries (critical for cross-device admin visibility)
       if (actor) {
-        (actor as any)
-          .submitAccessRequest(
-            newUser.id,
-            regName.trim(),
-            regInstitution.trim(),
-            regEmail.trim(),
-            regPurpose.trim(),
-            BigInt(Date.now()),
-          )
-          .catch((err: unknown) => {
-            console.warn("Backend sync failed (non-blocking):", err);
-          });
+        let synced = false;
+        for (let attempt = 0; attempt < 3 && !synced; attempt++) {
+          try {
+            if (attempt > 0) await new Promise((r) => setTimeout(r, 1500));
+            await (actor as any).submitAccessRequest(
+              newUser.id,
+              regName.trim(),
+              regInstitution.trim(),
+              regEmail.trim(),
+              regPurpose.trim(),
+              BigInt(Date.now()),
+            );
+            synced = true;
+          } catch (err) {
+            console.warn(
+              `Backend registration attempt ${attempt + 1} failed:`,
+              err,
+            );
+          }
+        }
       }
     } catch (err) {
       console.error("Registration failed:", err);
