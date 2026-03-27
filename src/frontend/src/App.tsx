@@ -180,7 +180,8 @@ function AppShell() {
     if (!actor || isFetching) return;
     const alreadyInited = localStorage.getItem("ayurnexis_inited");
     if (!alreadyInited) {
-      setShowInitModal(true);
+      localStorage.setItem("ayurnexis_inited", "1");
+      ensureSeedData();
     } else {
       ensureSeedData();
     }

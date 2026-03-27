@@ -222,3 +222,36 @@ export function isFormulationClaimed(formulationId: string): boolean {
   }
   return false;
 }
+
+export function backendUserToLocal(r: {
+  id: string;
+  name: string;
+  institution: string;
+  email: string;
+  purpose: string;
+  registeredAt: bigint;
+  status: string;
+  accessCode: { __kind__: "Some"; value: string } | { __kind__: "None" };
+  codeGeneratedAt: { __kind__: "Some"; value: bigint } | { __kind__: "None" };
+  approvedAt: { __kind__: "Some"; value: bigint } | { __kind__: "None" };
+}): UserRegistration {
+  return {
+    id: r.id,
+    name: r.name,
+    institution: r.institution,
+    email: r.email,
+    purpose: r.purpose,
+    registeredAt: Number(r.registeredAt),
+    status: r.status as "pending" | "approved" | "revoked",
+    accessCode:
+      r.accessCode.__kind__ === "Some" ? r.accessCode.value : undefined,
+    codeGeneratedAt:
+      r.codeGeneratedAt.__kind__ === "Some"
+        ? Number(r.codeGeneratedAt.value)
+        : undefined,
+    approvedAt:
+      r.approvedAt.__kind__ === "Some" ? Number(r.approvedAt.value) : undefined,
+    activityLog: [],
+    claimedFormulations: [],
+  };
+}

@@ -153,7 +153,7 @@ persistent actor class AyurNexis() = self {
     switch (batches.get(id)) {
       case (null) { null };
       case (?batch) {
-        let ts : Int = Prim.time().toNat();
+        let ts : Int = Prim.nat64ToNat(Prim.time());
         let result = runAnalysis(batch, ts);
         analyses.add(batch.batchId, result);
         ?result;
@@ -190,8 +190,9 @@ persistent actor class AyurNexis() = self {
     let sorted = all.sort(func(a : AnalysisResult, b : AnalysisResult) : { #less; #equal; #greater } {
       if (a.timestamp < b.timestamp) #less else if (a.timestamp > b.timestamp) #greater else #equal;
     });
-    let start = if (sorted.size() > 20) sorted.size() - 20 else 0;
-    sorted.sliceToArray(start, sorted.size()).map(func(a : AnalysisResult) : ScoreTrend {
+    let sz = sorted.size();
+    let start = if (sz > 20) sz - 20 else 0;
+    sorted.sliceToArray(start, sz).map(func(a : AnalysisResult) : ScoreTrend {
       { batchId = a.batchId; qualityScore = a.qualityScore; timestamp = a.timestamp };
     });
   };
@@ -266,4 +267,131 @@ persistent actor class AyurNexis() = self {
       offset += 1;
     };
   };
+
+  // ─── User Access Request System ──────────────────────────────────────────
+
+  let ADMIN_TOKEN = "AYURNEXIS-ADMIN-TOKEN-2026";
+
+  public type UserRecord = {
+    id : Text;
+    name : Text;
+    institution : Text;
+    email : Text;
+    purpose : Text;
+    registeredAt : Int;
+    status : Text;
+    accessCode : ?Text;
+    codeGeneratedAt : ?Int;
+    approvedAt : ?Int;
+  };
+
+  var userRecords : Map.Map<Text, UserRecord> = Map.empty<Text, UserRecord>();
+
+  // Anyone can submit a request
+  public shared func submitAccessRequest(
+    id : Text,
+    name : Text,
+    institution : Text,
+    email : Text,
+    purpose : Text,
+    registeredAt : Int,
+  ) : async Bool {
+    switch (userRecords.get(id)) {
+      case (?_) { return false };
+      case (null) {};
+    };
+    userRecords.add(id, {
+      id; name; institution; email; purpose; registeredAt;
+      status = "pending"; accessCode = null; codeGeneratedAt = null; approvedAt = null;
+    });
+    true;
+  };
+
+  // Admin: get all requests
+  public query func getAccessRequests(adminToken : Text) : async [UserRecord] {
+    if (adminToken != ADMIN_TOKEN) { return [] };
+    userRecords.values().toArray();
+  };
+
+  // Admin: approve user
+  public shared func adminApproveUser(userId : Text, adminToken : Text) : async Bool {
+    if (adminToken != ADMIN_TOKEN) { return false };
+    switch (userRecords.get(userId)) {
+      case (null) { false };
+      case (?u) {
+        let now : Int = Prim.nat64ToNat(Prim.time());
+        userRecords.add(userId, {
+          id = u.id; name = u.name; institution = u.institution; email = u.email;
+          purpose = u.purpose; registeredAt = u.registeredAt;
+          status = "approved"; accessCode = u.accessCode;
+          codeGeneratedAt = u.codeGeneratedAt; approvedAt = ?now;
+        });
+        true;
+      };
+    };
+  };
+
+  // Admin: revoke user
+  public shared func adminRevokeUser(userId : Text, adminToken : Text) : async Bool {
+    if (adminToken != ADMIN_TOKEN) { return false };
+    switch (userRecords.get(userId)) {
+      case (null) { false };
+      case (?u) {
+        userRecords.add(userId, {
+          id = u.id; name = u.name; institution = u.institution; email = u.email;
+          purpose = u.purpose; registeredAt = u.registeredAt;
+          status = "revoked"; accessCode = null;
+          codeGeneratedAt = null; approvedAt = u.approvedAt;
+        });
+        true;
+      };
+    };
+  };
+
+  // Admin: generate access code for user
+  public shared func adminGenerateCode(userId : Text, adminToken : Text) : async ?Text {
+    if (adminToken != ADMIN_TOKEN) { return null };
+    switch (userRecords.get(userId)) {
+      case (null) { null };
+      case (?u) {
+        let tNat = Prim.nat64ToNat(Prim.time());
+        let code = ((tNat % 900000) + 100000).toText();
+        let now : Int = tNat;
+        userRecords.add(userId, {
+          id = u.id; name = u.name; institution = u.institution; email = u.email;
+          purpose = u.purpose; registeredAt = u.registeredAt;
+          status = "approved"; accessCode = ?code;
+          codeGeneratedAt = ?now; approvedAt = ?now;
+        });
+        ?code;
+      };
+    };
+  };
+
+  // Anyone can verify a code by email
+  public query func verifyUserCode(email : Text, code : Text) : async ?Text {
+    for (u in userRecords.values()) {
+      if (u.email == email) {
+        switch (u.accessCode) {
+          case (?c) {
+            if (c == code and u.status == "approved") {
+              switch (u.codeGeneratedAt) {
+                case (?genAt) {
+                  let now : Int = Prim.nat64ToNat(Prim.time());
+                  let thirtyDays : Int = 30 * 24 * 60 * 60 * 1_000_000_000;
+                  if (now - genAt < thirtyDays) {
+                    return ?u.id;
+                  };
+                };
+                case (null) {};
+              };
+            };
+          };
+          case (null) {};
+        };
+      };
+    };
+    null;
+  };
+
 }

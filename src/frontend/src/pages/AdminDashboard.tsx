@@ -26,16 +26,12 @@ import {
   Users,
   XCircle,
 } from "lucide-react";
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
+import { useActor } from "../hooks/useActor";
 import {
   type UserRegistration,
-  approveUser,
-  generateCodeForUser,
-  getAllUsers,
   isAdminAuthed,
-  revokeUser,
-  saveAllUsers,
   setAdminAuthed,
 } from "../utils/accessControl";
 
@@ -232,48 +228,89 @@ function UserCard({
   const [generatedCode, setGeneratedCode] = useState("");
   const [showCodeModal, setShowCodeModal] = useState(false);
   const [localUser, setLocalUser] = useState(user);
+  const { actor } = useActor();
 
   const codeExpiry = localUser.codeGeneratedAt
     ? new Date(localUser.codeGeneratedAt + 30 * 24 * 60 * 60 * 1000)
     : null;
   const isCodeExpired = codeExpiry ? codeExpiry < new Date() : false;
 
-  const handleApprove = () => {
-    approveUser(localUser.id);
-    const updated = getAllUsers().find((u) => u.id === localUser.id);
-    if (updated) setLocalUser(updated);
-    onRefresh();
-    toast.success(`${localUser.name} approved`);
-  };
-
-  const handleRevoke = () => {
-    revokeUser(localUser.id);
-    const updated = getAllUsers().find((u) => u.id === localUser.id);
-    if (updated) setLocalUser(updated);
-    onRefresh();
-    toast.success(`${localUser.name}'s access revoked`);
-  };
-
-  const handleReactivate = () => {
-    const users = getAllUsers();
-    const idx = users.findIndex((u) => u.id === localUser.id);
-    if (idx >= 0) {
-      users[idx].status = "approved";
-      saveAllUsers(users);
-      const updated = users[idx];
-      setLocalUser(updated);
+  const handleApprove = async () => {
+    if (!actor) return;
+    try {
+      await (actor as any).adminApproveUser(
+        localUser.id,
+        "AYURNEXIS-ADMIN-TOKEN-2026",
+      );
+      setLocalUser((u) => ({
+        ...u,
+        status: "approved" as const,
+        approvedAt: Date.now(),
+      }));
+      onRefresh();
+      toast.success(`${localUser.name} approved`);
+    } catch {
+      toast.error("Failed to approve user");
     }
-    onRefresh();
-    toast.success(`${localUser.name} reactivated`);
   };
 
-  const handleGenerateCode = () => {
-    const code = generateCodeForUser(localUser.id);
-    const updated = getAllUsers().find((u) => u.id === localUser.id);
-    if (updated) setLocalUser(updated);
-    setGeneratedCode(code);
-    setShowCodeModal(true);
-    onRefresh();
+  const handleRevoke = async () => {
+    if (!actor) return;
+    try {
+      await (actor as any).adminRevokeUser(
+        localUser.id,
+        "AYURNEXIS-ADMIN-TOKEN-2026",
+      );
+      setLocalUser((u) => ({
+        ...u,
+        status: "revoked" as const,
+        accessCode: undefined,
+      }));
+      onRefresh();
+      toast.success(`${localUser.name}'s access revoked`);
+    } catch {
+      toast.error("Failed to revoke user");
+    }
+  };
+
+  const handleReactivate = async () => {
+    if (!actor) return;
+    try {
+      await (actor as any).adminApproveUser(
+        localUser.id,
+        "AYURNEXIS-ADMIN-TOKEN-2026",
+      );
+      setLocalUser((u) => ({ ...u, status: "approved" as const }));
+      onRefresh();
+      toast.success(`${localUser.name} reactivated`);
+    } catch {
+      toast.error("Failed to reactivate user");
+    }
+  };
+
+  const handleGenerateCode = async () => {
+    if (!actor) return;
+    try {
+      const result = await (actor as any).adminGenerateCode(
+        localUser.id,
+        "AYURNEXIS-ADMIN-TOKEN-2026",
+      );
+      if (result.__kind__ === "Some") {
+        const code = result.value;
+        setLocalUser((u) => ({
+          ...u,
+          accessCode: code,
+          codeGeneratedAt: Date.now(),
+        }));
+        setGeneratedCode(code);
+        setShowCodeModal(true);
+        onRefresh();
+      } else {
+        toast.error("Failed to generate code");
+      }
+    } catch {
+      toast.error("Failed to generate code");
+    }
   };
 
   const statusBadge = {
@@ -536,13 +573,60 @@ function UserCard({
 
 export function AdminDashboard() {
   const [authed, setAuthed] = useState(isAdminAuthed);
-  const [users, setUsers] = useState<UserRegistration[]>(() => getAllUsers());
+  const [users, setUsers] = useState<UserRegistration[]>([]);
+  const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
   const [activeFilter, setActiveFilter] = useState<
     "all" | "pending" | "approved" | "revoked"
   >("all");
+  const { actor, isFetching } = useActor();
 
-  const refreshUsers = () => setUsers(getAllUsers());
+  const refreshUsers = useCallback(async () => {
+    if (!actor) {
+      toast.error("Backend is connecting, please wait and try again.");
+      return;
+    }
+    if (isFetching) return;
+    setLoading(true);
+    try {
+      const records = await (actor as any).getAccessRequests(
+        "AYURNEXIS-ADMIN-TOKEN-2026",
+      );
+      const mapped: UserRegistration[] = records.map((r) => ({
+        id: r.id,
+        name: r.name,
+        institution: r.institution,
+        email: r.email,
+        purpose: r.purpose,
+        registeredAt: Number(r.registeredAt),
+        status: r.status as "pending" | "approved" | "revoked",
+        accessCode:
+          r.accessCode.__kind__ === "Some" ? r.accessCode.value : undefined,
+        codeGeneratedAt:
+          r.codeGeneratedAt.__kind__ === "Some"
+            ? Number(r.codeGeneratedAt.value)
+            : undefined,
+        approvedAt:
+          r.approvedAt.__kind__ === "Some"
+            ? Number(r.approvedAt.value)
+            : undefined,
+        activityLog: [],
+        claimedFormulations: [],
+      }));
+      setUsers(mapped);
+    } catch (err) {
+      console.error("Failed to load users from backend:", err);
+      toast.error("Failed to load users from backend");
+    } finally {
+      setLoading(false);
+    }
+  }, [actor, isFetching]);
+
+  useEffect(() => {
+    if (!authed) return;
+    if (!actor || isFetching) return;
+    refreshUsers();
+  }, [authed, actor, isFetching, refreshUsers]);
 
   const handleLogout = () => {
     setAdminAuthed(false);
@@ -654,6 +738,18 @@ export function AdminDashboard() {
           >
             <LogOut size={12} />
             <span className="hidden sm:inline">Logout</span>
+          </button>
+          <button
+            type="button"
+            onClick={refreshUsers}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-colors hover:bg-blue-50"
+            style={{
+              color: "oklch(0.44 0.14 240)",
+              border: "1px solid oklch(0.54 0.14 240 / 0.3)",
+            }}
+          >
+            <RefreshCw size={12} className={loading ? "animate-spin" : ""} />
+            <span className="hidden sm:inline">Refresh</span>
           </button>
         </div>
       </header>

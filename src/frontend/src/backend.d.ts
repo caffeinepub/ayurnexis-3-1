@@ -98,6 +98,19 @@ export interface QualityOverview {
   highRisk: bigint;
 }
 
+export interface UserRecord {
+  id: string;
+  name: string;
+  institution: string;
+  email: string;
+  purpose: string;
+  registeredAt: bigint;
+  status: string;
+  accessCode: Option<string>;
+  codeGeneratedAt: Option<bigint>;
+  approvedAt: Option<bigint>;
+}
+
 export interface backendInterface {
   // Auth
   _initializeAccessControlWithSecret(userSecret: string): Promise<void>;
@@ -131,4 +144,12 @@ export interface backendInterface {
 
   // Seed
   seedDemoData(): Promise<void>;
+
+  // User Access Requests
+  submitAccessRequest(id: string, name: string, institution: string, email: string, purpose: string, registeredAt: bigint): Promise<boolean>;
+  getAccessRequests(adminToken: string): Promise<UserRecord[]>;
+  adminApproveUser(userId: string, adminToken: string): Promise<boolean>;
+  adminRevokeUser(userId: string, adminToken: string): Promise<boolean>;
+  adminGenerateCode(userId: string, adminToken: string): Promise<Option<string>>;
+  verifyUserCode(email: string, code: string): Promise<Option<string>>;
 }

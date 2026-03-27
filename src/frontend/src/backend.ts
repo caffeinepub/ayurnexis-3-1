@@ -89,10 +89,175 @@ export class ExternalBlob {
         return this;
     }
 }
+
+export type AppRole = { qaManager: null } | { labTechnician: null } | { admin: null };
+export type UserRole = { admin: null } | { user: null } | { guest: null };
+
+export interface Batch {
+    id: bigint;
+    batchId: string;
+    herbName: string;
+    supplier: string;
+    region: string;
+    dateReceived: string;
+    moisture: number;
+    ash: number;
+    extractiveValue: number;
+    heavyMetals: number;
+    microbialCount: number;
+    notes: string;
+    createdBy: Principal;
+}
+
+export interface BatchInput {
+    batchId: string;
+    herbName: string;
+    supplier: string;
+    region: string;
+    dateReceived: string;
+    moisture: number;
+    ash: number;
+    extractiveValue: number;
+    heavyMetals: number;
+    microbialCount: number;
+    notes: string;
+}
+
+export interface AnalysisResult {
+    batchId: string;
+    herbName: string;
+    supplier: string;
+    region: string;
+    dateReceived: string;
+    qualityScore: number;
+    status: string;
+    probability: number;
+    anomaly: boolean;
+    anomalyDetails: string;
+    moistureOk: boolean;
+    ashOk: boolean;
+    extractiveOk: boolean;
+    heavyMetalsOk: boolean;
+    microbialOk: boolean;
+    timestamp: bigint;
+}
+
+export interface DashboardStats {
+    totalBatches: bigint;
+    passCount: bigint;
+    failCount: bigint;
+    passRate: number;
+    openDeviations: bigint;
+    avgQualityScore: number;
+}
+
+export interface ScoreTrend {
+    batchId: string;
+    qualityScore: number;
+    timestamp: bigint;
+}
+
+export interface SupplierStats {
+    supplier: string;
+    passRate: number;
+    avgScore: number;
+    totalBatches: bigint;
+}
+
+export interface RiskBatch {
+    batchId: string;
+    herbName: string;
+    supplier: string;
+    qualityScore: number;
+    riskLevel: string;
+}
+
+export interface QualityOverview {
+    total: bigint;
+    passed: bigint;
+    failed: bigint;
+    avgScore: number;
+    highRisk: bigint;
+}
+
+export interface UserRecord {
+    id: string;
+    name: string;
+    institution: string;
+    email: string;
+    purpose: string;
+    registeredAt: bigint;
+    status: string;
+    accessCode: Option<string>;
+    codeGeneratedAt: Option<bigint>;
+    approvedAt: Option<bigint>;
+}
+
 export interface backendInterface {
+    // Auth
+    _initializeAccessControlWithSecret(userSecret: string): Promise<void>;
+    getCallerUserRole(): Promise<UserRole>;
+    assignCallerUserRole(user: Principal, role: UserRole): Promise<void>;
+    isCallerAdmin(): Promise<boolean>;
+    setAppRole(user: Principal, role: AppRole): Promise<void>;
+    getMyAppRole(): Promise<Option<AppRole>>;
+    // Batch CRUD
+    createBatch(input: BatchInput): Promise<bigint>;
+    getBatch(id: bigint): Promise<Option<Batch>>;
+    getAllBatches(): Promise<Batch[]>;
+    updateBatch(id: bigint, input: BatchInput): Promise<boolean>;
+    deleteBatch(id: bigint): Promise<boolean>;
+    // Analysis
+    analyzeBatch(id: bigint): Promise<Option<AnalysisResult>>;
+    getAnalysis(batchId: string): Promise<Option<AnalysisResult>>;
+    getAllAnalyses(): Promise<AnalysisResult[]>;
+    // Dashboard
+    getDashboardStats(): Promise<DashboardStats>;
+    getScoreTrends(): Promise<ScoreTrend[]>;
+    getSupplierStats(): Promise<SupplierStats[]>;
+    getRiskAssessment(): Promise<RiskBatch[]>;
+    // Reports
+    getQualityOverview(): Promise<QualityOverview>;
+    getDeviationReport(): Promise<AnalysisResult[]>;
+    // Seed
+    seedDemoData(): Promise<void>;
+    // User Access Requests
+    submitAccessRequest(id: string, name: string, institution: string, email: string, purpose: string, registeredAt: bigint): Promise<boolean>;
+    getAccessRequests(adminToken: string): Promise<UserRecord[]>;
+    adminApproveUser(userId: string, adminToken: string): Promise<boolean>;
+    adminRevokeUser(userId: string, adminToken: string): Promise<boolean>;
+    adminGenerateCode(userId: string, adminToken: string): Promise<Option<string>>;
+    verifyUserCode(email: string, code: string): Promise<Option<string>>;
 }
 export class Backend implements backendInterface {
     constructor(private actor: ActorSubclass<_SERVICE>, private _uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, private _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, private processError?: (error: unknown) => never){}
+    async _initializeAccessControlWithSecret(userSecret: string): Promise<void> { return this.actor._initializeAccessControlWithSecret(userSecret); }
+    async getCallerUserRole(): Promise<UserRole> { return this.actor.getCallerUserRole() as any; }
+    async assignCallerUserRole(user: Principal, role: UserRole): Promise<void> { return this.actor.assignCallerUserRole(user, role as any); }
+    async isCallerAdmin(): Promise<boolean> { return this.actor.isCallerAdmin(); }
+    async setAppRole(user: Principal, role: AppRole): Promise<void> { return this.actor.setAppRole(user, role as any); }
+    async getMyAppRole(): Promise<Option<AppRole>> { const r = await this.actor.getMyAppRole(); return r.length > 0 ? some(r[0] as any) : none(); }
+    async createBatch(input: BatchInput): Promise<bigint> { return this.actor.createBatch(input as any); }
+    async getBatch(id: bigint): Promise<Option<Batch>> { const r = await this.actor.getBatch(id); return r.length > 0 ? some(r[0] as any) : none(); }
+    async getAllBatches(): Promise<Batch[]> { return this.actor.getAllBatches() as any; }
+    async updateBatch(id: bigint, input: BatchInput): Promise<boolean> { return this.actor.updateBatch(id, input as any); }
+    async deleteBatch(id: bigint): Promise<boolean> { return this.actor.deleteBatch(id); }
+    async analyzeBatch(id: bigint): Promise<Option<AnalysisResult>> { const r = await this.actor.analyzeBatch(id); return r.length > 0 ? some(r[0] as any) : none(); }
+    async getAnalysis(batchId: string): Promise<Option<AnalysisResult>> { const r = await this.actor.getAnalysis(batchId); return r.length > 0 ? some(r[0] as any) : none(); }
+    async getAllAnalyses(): Promise<AnalysisResult[]> { return this.actor.getAllAnalyses() as any; }
+    async getDashboardStats(): Promise<DashboardStats> { return this.actor.getDashboardStats() as any; }
+    async getScoreTrends(): Promise<ScoreTrend[]> { return this.actor.getScoreTrends() as any; }
+    async getSupplierStats(): Promise<SupplierStats[]> { return this.actor.getSupplierStats() as any; }
+    async getRiskAssessment(): Promise<RiskBatch[]> { return this.actor.getRiskAssessment() as any; }
+    async getQualityOverview(): Promise<QualityOverview> { return this.actor.getQualityOverview() as any; }
+    async getDeviationReport(): Promise<AnalysisResult[]> { return this.actor.getDeviationReport() as any; }
+    async seedDemoData(): Promise<void> { return this.actor.seedDemoData(); }
+    async submitAccessRequest(id: string, name: string, institution: string, email: string, purpose: string, registeredAt: bigint): Promise<boolean> { return this.actor.submitAccessRequest(id, name, institution, email, purpose, registeredAt); }
+    async getAccessRequests(adminToken: string): Promise<UserRecord[]> { return this.actor.getAccessRequests(adminToken) as any; }
+    async adminApproveUser(userId: string, adminToken: string): Promise<boolean> { return this.actor.adminApproveUser(userId, adminToken); }
+    async adminRevokeUser(userId: string, adminToken: string): Promise<boolean> { return this.actor.adminRevokeUser(userId, adminToken); }
+    async adminGenerateCode(userId: string, adminToken: string): Promise<Option<string>> { const r = await this.actor.adminGenerateCode(userId, adminToken); return r.length > 0 ? some(r[0] as string) : none(); }
+    async verifyUserCode(email: string, code: string): Promise<Option<string>> { const r = await this.actor.verifyUserCode(email, code); return r.length > 0 ? some(r[0] as string) : none(); }
 }
 export interface CreateActorOptions {
     agent?: Agent;

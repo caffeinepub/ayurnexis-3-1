@@ -12,13 +12,12 @@ import { Leaf, Lock, Shield, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { useActor } from "../hooks/useActor";
 import {
   getCurrentAccessLevel,
   getCurrentUser,
-  registerUser,
   setAccessLevel,
   setAdminAuthed,
-  verifyAccessCodeByEmail,
 } from "../utils/accessControl";
 
 interface AccessGateProps {
@@ -47,6 +46,7 @@ export function AccessGate({ children }: AccessGateProps) {
   const [codeValue, setCodeValue] = useState("");
   const [codeError, setCodeError] = useState("");
   const codeInputs = useRef<(HTMLInputElement | null)[]>([]);
+  const { actor, isFetching: actorLoading } = useActor();
 
   useEffect(() => {
     // Sync access level on mount
@@ -63,23 +63,58 @@ export function AccessGate({ children }: AccessGateProps) {
       toast.error("Please fill in all fields");
       return;
     }
-    setRegLoading(true);
-    setTimeout(() => {
-      registerUser({
-        name: regName.trim(),
-        institution: regInstitution.trim(),
-        email: regEmail.trim(),
-        purpose: regPurpose.trim(),
-      });
-      setAccessLevelState("readonly");
-      setRegLoading(false);
-      toast.success(
-        "Registration submitted! You can now browse in read-only mode. Contact admin for your access code.",
+    if (!actor) {
+      toast.error(
+        "Backend is still connecting. Please wait a moment and try again.",
       );
-    }, 400);
+      return;
+    }
+    setRegLoading(true);
+    try {
+      let id = `user_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+      let success = await (actor as any).submitAccessRequest(
+        id,
+        regName.trim(),
+        regInstitution.trim(),
+        regEmail.trim(),
+        regPurpose.trim(),
+        BigInt(Date.now()),
+      );
+      // Retry once with new ID if duplicate
+      if (!success) {
+        id = `user_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+        success = await (actor as any).submitAccessRequest(
+          id,
+          regName.trim(),
+          regInstitution.trim(),
+          regEmail.trim(),
+          regPurpose.trim(),
+          BigInt(Date.now()),
+        );
+      }
+      if (success) {
+        localStorage.setItem("ayurnexis_current_user_id", id);
+        localStorage.setItem("ayurnexis_access_level", "readonly");
+        setAccessLevelState("readonly");
+        toast.success(
+          "Registration submitted! You can now browse in read-only mode. Contact admin for your access code.",
+        );
+      } else {
+        toast.error(
+          "Your email may already be registered. Please contact admin for an access code.",
+        );
+      }
+    } catch (err) {
+      console.error("Registration failed:", err);
+      toast.error(
+        "Failed to submit registration. Please check your connection and try again.",
+      );
+    } finally {
+      setRegLoading(false);
+    }
   };
 
-  const handleCodeEntry = () => {
+  const handleCodeEntry = async () => {
     if (codeValue.length !== 6) {
       setCodeError("Please enter a 6-digit code");
       return;
@@ -88,16 +123,29 @@ export function AccessGate({ children }: AccessGateProps) {
       setCodeError("Please enter your registered email");
       return;
     }
-    const result = verifyAccessCodeByEmail(codeEmail.trim(), codeValue);
-    if (result.success) {
-      setAccessLevel("full");
-      setAccessLevelState("full");
-      setShowCodeDialog(false);
-      toast.success("Full access granted! Welcome to AyurNexis 3.1");
-    } else {
-      setCodeError(
-        "Invalid or expired code. Please check with your administrator.",
+    if (!actor) {
+      setCodeError("Connecting to backend, please try again.");
+      return;
+    }
+    try {
+      const result = await (actor as any).verifyUserCode(
+        codeEmail.trim(),
+        codeValue,
       );
+      if (result.__kind__ === "Some") {
+        localStorage.setItem("ayurnexis_current_user_id", result.value);
+        localStorage.setItem("ayurnexis_access_level", "full");
+        setAccessLevel("full");
+        setAccessLevelState("full");
+        setShowCodeDialog(false);
+        toast.success("Full access granted! Welcome to AyurNexis 3.1");
+      } else {
+        setCodeError(
+          "Invalid or expired code. Please check with your administrator.",
+        );
+      }
+    } catch {
+      setCodeError("Failed to verify code. Please try again.");
     }
   };
 
@@ -248,10 +296,14 @@ export function AccessGate({ children }: AccessGateProps) {
               <Button
                 data-ocid="access.register.primary_button"
                 className="w-full bg-primary text-primary-foreground font-semibold hover:opacity-90 mt-1"
-                disabled={regLoading}
+                disabled={regLoading || actorLoading}
                 onClick={handleRegister}
               >
-                {regLoading ? "Submitting…" : "Request Access"}
+                {actorLoading
+                  ? "Connecting…"
+                  : regLoading
+                    ? "Submitting…"
+                    : "Request Access"}
               </Button>
             </div>
           </div>
