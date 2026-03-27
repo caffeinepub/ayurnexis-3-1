@@ -295,8 +295,14 @@ function UserCard({
         localUser.id,
         "AYURNEXIS-ADMIN-TOKEN-2026",
       );
-      if (result.__kind__ === "Some") {
-        const code = result.value;
+      // Handle both Candid array format and Option object format
+      let code: string | undefined;
+      if (Array.isArray(result)) {
+        code = result.length > 0 ? String(result[0]) : undefined;
+      } else if (result?.__kind__ === "Some") {
+        code = result.value;
+      }
+      if (code) {
         setLocalUser((u) => ({
           ...u,
           accessCode: code,
@@ -582,17 +588,28 @@ export function AdminDashboard() {
   const { actor, isFetching } = useActor();
 
   const refreshUsers = useCallback(async () => {
-    if (!actor) {
-      toast.error("Backend is connecting, please wait and try again.");
-      return;
-    }
+    if (!actor) return; // silent - actor not ready yet, effect will retry
     if (isFetching) return;
     setLoading(true);
     try {
       const records = await (actor as any).getAccessRequests(
         "AYURNEXIS-ADMIN-TOKEN-2026",
       );
-      const mapped: UserRegistration[] = records.map((r) => ({
+      const getOptStr = (v: unknown): string | undefined => {
+        if (!v) return undefined;
+        if (Array.isArray(v)) return v.length > 0 ? String(v[0]) : undefined;
+        const opt = v as { __kind__?: string; value?: string };
+        if (opt?.__kind__ === "Some") return opt.value;
+        return undefined;
+      };
+      const getOptNum = (v: unknown): number | undefined => {
+        if (!v) return undefined;
+        if (Array.isArray(v)) return v.length > 0 ? Number(v[0]) : undefined;
+        const opt = v as { __kind__?: string; value?: unknown };
+        if (opt?.__kind__ === "Some") return Number(opt.value);
+        return undefined;
+      };
+      const mapped: UserRegistration[] = (records as any[]).map((r) => ({
         id: r.id,
         name: r.name,
         institution: r.institution,
@@ -600,16 +617,9 @@ export function AdminDashboard() {
         purpose: r.purpose,
         registeredAt: Number(r.registeredAt),
         status: r.status as "pending" | "approved" | "revoked",
-        accessCode:
-          r.accessCode.__kind__ === "Some" ? r.accessCode.value : undefined,
-        codeGeneratedAt:
-          r.codeGeneratedAt.__kind__ === "Some"
-            ? Number(r.codeGeneratedAt.value)
-            : undefined,
-        approvedAt:
-          r.approvedAt.__kind__ === "Some"
-            ? Number(r.approvedAt.value)
-            : undefined,
+        accessCode: getOptStr(r.accessCode),
+        codeGeneratedAt: getOptNum(r.codeGeneratedAt),
+        approvedAt: getOptNum(r.approvedAt),
         activityLog: [],
         claimedFormulations: [],
       }));
