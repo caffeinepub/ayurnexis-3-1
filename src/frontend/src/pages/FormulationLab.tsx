@@ -20,8 +20,7 @@ import {
 } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
+// jspdf loaded dynamically in handleExport
 import {
   AlertTriangle,
   Beaker,
@@ -1402,6 +1401,15 @@ export function FormulationLab({
   async function handleExport() {
     setExporting(true);
     try {
+      // Load jsPDF dynamically (package not in lockfile, use CDN)
+      const _jsPDFMod = await (Function(
+        'return import("https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js")',
+      )() as Promise<any>);
+      const jsPDF = _jsPDFMod.default ?? _jsPDFMod.jsPDF;
+      const _autoTableMod = await (Function(
+        'return import("https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js")',
+      )() as Promise<any>);
+      const autoTable = _autoTableMod.default ?? _autoTableMod;
       const doc = new jsPDF({
         orientation: "portrait",
         unit: "mm",
@@ -3562,6 +3570,7 @@ export function FormulationLab({
                         "ayurnexis_formulations",
                         JSON.stringify(existing.slice(0, 100)),
                       );
+                      window.dispatchEvent(new Event("storage"));
                     } catch {
                       /* ignore */
                     }

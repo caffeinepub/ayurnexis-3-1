@@ -26,7 +26,7 @@ import {
   Users,
   XCircle,
 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useActor } from "../hooks/useActor";
 import {
@@ -585,25 +585,35 @@ export function AdminDashboard() {
   const [activeFilter, setActiveFilter] = useState<
     "all" | "pending" | "approved" | "revoked"
   >("all");
-  const { actor, isFetching } = useActor();
+  const { actor } = useActor();
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const actorRef = useRef<any>(null);
 
-  const refreshUsers = useCallback(async () => {
-    if (!actor) return; // silent - actor not ready yet, effect will retry
-    if (isFetching) return;
+  useEffect(() => {
+    actorRef.current = actor;
+  }, [actor]);
+
+  const refreshUsers = async () => {
+    const a = actorRef.current;
+    if (!a) {
+      setLoadError("Backend not connected. Please wait and retry.");
+      return;
+    }
     setLoading(true);
+    setLoadError(null);
     try {
-      const records = await (actor as any).getAccessRequests(
+      const records = await (a as any).getAccessRequests(
         "AYURNEXIS-ADMIN-TOKEN-2026",
       );
       const getOptStr = (v: unknown): string | undefined => {
-        if (!v) return undefined;
+        if (v === null || v === undefined) return undefined;
         if (Array.isArray(v)) return v.length > 0 ? String(v[0]) : undefined;
         const opt = v as { __kind__?: string; value?: string };
         if (opt?.__kind__ === "Some") return opt.value;
         return undefined;
       };
       const getOptNum = (v: unknown): number | undefined => {
-        if (!v) return undefined;
+        if (v === null || v === undefined) return undefined;
         if (Array.isArray(v)) return v.length > 0 ? Number(v[0]) : undefined;
         const opt = v as { __kind__?: string; value?: unknown };
         if (opt?.__kind__ === "Some") return Number(opt.value);
@@ -626,17 +636,20 @@ export function AdminDashboard() {
       setUsers(mapped);
     } catch (err) {
       console.error("Failed to load users from backend:", err);
-      toast.error("Failed to load users from backend");
+      setLoadError("Could not reach backend. Check your connection and retry.");
     } finally {
       setLoading(false);
     }
-  }, [actor, isFetching]);
+  };
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: refreshUsers uses actorRef (stable ref, not reactive)
   useEffect(() => {
-    if (!authed) return;
-    if (!actor || isFetching) return;
-    refreshUsers();
-  }, [authed, actor, isFetching, refreshUsers]);
+    if (!authed || !actor) return;
+    const timer = setTimeout(() => {
+      refreshUsers();
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [authed, actor]);
 
   const handleLogout = () => {
     setAdminAuthed(false);
@@ -794,6 +807,29 @@ export function AdminDashboard() {
         </div>
 
         <Separator />
+
+        {/* Load error banner */}
+        {loadError && (
+          <div
+            className="mb-2 p-3 rounded-lg flex items-center justify-between gap-3"
+            style={{
+              background: "oklch(0.88 0.10 78 / 0.15)",
+              border: "1px solid oklch(0.72 0.13 78 / 0.3)",
+            }}
+          >
+            <span className="text-sm" style={{ color: "oklch(0.40 0.10 78)" }}>
+              {loadError}
+            </span>
+            <button
+              type="button"
+              onClick={refreshUsers}
+              className="text-xs font-semibold px-3 py-1 rounded-lg"
+              style={{ background: "oklch(0.68 0.13 78)", color: "white" }}
+            >
+              Retry
+            </button>
+          </div>
+        )}
 
         {/* Search + Filter */}
         <div className="flex flex-col sm:flex-row gap-3">

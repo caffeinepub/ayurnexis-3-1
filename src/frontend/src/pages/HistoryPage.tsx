@@ -25,7 +25,7 @@ import {
   TrendingUp,
 } from "lucide-react";
 import { motion } from "motion/react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   useAllAnalyses,
   useAllAnalysesMerged,
@@ -118,13 +118,27 @@ export function HistoryPage() {
   const [search, setSearch] = useState("");
   const [activeTab, setActiveTab] = useState("all");
 
-  const formulations: SavedFormulation[] = useMemo(() => {
+  const [formulations, setFormulations] = useState<SavedFormulation[]>(() => {
     try {
       const raw = localStorage.getItem("ayurnexis_formulations");
       return raw ? JSON.parse(raw) : [];
     } catch {
       return [];
     }
+  });
+
+  useEffect(() => {
+    const load = () => {
+      try {
+        const raw = localStorage.getItem("ayurnexis_formulations");
+        setFormulations(raw ? JSON.parse(raw) : []);
+      } catch {
+        setFormulations([]);
+      }
+    };
+    load();
+    window.addEventListener("storage", load);
+    return () => window.removeEventListener("storage", load);
   }, []);
 
   const q = search.toLowerCase();

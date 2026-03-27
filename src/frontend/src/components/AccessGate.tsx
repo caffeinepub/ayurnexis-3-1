@@ -95,6 +95,26 @@ export function AccessGate({ children }: AccessGateProps) {
       if (success) {
         localStorage.setItem("ayurnexis_current_user_id", id);
         localStorage.setItem("ayurnexis_access_level", "readonly");
+        try {
+          const pending = JSON.parse(
+            localStorage.getItem("ayurnexis_pending_requests") || "[]",
+          );
+          pending.push({
+            id,
+            name: regName.trim(),
+            institution: regInstitution.trim(),
+            email: regEmail.trim(),
+            purpose: regPurpose.trim(),
+            registeredAt: Date.now(),
+            status: "pending",
+          });
+          localStorage.setItem(
+            "ayurnexis_pending_requests",
+            JSON.stringify(pending),
+          );
+        } catch {
+          /* ignore */
+        }
         setAccessLevelState("readonly");
         toast.success(
           "Registration submitted! You can now browse in read-only mode. Contact admin for your access code.",
