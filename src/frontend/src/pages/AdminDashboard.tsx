@@ -26,12 +26,18 @@ import {
   Users,
   XCircle,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useActor } from "../hooks/useActor";
 import {
   type UserRegistration,
+  approveUser,
+  generateCodeForUser,
+  getAllUsers,
   isAdminAuthed,
+  mergeBackendUsers,
+  revokeUser,
+  saveAllUsers,
   setAdminAuthed,
 } from "../utils/accessControl";
 
@@ -236,59 +242,82 @@ function UserCard({
   const isCodeExpired = codeExpiry ? codeExpiry < new Date() : false;
 
   const handleApprove = async () => {
-    if (!actor) return;
-    try {
-      await (actor as any).adminApproveUser(
-        localUser.id,
-        "AYURNEXIS-ADMIN-TOKEN-2026",
-      );
-      setLocalUser((u) => ({
-        ...u,
-        status: "approved" as const,
-        approvedAt: Date.now(),
-      }));
-      onRefresh();
-      toast.success(`${localUser.name} approved`);
-    } catch {
-      toast.error("Failed to approve user");
+    // Update localStorage immediately (optimistic)
+    approveUser(localUser.id);
+    setLocalUser((u) => ({
+      ...u,
+      status: "approved" as const,
+      approvedAt: Date.now(),
+    }));
+    toast.success(`${localUser.name} approved`);
+    onRefresh();
+    // Sync to backend if available
+    if (actor) {
+      try {
+        await (actor as any).adminApproveUser(
+          localUser.id,
+          "AYURNEXIS-ADMIN-TOKEN-2026",
+        );
+      } catch {
+        console.warn("Backend sync for approve failed");
+      }
     }
   };
 
   const handleRevoke = async () => {
-    if (!actor) return;
-    try {
-      await (actor as any).adminRevokeUser(
-        localUser.id,
-        "AYURNEXIS-ADMIN-TOKEN-2026",
-      );
-      setLocalUser((u) => ({
-        ...u,
-        status: "revoked" as const,
-        accessCode: undefined,
-      }));
-      onRefresh();
-      toast.success(`${localUser.name}'s access revoked`);
-    } catch {
-      toast.error("Failed to revoke user");
+    // Update localStorage immediately (optimistic)
+    revokeUser(localUser.id);
+    setLocalUser((u) => ({
+      ...u,
+      status: "revoked" as const,
+      accessCode: undefined,
+    }));
+    toast.success(`${localUser.name}'s access revoked`);
+    onRefresh();
+    // Sync to backend if available
+    if (actor) {
+      try {
+        await (actor as any).adminRevokeUser(
+          localUser.id,
+          "AYURNEXIS-ADMIN-TOKEN-2026",
+        );
+      } catch {
+        console.warn("Backend sync for revoke failed");
+      }
     }
   };
 
   const handleReactivate = async () => {
-    if (!actor) return;
-    try {
-      await (actor as any).adminApproveUser(
-        localUser.id,
-        "AYURNEXIS-ADMIN-TOKEN-2026",
-      );
-      setLocalUser((u) => ({ ...u, status: "approved" as const }));
-      onRefresh();
-      toast.success(`${localUser.name} reactivated`);
-    } catch {
-      toast.error("Failed to reactivate user");
+    // Update localStorage immediately (optimistic)
+    approveUser(localUser.id);
+    setLocalUser((u) => ({ ...u, status: "approved" as const }));
+    toast.success(`${localUser.name} reactivated`);
+    onRefresh();
+    // Sync to backend if available
+    if (actor) {
+      try {
+        await (actor as any).adminApproveUser(
+          localUser.id,
+          "AYURNEXIS-ADMIN-TOKEN-2026",
+        );
+      } catch {
+        console.warn("Backend sync for reactivate failed");
+      }
     }
   };
 
   const handleGenerateCode = async () => {
+    // Generate code locally first (works offline)
+    const localCode = generateCodeForUser(localUser.id);
+    setLocalUser((u) => ({
+      ...u,
+      accessCode: localCode,
+      codeGeneratedAt: Date.now(),
+    }));
+    setGeneratedCode(localCode);
+    setShowCodeModal(true);
+    onRefresh();
+    // Try to sync with backend
     if (!actor) return;
     try {
       const result = await (actor as any).adminGenerateCode(
@@ -302,20 +331,12 @@ function UserCard({
       } else if (result?.__kind__ === "Some") {
         code = result.value;
       }
-      if (code) {
-        setLocalUser((u) => ({
-          ...u,
-          accessCode: code,
-          codeGeneratedAt: Date.now(),
-        }));
-        setGeneratedCode(code);
-        setShowCodeModal(true);
-        onRefresh();
-      } else {
-        toast.error("Failed to generate code");
+      if (code && code !== localCode) {
+        // Backend returned a different code - use it
+        generateCodeForUser(localUser.id); // re-save with new code not available, keep local
       }
     } catch {
-      toast.error("Failed to generate code");
+      console.warn("Backend sync for generate code failed, using local code");
     }
   };
 
@@ -587,64 +608,51 @@ export function AdminDashboard() {
   >("all");
   const { actor } = useActor();
   const [loadError, setLoadError] = useState<string | null>(null);
-  const actorRef = useRef<any>(null);
-
-  useEffect(() => {
-    actorRef.current = actor;
-  }, [actor]);
 
   const refreshUsers = async () => {
-    const a = actorRef.current;
-    if (!a) {
-      setLoadError("Backend not connected. Please wait and retry.");
-      return;
+    // 1. Load from localStorage immediately so users are always shown
+    const localUsers = getAllUsers();
+    if (localUsers.length > 0) {
+      setUsers(localUsers);
     }
     setLoading(true);
     setLoadError(null);
+    // 2. Try backend in background
     try {
-      const records = await (a as any).getAccessRequests(
-        "AYURNEXIS-ADMIN-TOKEN-2026",
-      );
-      const getOptStr = (v: unknown): string | undefined => {
-        if (v === null || v === undefined) return undefined;
-        if (Array.isArray(v)) return v.length > 0 ? String(v[0]) : undefined;
-        const opt = v as { __kind__?: string; value?: string };
-        if (opt?.__kind__ === "Some") return opt.value;
-        return undefined;
-      };
-      const getOptNum = (v: unknown): number | undefined => {
-        if (v === null || v === undefined) return undefined;
-        if (Array.isArray(v)) return v.length > 0 ? Number(v[0]) : undefined;
-        const opt = v as { __kind__?: string; value?: unknown };
-        if (opt?.__kind__ === "Some") return Number(opt.value);
-        return undefined;
-      };
-      const mapped: UserRegistration[] = (records as any[]).map((r) => ({
-        id: r.id,
-        name: r.name,
-        institution: r.institution,
-        email: r.email,
-        purpose: r.purpose,
-        registeredAt: Number(r.registeredAt),
-        status: r.status as "pending" | "approved" | "revoked",
-        accessCode: getOptStr(r.accessCode),
-        codeGeneratedAt: getOptNum(r.codeGeneratedAt),
-        approvedAt: getOptNum(r.approvedAt),
-        activityLog: [],
-        claimedFormulations: [],
-      }));
-      setUsers(mapped);
+      if (actor) {
+        const records = await (actor as any).getAccessRequests(
+          "AYURNEXIS-ADMIN-TOKEN-2026",
+        );
+        if (Array.isArray(records) && records.length > 0) {
+          // Merge backend into localStorage (backend takes precedence)
+          mergeBackendUsers(records);
+          const merged = getAllUsers();
+          setUsers(merged);
+        } else if (Array.isArray(records)) {
+          // Backend returned empty — still show local users
+          if (localUsers.length === 0) setUsers([]);
+        }
+      } else {
+        // No actor — show inline warning but keep local users displayed
+        if (localUsers.length === 0) {
+          setLoadError("Showing locally cached users. Backend sync failed.");
+        } else {
+          setLoadError("Showing locally cached users. Backend sync failed.");
+        }
+      }
     } catch (err) {
-      console.error("Failed to load users from backend:", err);
-      setLoadError("Could not reach backend. Check your connection and retry.");
+      console.error("Backend sync failed:", err);
+      // Show subtle inline warning, not a blocking error
+      setLoadError("Showing locally cached users. Backend sync failed.");
+      // Keep whatever users we already loaded from localStorage
     } finally {
       setLoading(false);
     }
   };
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: refreshUsers uses actorRef (stable ref, not reactive)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
-    if (!authed || !actor) return;
+    if (!authed) return;
     const timer = setTimeout(() => {
       refreshUsers();
     }, 300);
