@@ -17,6 +17,7 @@ import {
   Copy,
   Key,
   Leaf,
+  Loader2,
   LogOut,
   RefreshCw,
   Search,
@@ -242,7 +243,6 @@ function UserCard({
   const isCodeExpired = codeExpiry ? codeExpiry < new Date() : false;
 
   const handleApprove = async () => {
-    // Update localStorage immediately (optimistic)
     approveUser(localUser.id);
     setLocalUser((u) => ({
       ...u,
@@ -251,13 +251,9 @@ function UserCard({
     }));
     toast.success(`${localUser.name} approved`);
     onRefresh();
-    // Sync to backend if available
     if (actor) {
       try {
-        await (actor as any).adminApproveUser(
-          localUser.id,
-          "AYURNEXIS-ADMIN-TOKEN-2026",
-        );
+        await actor.adminApproveUser(localUser.id, ADMIN_PASSWORD);
       } catch {
         console.warn("Backend sync for approve failed");
       }
@@ -265,7 +261,6 @@ function UserCard({
   };
 
   const handleRevoke = async () => {
-    // Update localStorage immediately (optimistic)
     revokeUser(localUser.id);
     setLocalUser((u) => ({
       ...u,
@@ -274,13 +269,9 @@ function UserCard({
     }));
     toast.success(`${localUser.name}'s access revoked`);
     onRefresh();
-    // Sync to backend if available
     if (actor) {
       try {
-        await (actor as any).adminRevokeUser(
-          localUser.id,
-          "AYURNEXIS-ADMIN-TOKEN-2026",
-        );
+        await actor.adminRevokeUser(localUser.id, ADMIN_PASSWORD);
       } catch {
         console.warn("Backend sync for revoke failed");
       }
@@ -288,18 +279,13 @@ function UserCard({
   };
 
   const handleReactivate = async () => {
-    // Update localStorage immediately (optimistic)
     approveUser(localUser.id);
     setLocalUser((u) => ({ ...u, status: "approved" as const }));
     toast.success(`${localUser.name} reactivated`);
     onRefresh();
-    // Sync to backend if available
     if (actor) {
       try {
-        await (actor as any).adminApproveUser(
-          localUser.id,
-          "AYURNEXIS-ADMIN-TOKEN-2026",
-        );
+        await actor.adminApproveUser(localUser.id, ADMIN_PASSWORD);
       } catch {
         console.warn("Backend sync for reactivate failed");
       }
@@ -307,7 +293,6 @@ function UserCard({
   };
 
   const handleGenerateCode = async () => {
-    // Generate code locally first (works offline)
     const localCode = generateCodeForUser(localUser.id);
     setLocalUser((u) => ({
       ...u,
@@ -317,14 +302,12 @@ function UserCard({
     setGeneratedCode(localCode);
     setShowCodeModal(true);
     onRefresh();
-    // Try to sync with backend
     if (!actor) return;
     try {
-      const result = await (actor as any).adminGenerateCode(
+      const result = await actor.adminGenerateCode(
         localUser.id,
-        "AYURNEXIS-ADMIN-TOKEN-2026",
+        ADMIN_PASSWORD,
       );
-      // Handle both Candid array format and Option object format
       let code: string | undefined;
       if (Array.isArray(result)) {
         code = result.length > 0 ? String(result[0]) : undefined;
@@ -332,8 +315,7 @@ function UserCard({
         code = result.value;
       }
       if (code && code !== localCode) {
-        // Backend returned a different code - use it
-        generateCodeForUser(localUser.id); // re-save with new code not available, keep local
+        console.log("Backend returned different code, keeping local");
       }
     } catch {
       console.warn("Backend sync for generate code failed, using local code");
@@ -602,62 +584,66 @@ export function AdminDashboard() {
   const [authed, setAuthed] = useState(isAdminAuthed);
   const [users, setUsers] = useState<UserRegistration[]>([]);
   const [loading, setLoading] = useState(false);
+  const [backendSyncing, setBackendSyncing] = useState(false);
   const [search, setSearch] = useState("");
   const [activeFilter, setActiveFilter] = useState<
     "all" | "pending" | "approved" | "revoked"
   >("all");
-  const { actor } = useActor();
+  const { actor, isFetching } = useActor();
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  const refreshUsers = async () => {
-    // 1. Load from localStorage immediately so users are always shown
+  // Load localStorage users immediately on mount (synchronous, no backend needed)
+  useEffect(() => {
+    if (!authed) return;
     const localUsers = getAllUsers();
-    if (localUsers.length > 0) {
-      setUsers(localUsers);
-    }
-    setLoading(true);
+    setUsers(localUsers);
+  }, [authed]);
+
+  const refreshUsers = async () => {
+    // Always show localStorage users first
+    const localUsers = getAllUsers();
+    setUsers(localUsers);
     setLoadError(null);
-    // 2. Try backend in background
-    try {
-      if (actor) {
-        const records = await (actor as any).getAccessRequests(
-          "AYURNEXIS-ADMIN-TOKEN-2026",
-        );
-        if (Array.isArray(records) && records.length > 0) {
-          // Merge backend into localStorage (backend takes precedence)
-          mergeBackendUsers(records);
-          const merged = getAllUsers();
-          setUsers(merged);
-        } else if (Array.isArray(records)) {
-          // Backend returned empty — still show local users
-          if (localUsers.length === 0) setUsers([]);
-        }
+
+    if (!actor) {
+      if (isFetching) {
+        // Actor is still loading — not a failure, just waiting
+        setBackendSyncing(true);
       } else {
-        // No actor — show inline warning but keep local users displayed
-        if (localUsers.length === 0) {
-          setLoadError("Showing locally cached users. Backend sync failed.");
-        } else {
-          setLoadError("Showing locally cached users. Backend sync failed.");
-        }
+        // Actor finished loading but is still null — genuine failure
+        setLoadError("Could not reach backend. Showing locally cached users.");
+        setBackendSyncing(false);
       }
+      return;
+    }
+
+    // Actor is available — sync with backend
+    setBackendSyncing(true);
+    setLoading(true);
+    try {
+      const records = await actor.getAccessRequests(ADMIN_PASSWORD);
+      if (Array.isArray(records) && records.length > 0) {
+        mergeBackendUsers(records);
+        setUsers(getAllUsers());
+      }
+      // If backend returns empty but localStorage has users, keep localStorage users
+      setBackendSyncing(false);
+      setLoadError(null);
     } catch (err) {
       console.error("Backend sync failed:", err);
-      // Show subtle inline warning, not a blocking error
       setLoadError("Showing locally cached users. Backend sync failed.");
-      // Keep whatever users we already loaded from localStorage
+      setBackendSyncing(false);
     } finally {
       setLoading(false);
     }
   };
 
+  // Re-run when actor loads or fetching state changes
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     if (!authed) return;
-    const timer = setTimeout(() => {
-      refreshUsers();
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [authed, actor]);
+    refreshUsers();
+  }, [authed, actor, isFetching]);
 
   const handleLogout = () => {
     setAdminAuthed(false);
@@ -816,10 +802,25 @@ export function AdminDashboard() {
 
         <Separator />
 
-        {/* Load error banner */}
+        {/* Backend syncing indicator — subtle, not an error */}
+        {backendSyncing && !loadError && (
+          <div
+            className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs"
+            style={{
+              background: "oklch(0.55 0.14 200 / 0.08)",
+              border: "1px solid oklch(0.55 0.14 200 / 0.2)",
+              color: "oklch(0.40 0.10 200)",
+            }}
+          >
+            <Loader2 size={12} className="animate-spin" />
+            Syncing with backend…
+          </div>
+        )}
+
+        {/* Load error banner — only shown when actor is loaded and backend call threw */}
         {loadError && (
           <div
-            className="mb-2 p-3 rounded-lg flex items-center justify-between gap-3"
+            className="p-3 rounded-lg flex items-center justify-between gap-3"
             style={{
               background: "oklch(0.88 0.10 78 / 0.15)",
               border: "1px solid oklch(0.72 0.13 78 / 0.3)",
@@ -831,7 +832,7 @@ export function AdminDashboard() {
             <button
               type="button"
               onClick={refreshUsers}
-              className="text-xs font-semibold px-3 py-1 rounded-lg"
+              className="text-xs font-semibold px-3 py-1 rounded-lg flex-shrink-0"
               style={{ background: "oklch(0.68 0.13 78)", color: "white" }}
             >
               Retry
