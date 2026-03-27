@@ -20,7 +20,8 @@ import {
 } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-// jspdf loaded dynamically in handleExport
+import { jsPDF } from "jspdf";
+import autoTable from "jspdf-autotable";
 import {
   AlertTriangle,
   Award,
@@ -2180,10 +2181,6 @@ async function generateCertificatePDF(data: {
   certNum: string;
   date: string;
 }): Promise<void> {
-  const _jsPDFMod = await (Function(
-    'return import("https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js")',
-  )() as Promise<any>);
-  const jsPDF = _jsPDFMod.default ?? _jsPDFMod.jsPDF;
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
   const pageW = doc.internal.pageSize.getWidth();
 
@@ -2459,153 +2456,381 @@ async function generateLabelPDF(data: {
   overallScore: number;
   approved: boolean;
   date: string;
+  aiSummary?: string;
+  indications?: string;
+  contraindications?: string;
 }): Promise<void> {
-  const _jsPDFMod = await (Function(
-    'return import("https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js")',
-  )() as Promise<any>);
-  const jsPDF = _jsPDFMod.default ?? _jsPDFMod.jsPDF;
-  // Landscape label format
-  const doc = new jsPDF({
-    orientation: "landscape",
-    unit: "mm",
-    format: [148, 105],
-  });
-  const W = 148;
-  const H = 105;
+  // Full A4 professional drug label
+  const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+  const W = doc.internal.pageSize.getWidth();
+  const margin = 14;
+  let y = 0;
 
-  // White background
-  doc.setFillColor(255, 255, 255);
-  doc.rect(0, 0, W, H, "F");
-  // Outer green border
-  doc.setDrawColor(20, 83, 45);
-  doc.setLineWidth(1.5);
-  doc.rect(4, 4, W - 8, H - 8, "S");
-  // Inner thin border
-  doc.setLineWidth(0.4);
-  doc.rect(7, 7, W - 14, H - 14, "S");
-
-  // Header band
-  doc.setFillColor(20, 83, 45);
-  doc.rect(7, 7, W - 14, 20, "F");
-  // Product name
-  doc.setFontSize(14);
-  doc.setFont("helvetica", "bold");
-  doc.setTextColor(255, 255, 255);
+  const batchNum = `AN-${Date.now().toString(36).toUpperCase().slice(-8)}`;
   const prodName = (
     data.formulationName || `${data.dosageForm} Formulation`
   ).toUpperCase();
-  doc.text(
-    prodName.length > 35 ? `${prodName.slice(0, 35)}…` : prodName,
-    W / 2,
-    16,
-    { align: "center" },
-  );
+
+  // === PAGE BACKGROUND ===
+  doc.setFillColor(255, 255, 255);
+  doc.rect(0, 0, W, 297, "F");
+  // Subtle diagonal pattern
+  doc.setDrawColor(240, 248, 240);
+  doc.setLineWidth(0.2);
+  for (let i = -297; i < W + 297; i += 6) {
+    doc.line(i, 0, i + 297, 297);
+  }
+
+  // === OUTER BORDERS ===
+  doc.setDrawColor(20, 83, 45);
+  doc.setLineWidth(2);
+  doc.rect(5, 5, W - 10, 287, "S");
+  doc.setDrawColor(180, 130, 30);
+  doc.setLineWidth(0.7);
+  doc.rect(8, 8, W - 16, 281, "S");
+
+  // === HEADER BAND ===
+  doc.setFillColor(20, 83, 45);
+  doc.rect(8, 8, W - 16, 28, "F");
+
+  // Brand left
+  doc.setFontSize(8);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(255, 220, 100);
+  doc.text("AyurNexis 3.1", margin, 18);
+  doc.setFontSize(6);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(167, 243, 208);
+  doc.text("AI-Enabled QA Platform", margin, 24);
+
+  // Product name center
+  doc.setFontSize(13);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(255, 255, 255);
+  const nameShort =
+    prodName.length > 40 ? `${prodName.slice(0, 40)}…` : prodName;
+  doc.text(nameShort, W / 2, 20, { align: "center" });
   doc.setFontSize(7);
   doc.setFont("helvetica", "normal");
   doc.setTextColor(167, 243, 208);
-  doc.text("Manufactured by AyurNexis Formulation Lab", W / 2, 22, {
+  doc.text("Manufactured by AyurNexis Formulation Lab", W / 2, 28, {
     align: "center",
   });
 
-  // Dosage form badge
-  doc.setFillColor(255, 220, 100);
-  doc.rect(10, 30, 35, 7, "F");
-  doc.setFontSize(7.5);
+  // Rx symbol right
+  doc.setFontSize(16);
   doc.setFont("helvetica", "bold");
-  doc.setTextColor(80, 40, 0);
-  doc.text(data.dosageForm.toUpperCase(), 27.5, 35.5, { align: "center" });
+  doc.setTextColor(255, 220, 100);
+  doc.text("Rx", W - margin, 22, { align: "right" });
 
-  // Composition table
+  y = 42;
+
+  // === DOSAGE FORM + BATCH ROW ===
+  doc.setFillColor(240, 253, 244);
+  doc.setDrawColor(20, 83, 45);
+  doc.setLineWidth(0.3);
+  doc.rect(margin, y, W - margin * 2, 10, "FD");
   doc.setFontSize(8);
   doc.setFont("helvetica", "bold");
   doc.setTextColor(20, 83, 45);
-  doc.text("Composition:", 10, 44);
+  doc.text(`Dosage Form: ${data.dosageForm}`, margin + 3, y + 7);
+  doc.text(`Batch/Lot No: ${batchNum}`, W / 2, y + 7, { align: "center" });
+  doc.text(`Date: ${data.date}`, W - margin - 3, y + 7, { align: "right" });
+  y += 15;
+
+  // === COMPOSITION TABLE ===
+  doc.setFontSize(9);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(20, 83, 45);
+  doc.text("COMPOSITION", margin, y);
+  doc.setDrawColor(20, 83, 45);
+  doc.setLineWidth(0.4);
+  doc.line(margin, y + 1, W - margin, y + 1);
+  y += 5;
+
+  // Table header
   doc.setFillColor(20, 83, 45);
-  doc.rect(10, 45, W - 20, 5.5, "F");
-  doc.setFontSize(6.5);
+  doc.rect(margin, y, W - margin * 2, 6, "F");
+  doc.setFontSize(7);
   doc.setFont("helvetica", "bold");
   doc.setTextColor(255, 255, 255);
-  doc.text("Ingredient", 12, 49);
-  doc.text("Qty", 100, 49, { align: "right" });
-  doc.text("Unit", 118, 49, { align: "right" });
-  const maxRows = Math.min(data.ingredients.length, 6);
-  for (let i = 0; i < maxRows; i++) {
+  doc.text("Ingredient / Active Substance", margin + 2, y + 4.2);
+  doc.text("Qty", W - margin - 35, y + 4.2, { align: "right" });
+  doc.text("Unit", W - margin - 18, y + 4.2, { align: "right" });
+  doc.text("Role", W - margin - 2, y + 4.2, { align: "right" });
+  y += 6;
+
+  const maxIngRows = Math.min(data.ingredients.length, 12);
+  for (let i = 0; i < maxIngRows; i++) {
     const row = data.ingredients[i];
-    const ry = 50.5 + i * 6;
     if (i % 2 === 0) {
       doc.setFillColor(245, 252, 245);
-      doc.rect(10, ry, W - 20, 6, "F");
+      doc.rect(margin, y, W - margin * 2, 5.5, "F");
     }
     doc.setFontSize(6.5);
     doc.setFont("helvetica", "normal");
     doc.setTextColor(30, 30, 30);
-    doc.text(
-      row.name.length > 52 ? `${row.name.slice(0, 52)}…` : row.name,
-      12,
-      ry + 4.2,
-    );
-    doc.text(String(row.qty), 100, ry + 4.2, { align: "right" });
-    doc.text(row.unit, 118, ry + 4.2, { align: "right" });
+    const nm = row.name.length > 50 ? `${row.name.slice(0, 50)}…` : row.name;
+    doc.text(nm, margin + 2, y + 3.8);
+    doc.text(String(row.qty), W - margin - 35, y + 3.8, { align: "right" });
+    doc.text(row.unit, W - margin - 18, y + 3.8, { align: "right" });
+    y += 5.5;
   }
-  if (data.ingredients.length > 6) {
+  if (data.ingredients.length > 12) {
     doc.setFontSize(6);
     doc.setTextColor(100, 100, 100);
-    doc.text(`+${data.ingredients.length - 6} more`, 12, 50.5 + 6 * 6 + 3);
+    doc.text(
+      `(+${data.ingredients.length - 12} additional excipients)`,
+      margin + 2,
+      y + 3,
+    );
+    y += 6;
+  }
+  y += 4;
+
+  // === PHARMACOLOGICAL EFFECTS ===
+  if (data.aiSummary && data.aiSummary.length > 10) {
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(20, 83, 45);
+    doc.text("PHARMACOLOGICAL EFFECTS", margin, y);
+    doc.setLineWidth(0.4);
+    doc.line(margin, y + 1, W - margin, y + 1);
+    y += 5;
+    doc.setFontSize(7);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(40, 40, 40);
+    const pharmLines = doc.splitTextToSize(data.aiSummary, W - margin * 2 - 2);
+    const maxLines = Math.min(pharmLines.length, 8);
+    doc.text(pharmLines.slice(0, maxLines), margin + 2, y);
+    y += maxLines * 4 + 3;
   }
 
-  const bottomY = 50.5 + maxRows * 6 + (data.ingredients.length > 6 ? 8 : 5);
+  // === INDICATIONS ===
+  if (data.indications && data.indications.length > 5) {
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(20, 83, 45);
+    doc.text("INDICATIONS", margin, y);
+    doc.setLineWidth(0.4);
+    doc.line(margin, y + 1, W - margin, y + 1);
+    y += 5;
+    doc.setFontSize(7);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(40, 40, 40);
+    const indLines = doc.splitTextToSize(data.indications, W - margin * 2 - 2);
+    doc.text(indLines.slice(0, 4), margin + 2, y);
+    y += Math.min(indLines.length, 4) * 4 + 3;
+  }
 
-  // Storage and expiry info
-  doc.setFontSize(6.5);
+  // === CONTRAINDICATIONS ===
+  const contrText =
+    data.contraindications && data.contraindications.length > 5
+      ? data.contraindications
+      : "Not recommended in known hypersensitivity to any ingredient. Caution in pregnancy, lactation, pediatric, and hepatic/renal impairment. Consult physician before use.";
+  doc.setFontSize(9);
   doc.setFont("helvetica", "bold");
+  doc.setTextColor(180, 30, 30);
+  doc.text("CONTRAINDICATIONS & WARNINGS", margin, y);
+  doc.setLineWidth(0.4);
+  doc.line(margin, y + 1, W - margin, y + 1);
+  y += 5;
+  doc.setFontSize(7);
+  doc.setFont("helvetica", "normal");
   doc.setTextColor(40, 40, 40);
-  doc.text(
-    "Storage: Store at 25°C ± 2°C / 60% RH. Keep in cool dry place, away from light.",
-    10,
-    bottomY,
-  );
+  const cLines = doc.splitTextToSize(contrText, W - margin * 2 - 2);
+  doc.text(cLines.slice(0, 4), margin + 2, y);
+  y += Math.min(cLines.length, 4) * 4 + 3;
+
+  // === DOSAGE & ADMINISTRATION ===
+  const dosageMap: Record<string, string> = {
+    Tablet:
+      "Adults: 1-2 tablets orally twice or thrice daily after meals, or as directed by physician. Swallow whole with water. Do not crush or chew.",
+    Capsule:
+      "Adults: 1-2 capsules orally twice daily with water after meals, or as directed by physician.",
+    Syrup:
+      "Adults: 5-10 mL (1-2 teaspoonfuls) thrice daily after meals. Children (6-12 yrs): 2.5-5 mL twice daily. Shake well before use.",
+    Injection:
+      "Administer by qualified healthcare professional only. IV/IM as directed by physician. Refer to prescribing information for reconstitution and administration details.",
+    Cream:
+      "Apply a thin layer to affected area 2-3 times daily. Cleanse area before application. Avoid contact with eyes and mucous membranes.",
+    Ointment:
+      "Apply topically to affected area twice daily or as directed. For external use only.",
+    Gel: "Apply to affected area 2-3 times daily. Wash hands after application. External use only.",
+    Drops:
+      "Instill 2-3 drops in affected area as directed. Follow physician's instructions regarding frequency and duration.",
+    Patch:
+      "Apply one patch to clean dry skin. Replace as directed. Rotate application site.",
+    Inhaler:
+      "2 inhalations as required (max 8 puffs/day). Shake well before each use. Rinse mouth after use.",
+  };
+  const dosageInstr =
+    dosageMap[data.dosageForm] ??
+    `Adults: Use as directed by physician. Follow prescribed dosage for ${data.dosageForm}.`;
+  doc.setFontSize(9);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(20, 83, 45);
+  doc.text("DOSAGE & ADMINISTRATION", margin, y);
+  doc.setLineWidth(0.4);
+  doc.line(margin, y + 1, W - margin, y + 1);
+  y += 5;
+  doc.setFontSize(7);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(40, 40, 40);
+  const dLines = doc.splitTextToSize(dosageInstr, W - margin * 2 - 2);
+  doc.text(dLines, margin + 2, y);
+  y += dLines.length * 4 + 3;
+
+  // === STORAGE CONDITIONS ===
+  doc.setFontSize(9);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(20, 83, 45);
+  doc.text("STORAGE CONDITIONS", margin, y);
+  doc.setLineWidth(0.4);
+  doc.line(margin, y + 1, W - margin, y + 1);
+  y += 5;
+  doc.setFontSize(7);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(40, 40, 40);
+  const storageText =
+    "Store at 25°C ± 2°C (77°F ± 4°F). Excursions permitted to 15–30°C. Relative Humidity: ≤60%. Protect from light and moisture. Keep in original tightly closed container. Store in a cool, dry place away from direct sunlight and heat sources. Keep out of reach of children. Do not freeze.";
+  const sLines = doc.splitTextToSize(storageText, W - margin * 2 - 2);
+  doc.text(sLines, margin + 2, y);
+  y += sLines.length * 4 + 3;
+
+  // === MANUFACTURER INFO ===
+  doc.setFontSize(9);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(20, 83, 45);
+  doc.text("MANUFACTURER / FORMULATOR", margin, y);
+  doc.setLineWidth(0.4);
+  doc.line(margin, y + 1, W - margin, y + 1);
+  y += 5;
+  doc.setFillColor(248, 252, 248);
+  doc.setDrawColor(20, 83, 45);
+  doc.setLineWidth(0.3);
+  doc.rect(margin, y, W - margin * 2, 16, "FD");
+  doc.setFontSize(7.5);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(20, 83, 45);
+  doc.text("AyurNexis Formulation Lab", margin + 3, y + 5);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(60, 60, 60);
   doc.text(
     `Formulator: ${data.ownerName}${data.institution ? `  |  ${data.institution}` : ""}`,
-    10,
-    bottomY + 5,
+    margin + 3,
+    y + 10,
   );
-  doc.text(`Date: ${data.date}`, 10, bottomY + 10);
+  doc.text(
+    "Platform: AyurNexis 3.1 AI-Enabled Ayurvedic QA Platform",
+    margin + 3,
+    y + 14,
+  );
+  y += 20;
 
-  // Approval status banner
-  const approvalY = H - 20;
-  doc.setFillColor(
-    data.approved ? 20 : 180,
-    data.approved ? 83 : 30,
-    data.approved ? 45 : 30,
-  );
-  doc.rect(7, approvalY, W - 14, 9, "F");
-  doc.setFontSize(8);
+  // === APPROVAL STATUS BANNER ===
+  const approved = data.approved;
+  doc.setFillColor(approved ? 20 : 185, approved ? 83 : 28, approved ? 45 : 28);
+  doc.rect(margin, y, W - margin * 2, 14, "F");
+  doc.setFontSize(10);
   doc.setFont("helvetica", "bold");
   doc.setTextColor(255, 255, 255);
   doc.text(
-    data.approved
-      ? "✓ APPROVED FOR PLATFORM RELEASE"
-      : "✗ NOT APPROVED FOR MARKET RELEASE",
+    approved
+      ? "✓  APPROVED FOR PLATFORM RELEASE"
+      : `✗  NOT APPROVED FOR MARKET RELEASE  —  Quality Score: ${data.overallScore}/100`,
     W / 2,
-    approvalY + 6,
+    y + 9,
     { align: "center" },
   );
+  y += 18;
 
-  // Footer
-  doc.setFillColor(240, 253, 244);
-  doc.rect(7, H - 11, W - 14, 4, "F");
+  // === REGULATORY STATEMENT ===
+  doc.setFontSize(6.5);
+  doc.setFont("helvetica", "italic");
+  doc.setTextColor(80, 80, 80);
+  const regText =
+    "This formulation has been evaluated by AyurNexis 3.1 AI-enabled QA platform in accordance with pharmacopoeia guidelines (IP 2022, BP 2023, WHO). This is an academically developed formulation; clinical use requires regulatory approval by competent authority (CDSCO/FDA/EMA).";
+  const regLines = doc.splitTextToSize(regText, W - margin * 2 - 2);
+  doc.text(regLines, margin + 2, y);
+  y += regLines.length * 3.5 + 3;
+
+  // === BARCODE-STYLE AREA ===
+  const barcodeY = y + 2;
+  if (barcodeY < 275) {
+    doc.setFillColor(248, 252, 248);
+    doc.setDrawColor(180, 130, 30);
+    doc.setLineWidth(0.4);
+    doc.rect(margin, barcodeY, 50, 12, "FD");
+    // Draw barcode lines pattern
+    doc.setLineWidth(0.8);
+    doc.setDrawColor(30, 30, 30);
+    const barsX = margin + 3;
+    const barWidths = [
+      1, 0.5, 1.5, 0.5, 1, 1.5, 0.5, 1, 0.5, 1.5, 1, 0.5, 1, 0.5, 1.5,
+    ];
+    let bx = barsX;
+    for (const w of barWidths) {
+      doc.setLineWidth(w);
+      doc.line(bx, barcodeY + 2, bx, barcodeY + 9);
+      bx += w + 0.7;
+    }
+    doc.setFontSize(6);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(30, 30, 30);
+    doc.text(batchNum, margin + 25, barcodeY + 11, { align: "center" });
+    // Score badge
+    doc.setFillColor(
+      approved ? 240 : 255,
+      approved ? 253 : 240,
+      approved ? 244 : 240,
+    );
+    doc.setDrawColor(
+      approved ? 20 : 180,
+      approved ? 83 : 30,
+      approved ? 45 : 30,
+    );
+    doc.setLineWidth(0.4);
+    doc.rect(W - margin - 45, barcodeY, 45, 12, "FD");
+    doc.setFontSize(7);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(
+      approved ? 20 : 180,
+      approved ? 83 : 30,
+      approved ? 45 : 30,
+    );
+    doc.text(
+      `QA Score: ${data.overallScore}/100`,
+      W - margin - 22.5,
+      barcodeY + 5,
+      { align: "center" },
+    );
+    doc.setFontSize(6);
+    doc.setFont("helvetica", "normal");
+    doc.text(
+      approved ? "APPROVED" : "BELOW THRESHOLD",
+      W - margin - 22.5,
+      barcodeY + 10,
+      { align: "center" },
+    );
+  }
+
+  // Footer line
+  doc.setDrawColor(20, 83, 45);
+  doc.setLineWidth(0.5);
+  doc.line(8, 287, W - 8, 287);
   doc.setFontSize(5.5);
   doc.setFont("helvetica", "normal");
-  doc.setTextColor(80, 120, 80);
+  doc.setTextColor(80, 80, 80);
   doc.text(
-    `Score: ${data.overallScore}/100  |  AyurNexis 3.1 — AI-Enabled Ayurvedic QA Platform`,
+    `AyurNexis 3.1 — AI-Enabled Ayurvedic QA Platform  |  Generated: ${data.date}  |  Batch: ${batchNum}`,
     W / 2,
-    H - 8,
+    291,
     { align: "center" },
   );
 
   doc.save(
-    `${data.formulationName || data.dosageForm || "formulation"}_label.pdf`,
+    `${data.formulationName || data.dosageForm || "formulation"}_drug_label.pdf`,
   );
 }
 
@@ -3174,15 +3399,6 @@ export function FormulationLab({
   async function handleExport() {
     setExporting(true);
     try {
-      // Load jsPDF dynamically (package not in lockfile, use CDN)
-      const _jsPDFMod = await (Function(
-        'return import("https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js")',
-      )() as Promise<any>);
-      const jsPDF = _jsPDFMod.default ?? _jsPDFMod.jsPDF;
-      const _autoTableMod = await (Function(
-        'return import("https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js")',
-      )() as Promise<any>);
-      const autoTable = _autoTableMod.default ?? _autoTableMod;
       const doc = new jsPDF({
         orientation: "portrait",
         unit: "mm",
@@ -5073,6 +5289,106 @@ export function FormulationLab({
                 </CardContent>
               </Card>
 
+              {/* Pharmacological Effects of Composition */}
+              <Card className="border-border">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <Zap className="w-4 h-4 text-amber-500" />
+                    Pharmacological Effects of Composition
+                    {summaryLoading && (
+                      <div className="w-3 h-3 border-2 border-amber-500 border-t-transparent rounded-full animate-spin ml-1" />
+                    )}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {summaryLoading ? (
+                    <div className="space-y-2">
+                      <div className="h-3 bg-muted rounded animate-pulse w-full" />
+                      <div className="h-3 bg-muted rounded animate-pulse w-5/6" />
+                      <div className="h-3 bg-muted rounded animate-pulse w-4/5" />
+                      <div className="h-3 bg-muted rounded animate-pulse w-3/4" />
+                    </div>
+                  ) : summaryData ? (
+                    <>
+                      <div>
+                        <p className="text-xs font-semibold text-amber-600 mb-2">
+                          Combined Mechanism of Action
+                        </p>
+                        <p className="text-xs text-muted-foreground leading-relaxed">
+                          {summaryData.narrative}
+                        </p>
+                      </div>
+                      {ingredients.filter(
+                        (i) => i.category === "api" || i.category === "herb",
+                      ).length > 0 && (
+                        <div>
+                          <p className="text-xs font-semibold text-foreground mb-2">
+                            API / Active Ingredient Pharmacology
+                          </p>
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-xs border-collapse">
+                              <thead>
+                                <tr className="bg-amber-50 dark:bg-amber-900/10">
+                                  <th className="px-3 py-2 text-left font-semibold border border-border/50">
+                                    Ingredient
+                                  </th>
+                                  <th className="px-3 py-2 text-left font-semibold border border-border/50">
+                                    Category
+                                  </th>
+                                  <th className="px-3 py-2 text-left font-semibold border border-border/50">
+                                    Pharmacological Role
+                                  </th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {ingredients
+                                  .filter(
+                                    (i) =>
+                                      i.category === "api" ||
+                                      i.category === "herb",
+                                  )
+                                  .map((ing) => (
+                                    <tr
+                                      key={ing.id}
+                                      className="border-t border-border/30"
+                                    >
+                                      <td className="px-3 py-2 font-medium">
+                                        {ing.name}
+                                      </td>
+                                      <td className="px-3 py-2">
+                                        <Badge
+                                          variant="secondary"
+                                          className="text-[10px]"
+                                        >
+                                          {ing.category === "api"
+                                            ? "API"
+                                            : "Herbal API"}
+                                        </Badge>
+                                      </td>
+                                      <td className="px-3 py-2 text-muted-foreground">
+                                        Active therapeutic constituent —
+                                        contributes to the primary
+                                        pharmacological action of the
+                                        formulation.
+                                      </td>
+                                    </tr>
+                                  ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      Add ingredients and proceed to view pharmacological
+                      effects. Data could not be generated automatically — add
+                      APIs and navigate to this step again.
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+
               {/* Pharmacopeia Compliance */}
               <Card className="border-border">
                 <CardHeader className="pb-2">
@@ -5922,6 +6238,17 @@ export function FormulationLab({
                                 month: "long",
                                 year: "numeric",
                               }),
+                              aiSummary: summaryData?.narrative,
+                              indications: ingredients
+                                .filter(
+                                  (i) =>
+                                    i.category === "api" ||
+                                    i.category === "herb",
+                                )
+                                .map((i) => i.name)
+                                .join(", "),
+                              contraindications:
+                                "Not recommended in known hypersensitivity to any ingredient. Caution in pregnancy, lactation, and renal/hepatic impairment. Consult physician before use.",
                             });
                           } finally {
                             setLabelExporting(false);

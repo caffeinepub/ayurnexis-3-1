@@ -9,7 +9,7 @@ async function callGemini(prompt: string): Promise<string | null> {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.7, maxOutputTokens: 8192 },
+        generationConfig: { temperature: 0.8, maxOutputTokens: 8192 },
       }),
     });
     if (!res.ok) return null;
@@ -71,6 +71,10 @@ export interface FormulationIdea {
   mechanismOfAction: string;
   drugInteractions: string[];
   clinicalRationale: string;
+  pharmacologicalEffects: string;
+  indicationsForDisease: string;
+  contraindications: string[];
+  dosageInstructions: string;
 }
 
 export interface CompatibilityPair {
@@ -146,7 +150,7 @@ export interface FormulationAnalysis {
 // ─── API Functions ────────────────────────────────────────────────────────────
 
 export async function searchDiseases(query: string): Promise<string[]> {
-  const prompt = `List 20 medical diseases or conditions that match or relate to: '${query}'. Return ONLY a JSON array of 20 strings, no explanation. Example: ["Disease 1", "Disease 2"]`;
+  const prompt = `List 30 medical diseases, disorders, syndromes, or conditions that match or relate to: '${query}'. Include common conditions like fever, cold, headache, diabetes, hypertension, infections, skin diseases, GI issues, respiratory, neurological, rare diseases, pediatric, geriatric, and specialty conditions. Return ONLY a JSON array of 30 strings (disease/condition names only), no explanation. Example: ["Type 2 Diabetes Mellitus", "Acute Febrile Illness", "Common Cold (Rhinovirus)"]`;
   const result = await callGemini(prompt);
   if (!result) return [];
   const parsed = parseJSON<string[]>(result);
@@ -160,7 +164,23 @@ export async function getFormulationIdeas(
   dosageForm: string,
   drugType: string,
 ): Promise<FormulationIdea[]> {
-  const prompt = `Generate exactly 10 novel pharmaceutical formulation ideas for treating ${disease} as a ${dosageForm} using ${drugType} approach. For each, return a JSON array of objects with these exact fields: compositionName (string), ingredients (array of objects with name (string), quantity (number), unit (string), role (string), pharmacologicalEffect (string)), advantages (array of strings), disadvantages (array of strings), stabilityPrediction (string), mechanismOfAction (string), drugInteractions (array of strings), clinicalRationale (string). Return ONLY valid JSON array, no markdown, no explanation.`;
+  const prompt = `Generate exactly 20 diverse, creative, pharmacopeia-compliant novel pharmaceutical formulation ideas for treating ${disease} as a ${dosageForm} using ${drugType} approach. Include Ayurvedic, allopathic, herbal, and combination approaches as appropriate. No restrictions on formulation types. Use real ingredient names, real pharmacopeia doses.
+
+For each, return a JSON array of objects with these exact fields:
+- compositionName (string): unique descriptive name
+- ingredients (array): each with name (string), quantity (number), unit (string), role (string), pharmacologicalEffect (string - specific mechanism of this ingredient)
+- advantages (array of 3-5 strings)
+- disadvantages (array of 2-3 strings)
+- stabilityPrediction (string)
+- mechanismOfAction (string): 2-3 sentence combined mechanism
+- drugInteractions (array of strings)
+- clinicalRationale (string): 2-3 sentences
+- pharmacologicalEffects (string): comprehensive 4-6 sentence paragraph covering overall mechanism of action, key active constituents and their receptor/enzyme targets, therapeutic effects, bioavailability considerations, and clinical rationale for this specific disease
+- indicationsForDisease (string): comma-separated list of all diseases/conditions this formulation is indicated for
+- contraindications (array of strings): specific contraindications
+- dosageInstructions (string): dosage and administration instructions
+
+Return ONLY valid JSON array, no markdown, no explanation.`;
   const result = await callGemini(prompt);
   if (!result) return [];
   const parsed = parseJSON<FormulationIdea[]>(result);
@@ -200,10 +220,10 @@ export interface MarketedDrugResult {
 
 export async function getMarketedDrugs(
   disease: string,
-  drugType: string,
-  dosageForm: string,
+  _drugType: string,
+  _dosageForm: string,
 ): Promise<MarketedDrugResult[]> {
-  const prompt = `List 10 real marketed pharmaceutical drugs for treating ${disease} as a ${drugType} ${dosageForm}. Return ONLY a JSON array of objects with fields: brandName (string), genericName (string), manufacturer (string), dosageForm (string), strength (string). Use real drug names, manufacturers, and strengths from pharmacopoeia. Example format: [{"brandName":"Glucophage","genericName":"Metformin HCl","manufacturer":"Merck","dosageForm":"Tablet","strength":"500 mg"}]. Return ONLY valid JSON array, no markdown.`;
+  const prompt = `List 20 real marketed pharmaceutical drugs for treating ${disease}. Include ALL available dosage forms (tablets, capsules, injections, syrups, creams, patches, suppositories, inhalers, etc.) and both allopathic and herbal/Ayurvedic brands. Use real brand names, manufacturers, and strengths from pharmacopoeia. Return ONLY a JSON array of objects with fields: brandName (string), genericName (string), manufacturer (string), dosageForm (string), strength (string). Example: [{"brandName":"Glucophage","genericName":"Metformin HCl","manufacturer":"Merck","dosageForm":"Tablet","strength":"500 mg"}]. Return ONLY valid JSON array, no markdown.`;
   const result = await callGemini(prompt);
   if (!result) return [];
   const parsed = parseJSON<MarketedDrugResult[]>(result);
@@ -226,12 +246,24 @@ export async function getFormulationSummary(
 ): Promise<FormulationSummaryData | null> {
   const prompt = `For a ${dosageForm} pharmaceutical formulation prepared by ${method} method using: ${ingredients.map((i) => `${i.name} ${i.quantity}${i.unit} (${i.role})`).join(", ")}.
 Return a JSON object with:
-- narrative: a 3-4 sentence clinical rationale for this formulation (scientific, pharmacopeia-based)
-- procedure: array of 6-8 step-by-step manufacturing procedure strings (brief, numbered context omitted)
-- instruments: array of 6-10 laboratory instruments required (e.g. "Tablet Compression Machine", "Analytical Balance")
-- glassware: array of 5-8 glassware items required (e.g. "250 mL Beaker", "100 mL Volumetric Flask")
+- narrative: a 4-6 sentence clinical rationale for this formulation covering pharmacological mechanisms, therapeutic synergy, and clinical evidence basis (scientific, pharmacopeia-based)
+- procedure: array of 8-10 step-by-step manufacturing procedure strings (detailed, numbered context omitted, specific to ${dosageForm} by ${method})
+- instruments: array of 8-12 laboratory instruments required (e.g. "Tablet Compression Machine", "Analytical Balance", "Dissolution Apparatus USP Type II")
+- glassware: array of 6-10 glassware items required (e.g. "250 mL Beaker", "100 mL Volumetric Flask", "Conical Flask 500 mL")
 Return ONLY valid JSON, no markdown.`;
   const result = await callGemini(prompt);
   if (!result) return null;
   return parseJSON<FormulationSummaryData>(result);
+}
+
+// ─── Composition Pharmacology ─────────────────────────────────────────────────
+
+export async function getCompositionPharmacology(
+  ingredients: { name: string; quantity: number; unit: string; role: string }[],
+  dosageForm: string,
+  disease?: string,
+): Promise<string> {
+  const prompt = `Describe the combined pharmacological effects of this ${dosageForm} formulation${disease ? ` for treating ${disease}` : ""}: ${ingredients.map((i) => `${i.name} ${i.quantity}${i.unit} (${i.role})`).join(", ")}. Write a comprehensive 4-6 sentence paragraph covering: overall mechanism of action, key active constituents and their targets, therapeutic effects, bioavailability considerations, and clinical rationale. Be specific and pharmacopeia-accurate. Return ONLY the paragraph text, no JSON, no headers.`;
+  const result = await callGemini(prompt);
+  return result ?? "Pharmacological effects data unavailable.";
 }

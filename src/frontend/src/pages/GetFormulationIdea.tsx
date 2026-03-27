@@ -30,7 +30,6 @@ import {
   type MarketedDrug,
   NOVEL_COMPOSITIONS,
   type NovelComposition,
-  generateDynamicCompositions,
 } from "../data/formulationIdeaData";
 import {
   type FormulationIdea,
@@ -618,18 +617,8 @@ function NovelCompositionsStep({
       .finally(() => setIsLoadingMore(false));
   };
 
-  // Fallback to static data
+  // Static fallback data (used if AI unavailable)
   const directComps: NovelComposition[] = NOVEL_COMPOSITIONS[key] ?? [];
-  const fallbackComps: NovelComposition[] =
-    directComps.length === 0
-      ? Object.keys(NOVEL_COMPOSITIONS)
-          .filter((k) => k.startsWith(disease))
-          .flatMap((k) => NOVEL_COMPOSITIONS[k])
-      : [];
-  const dynamicComps =
-    fallbackComps.length === 0 && directComps.length === 0
-      ? generateDynamicCompositions(disease, dosageForm, drugType)
-      : [];
 
   // Convert AI ideas to NovelComposition format for display
   const aiConverted: NovelComposition[] | null = aiComps
@@ -643,7 +632,8 @@ function NovelCompositionsStep({
           role: ing.role,
           category: "api",
         })),
-        pharmacologicalEffects: idea.mechanismOfAction,
+        pharmacologicalEffects:
+          idea.pharmacologicalEffects ?? idea.mechanismOfAction,
         advantages: idea.advantages,
         disadvantages: idea.disadvantages,
         stabilityPrediction: idea.stabilityPrediction,
@@ -663,20 +653,10 @@ function NovelCompositionsStep({
     : null;
 
   const displayComps =
-    aiConverted && aiConverted.length > 0
-      ? aiConverted
-      : directComps.length > 0
-        ? directComps
-        : fallbackComps.length > 0
-          ? fallbackComps
-          : dynamicComps;
+    aiConverted && aiConverted.length > 0 ? aiConverted : directComps;
 
   const isAiSource = !!(aiConverted && aiConverted.length > 0);
-  const isDynamic =
-    !isAiSource &&
-    dynamicComps.length > 0 &&
-    directComps.length === 0 &&
-    fallbackComps.length === 0;
+  const isDynamic = false;
 
   const total = displayComps.length;
   const comp = displayComps[index] ?? null;
@@ -799,6 +779,9 @@ function NovelCompositionsStep({
                         <th className="px-4 py-2 text-left font-medium hidden sm:table-cell">
                           Role
                         </th>
+                        <th className="px-4 py-2 text-left font-medium hidden md:table-cell">
+                          Pharmacological Effect
+                        </th>
                       </tr>
                     </thead>
                     <tbody>
@@ -821,6 +804,9 @@ function NovelCompositionsStep({
                           <td className="px-4 py-2 text-muted-foreground hidden sm:table-cell">
                             {ing.role}
                           </td>
+                          <td className="px-4 py-2 text-muted-foreground text-xs hidden md:table-cell max-w-[180px]">
+                            {(ing as any).pharmacologicalEffect ?? "—"}
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -837,10 +823,59 @@ function NovelCompositionsStep({
                   Pharmacological Effects
                 </CardTitle>
               </CardHeader>
-              <CardContent>
-                <p className="text-xs text-muted-foreground leading-relaxed">
-                  {comp.pharmacologicalEffects}
-                </p>
+              <CardContent className="space-y-3">
+                <div>
+                  <p className="text-xs font-semibold text-amber-600 mb-1">
+                    Combined Mechanism of Action
+                  </p>
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    {(comp as any).pharmacologicalEffects ??
+                      comp.pharmacologicalEffects}
+                  </p>
+                </div>
+                {(comp as any).indicationsForDisease &&
+                  (comp as any).indicationsForDisease.length > 3 && (
+                    <div>
+                      <p className="text-xs font-semibold text-primary mb-1">
+                        Indications
+                      </p>
+                      <p className="text-xs text-muted-foreground leading-relaxed">
+                        {(comp as any).indicationsForDisease}
+                      </p>
+                    </div>
+                  )}
+                {(comp as any).dosageInstructions &&
+                  (comp as any).dosageInstructions.length > 3 && (
+                    <div>
+                      <p className="text-xs font-semibold text-foreground mb-1">
+                        Dosage & Administration
+                      </p>
+                      <p className="text-xs text-muted-foreground leading-relaxed">
+                        {(comp as any).dosageInstructions}
+                      </p>
+                    </div>
+                  )}
+                {(comp as any).contraindications &&
+                  (comp as any).contraindications.length > 0 && (
+                    <div>
+                      <p className="text-xs font-semibold text-red-500 mb-1">
+                        Contraindications
+                      </p>
+                      <ul className="space-y-0.5">
+                        {((comp as any).contraindications as string[]).map(
+                          (c: string) => (
+                            <li
+                              key={c}
+                              className="text-xs text-muted-foreground flex gap-1.5"
+                            >
+                              <span className="text-red-400 shrink-0">•</span>
+                              {c}
+                            </li>
+                          ),
+                        )}
+                      </ul>
+                    </div>
+                  )}
               </CardContent>
             </Card>
 
