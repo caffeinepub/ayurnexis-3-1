@@ -148,7 +148,9 @@ export const idlService = IDL.Service({
   getAccessRequests: IDL.Func([IDL.Text], [IDL.Vec(UserRecord)], ['query']),
   adminApproveUser: IDL.Func([IDL.Text, IDL.Text], [IDL.Bool], []),
   adminRevokeUser: IDL.Func([IDL.Text, IDL.Text], [IDL.Bool], []),
-  adminGenerateCode: IDL.Func([IDL.Text, IDL.Text], [IDL.Opt(IDL.Text)], []),
+  adminDeleteUser: IDL.Func([IDL.Text, IDL.Text], [IDL.Bool], []),
+    adminGenerateCode: IDL.Func([IDL.Text, IDL.Text, IDL.Nat], [IDL.Opt(IDL.Text)], []),
+    getUserCodeExpiry: IDL.Func([IDL.Text], [IDL.Opt(IDL.Tuple(IDL.Int, IDL.Nat))], ['query']),
   verifyUserCode: IDL.Func([IDL.Text, IDL.Text], [IDL.Opt(IDL.Text)], ['query']),
 });
 
@@ -281,7 +283,9 @@ export const idlFactory = ({ IDL }) => {
     getAccessRequests: IDL.Func([IDL.Text], [IDL.Vec(UserRecord)], ['query']),
     adminApproveUser: IDL.Func([IDL.Text, IDL.Text], [IDL.Bool], []),
     adminRevokeUser: IDL.Func([IDL.Text, IDL.Text], [IDL.Bool], []),
-    adminGenerateCode: IDL.Func([IDL.Text, IDL.Text], [IDL.Opt(IDL.Text)], []),
+    adminDeleteUser: IDL.Func([IDL.Text, IDL.Text], [IDL.Bool], []),
+    adminGenerateCode: IDL.Func([IDL.Text, IDL.Text, IDL.Nat], [IDL.Opt(IDL.Text)], []),
+    getUserCodeExpiry: IDL.Func([IDL.Text], [IDL.Opt(IDL.Tuple(IDL.Int, IDL.Nat))], ['query']),
     verifyUserCode: IDL.Func([IDL.Text, IDL.Text], [IDL.Opt(IDL.Text)], ['query']),
   });
 };

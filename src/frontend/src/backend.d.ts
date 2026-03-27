@@ -150,6 +150,8 @@ export interface backendInterface {
   getAccessRequests(adminToken: string): Promise<UserRecord[]>;
   adminApproveUser(userId: string, adminToken: string): Promise<boolean>;
   adminRevokeUser(userId: string, adminToken: string): Promise<boolean>;
-  adminGenerateCode(userId: string, adminToken: string): Promise<Option<string>>;
+  adminDeleteUser(userId: string, adminToken: string): Promise<boolean>;
+  adminGenerateCode(userId: string, adminToken: string, expiryDays: bigint): Promise<Option<string>>;
   verifyUserCode(email: string, code: string): Promise<Option<string>>;
+  getUserCodeExpiry(email: string): Promise<Option<[bigint, bigint]>>;
 }

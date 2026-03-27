@@ -29,7 +29,13 @@ import {
   type MarketedDrug,
   NOVEL_COMPOSITIONS,
   type NovelComposition,
+  generateDynamicCompositions,
 } from "../data/formulationIdeaData";
+import {
+  type FormulationIdea,
+  getFormulationIdeas,
+  searchDiseases,
+} from "../services/geminiService";
 import { claimFormulation, isFormulationClaimed } from "../utils/accessControl";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -140,6 +146,8 @@ function DiseaseSearch({ onSelect }: { onSelect: (disease: string) => void }) {
 
   const filtered = fdaResults.length > 0 ? fdaResults : preloadedFiltered;
 
+  const [geminiSearching, setGeminiSearching] = useState(false);
+
   useEffect(() => {
     if (query.length < 3) {
       setFdaResults([]);
@@ -147,25 +155,19 @@ function DiseaseSearch({ onSelect }: { onSelect: (disease: string) => void }) {
     }
     if (fdaTimerRef.current) clearTimeout(fdaTimerRef.current);
     fdaTimerRef.current = setTimeout(async () => {
+      setGeminiSearching(true);
       try {
-        const url = `https://api.fda.gov/drug/label.json?search=indications_and_usage:"${encodeURIComponent(query)}"&limit=8`;
-        const res = await fetch(url);
-        if (!res.ok) return;
-        const data = await res.json();
-        const names: string[] = [];
-        for (const r of data.results || []) {
-          const name =
-            r?.openfda?.brand_name?.[0] || r?.openfda?.generic_name?.[0];
-          if (name && !names.includes(name)) names.push(name);
-        }
-        if (names.length > 0) {
-          setFdaResults(names);
+        const results = await searchDiseases(query);
+        if (results.length > 0) {
+          setFdaResults(results);
           setFdaConnected(true);
         } else {
           setFdaResults([]);
         }
       } catch {
         setFdaResults([]);
+      } finally {
+        setGeminiSearching(false);
       }
     }, 500);
   }, [query]);
@@ -191,8 +193,8 @@ function DiseaseSearch({ onSelect }: { onSelect: (disease: string) => void }) {
           What condition are you formulating for?
         </h2>
         <p className="text-muted-foreground">
-          Search from 50+ diseases and conditions with preloaded pharmaceutical
-          data
+          Search any disease or condition — Gemini AI finds relevant results in
+          real-time
         </p>
         {fdaConnected && (
           <div
@@ -204,7 +206,7 @@ function DiseaseSearch({ onSelect }: { onSelect: (disease: string) => void }) {
             }}
           >
             <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse inline-block" />
-            Live Drug Database (OpenFDA)
+            Live Search (Gemini AI)
           </div>
         )}
       </div>
@@ -221,10 +223,15 @@ function DiseaseSearch({ onSelect }: { onSelect: (disease: string) => void }) {
           }}
           onFocus={() => setOpen(true)}
           onBlur={() => setTimeout(() => setOpen(false), 150)}
-          placeholder="Type a disease or condition (e.g. Diabetes, Hypertension)…"
-          className="pl-9 h-12 text-base"
+          placeholder="Type any disease or condition — powered by Gemini AI…"
+          className="pl-9 pr-10 h-12 text-base"
           data-ocid="idea.input"
         />
+        {geminiSearching && (
+          <div className="absolute right-3 top-1/2 -translate-y-1/2">
+            <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+          </div>
+        )}
         <AnimatePresence>
           {open && filtered.length > 0 && (
             <motion.div
@@ -531,25 +538,89 @@ function NovelCompositionsStep({
   onBack: () => void;
 }) {
   const key = `${disease}|${dosageForm}|${drugType}`;
-  const directComps: NovelComposition[] = NOVEL_COMPOSITIONS[key] ?? [];
+  const [index, setIndex] = useState(0);
+  const [geminiComps, setGeminiComps] = useState<FormulationIdea[] | null>(
+    null,
+  );
+  const [isLoadingGemini, setIsLoadingGemini] = useState(false);
 
-  // fallback: find any key matching disease
+  // Fetch Gemini ideas on mount / when key changes
+  // biome-ignore lint/correctness/useExhaustiveDependencies: key is a derived string
+  useEffect(() => {
+    setIndex(0);
+    setGeminiComps(null);
+    setIsLoadingGemini(true);
+    getFormulationIdeas(disease, dosageForm, drugType)
+      .then((ideas) => {
+        if (ideas && ideas.length > 0) setGeminiComps(ideas);
+        else setGeminiComps(null);
+      })
+      .catch(() => setGeminiComps(null))
+      .finally(() => setIsLoadingGemini(false));
+  }, [key]);
+
+  // Fallback to static data
+  const directComps: NovelComposition[] = NOVEL_COMPOSITIONS[key] ?? [];
   const fallbackComps: NovelComposition[] =
     directComps.length === 0
       ? Object.keys(NOVEL_COMPOSITIONS)
           .filter((k) => k.startsWith(disease))
           .flatMap((k) => NOVEL_COMPOSITIONS[k])
       : [];
+  const dynamicComps =
+    fallbackComps.length === 0 && directComps.length === 0
+      ? generateDynamicCompositions(disease, dosageForm, drugType)
+      : [];
 
-  const displayComps = directComps.length > 0 ? directComps : fallbackComps;
-  const [index, setIndex] = useState(0);
+  // Convert Gemini ideas to NovelComposition format for display
+  const geminiConverted: NovelComposition[] | null = geminiComps
+    ? geminiComps.map((idea, idx) => ({
+        id: `GEMINI-${String(idx + 1).padStart(3, "0")}`,
+        name: idea.compositionName,
+        ingredients: idea.ingredients.map((ing) => ({
+          name: ing.name,
+          quantity: ing.quantity,
+          unit: ing.unit,
+          role: ing.role,
+          category: "api",
+        })),
+        pharmacologicalEffects: idea.mechanismOfAction,
+        advantages: idea.advantages,
+        disadvantages: idea.disadvantages,
+        stabilityPrediction: idea.stabilityPrediction,
+        shelfLife: idea.stabilityPrediction.includes("24")
+          ? "24 months"
+          : "18 months",
+        storageCondition:
+          "Store at 25°C/60% RH, protect from light and moisture",
+        drugInteractions: idea.drugInteractions,
+        dosageForm: dosageForm,
+        analyticalData: {
+          hplcMethod: "RP-HPLC, C18 column, UV detection",
+          uvLambdaMax: "254 nm",
+          ftirPeaks: "3300-3500 (O-H), 1700-1750 (C=O), 1600-1650 (C=C)",
+        },
+      }))
+    : null;
+
+  const displayComps =
+    geminiConverted && geminiConverted.length > 0
+      ? geminiConverted
+      : directComps.length > 0
+        ? directComps
+        : fallbackComps.length > 0
+          ? fallbackComps
+          : dynamicComps;
+
+  const isGeminiSource = !!(geminiConverted && geminiConverted.length > 0);
+  const isDynamic =
+    !isGeminiSource &&
+    dynamicComps.length > 0 &&
+    directComps.length === 0 &&
+    fallbackComps.length === 0;
+
   const total = displayComps.length;
   const comp = displayComps[index] ?? null;
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: key is a derived string
-  useEffect(() => {
-    setIndex(0);
-  }, [key]);
 
   return (
     <motion.div
@@ -579,7 +650,22 @@ function NovelCompositionsStep({
         )}
       </div>
 
-      {!comp ? (
+      {isLoadingGemini ? (
+        <Card className="border-primary/20 bg-primary/5">
+          <CardContent className="py-12 text-center">
+            <div className="flex flex-col items-center gap-3">
+              <div className="w-10 h-10 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+              <p className="font-medium text-foreground">
+                Generating novel formulations with AI…
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Gemini is analyzing {disease} treatment options for {dosageForm}{" "}
+                ({drugType})
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      ) : !comp ? (
         <Card className="border-dashed">
           <CardContent className="py-12 text-center">
             <FlaskConical className="w-10 h-10 mx-auto mb-3 text-muted-foreground opacity-40" />
@@ -609,6 +695,16 @@ function NovelCompositionsStep({
                       <Badge className="text-xs" variant="outline">
                         {comp.id}
                       </Badge>
+                      {isGeminiSource && (
+                        <Badge className="text-xs bg-violet-100 text-violet-700 border-violet-200">
+                          ✦ Gemini AI — Real-time Generated
+                        </Badge>
+                      )}
+                      {isDynamic && !isGeminiSource && (
+                        <Badge className="text-xs bg-violet-100 text-violet-700 border-violet-200">
+                          ✦ AI-Generated Composition
+                        </Badge>
+                      )}
                       {isFormulationClaimed(
                         `${disease}-${dosageForm}-${drugType}-${index}`
                           .toLowerCase()
@@ -767,10 +863,18 @@ function NovelCompositionsStep({
                     <p className="text-xs font-medium text-muted-foreground mb-1">
                       Shelf Life
                     </p>
-                    <p className="text-xs font-semibold text-foreground flex items-center gap-1">
-                      <Clock className="w-3 h-3 text-primary" />
+                    <span
+                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold ${
+                        Number.parseInt(comp.shelfLife) >= 24
+                          ? "bg-green-100 text-green-700"
+                          : Number.parseInt(comp.shelfLife) >= 18
+                            ? "bg-amber-100 text-amber-700"
+                            : "bg-red-100 text-red-700"
+                      }`}
+                    >
+                      <Clock className="w-3 h-3" />
                       {comp.shelfLife}
-                    </p>
+                    </span>
                   </div>
                   <div>
                     <p className="text-xs font-medium text-muted-foreground mb-1">

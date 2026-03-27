@@ -226,7 +226,9 @@ export interface backendInterface {
     getAccessRequests(adminToken: string): Promise<UserRecord[]>;
     adminApproveUser(userId: string, adminToken: string): Promise<boolean>;
     adminRevokeUser(userId: string, adminToken: string): Promise<boolean>;
-    adminGenerateCode(userId: string, adminToken: string): Promise<Option<string>>;
+    adminDeleteUser(userId: string, adminToken: string): Promise<boolean>;
+    adminGenerateCode(userId: string, adminToken: string, expiryDays: bigint): Promise<Option<string>>;
+    getUserCodeExpiry(email: string): Promise<Option<[bigint, bigint]>>;
     verifyUserCode(email: string, code: string): Promise<Option<string>>;
 }
 export class Backend implements backendInterface {
@@ -256,7 +258,9 @@ export class Backend implements backendInterface {
     async getAccessRequests(adminToken: string): Promise<UserRecord[]> { return this.actor.getAccessRequests(adminToken) as any; }
     async adminApproveUser(userId: string, adminToken: string): Promise<boolean> { return this.actor.adminApproveUser(userId, adminToken); }
     async adminRevokeUser(userId: string, adminToken: string): Promise<boolean> { return this.actor.adminRevokeUser(userId, adminToken); }
-    async adminGenerateCode(userId: string, adminToken: string): Promise<Option<string>> { const r = await this.actor.adminGenerateCode(userId, adminToken); return r.length > 0 ? some(r[0] as string) : none(); }
+    async adminDeleteUser(userId: string, adminToken: string): Promise<boolean> { return (this.actor as any).adminDeleteUser(userId, adminToken); }
+    async adminGenerateCode(userId: string, adminToken: string, expiryDays: bigint): Promise<Option<string>> { const r = await (this.actor as any).adminGenerateCode(userId, adminToken, expiryDays); return r.length > 0 ? some(r[0] as string) : none(); }
+    async getUserCodeExpiry(email: string): Promise<Option<[bigint, bigint]>> { return (this.actor as any).getUserCodeExpiry(email); }
     async verifyUserCode(email: string, code: string): Promise<Option<string>> { const r = await this.actor.verifyUserCode(email, code); return r.length > 0 ? some(r[0] as string) : none(); }
 }
 export interface CreateActorOptions {

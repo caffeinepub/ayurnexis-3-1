@@ -1993,3 +1993,1182 @@ export const NOVEL_COMPOSITIONS: Record<string, NovelComposition[]> = {
     },
   ],
 };
+
+// ─── Dynamic Composition Generator ──────────────────────────────────────────
+
+interface DiseaseIngredient {
+  name: string;
+  qty: number;
+  unit: string;
+  role: string;
+  mechanism: string;
+}
+
+const DISEASE_INGREDIENT_MAP: Record<
+  string,
+  Record<string, DiseaseIngredient[]>
+> = {
+  "Diabetes (Type 2)": {
+    Allopathic: [
+      {
+        name: "Metformin HCl",
+        qty: 500,
+        unit: "mg",
+        role: "Primary API",
+        mechanism:
+          "Biguanide; inhibits hepatic gluconeogenesis, activates AMPK",
+      },
+      {
+        name: "Sitagliptin Phosphate",
+        qty: 50,
+        unit: "mg",
+        role: "Secondary API",
+        mechanism: "DPP-4 inhibitor; increases incretin (GLP-1, GIP) levels",
+      },
+      {
+        name: "Glipizide",
+        qty: 5,
+        unit: "mg",
+        role: "Alternate API",
+        mechanism:
+          "Sulfonylurea; stimulates pancreatic β-cell insulin secretion",
+      },
+    ],
+    Herbal: [
+      {
+        name: "Bitter Melon Extract",
+        qty: 200,
+        unit: "mg",
+        role: "Primary API",
+        mechanism: "Activates AMPK; polypeptide-p mimics insulin action",
+      },
+      {
+        name: "Fenugreek Seed Extract",
+        qty: 300,
+        unit: "mg",
+        role: "Secondary API",
+        mechanism:
+          "Trigonelline reduces glucose absorption; improves insulin sensitivity",
+      },
+      {
+        name: "Gymnema Sylvestre Extract",
+        qty: 200,
+        unit: "mg",
+        role: "Synergist",
+        mechanism: "Gymnemic acids reduce intestinal glucose absorption",
+      },
+    ],
+    Ayurvedic: [
+      {
+        name: "Guduchi (Tinospora cordifolia)",
+        qty: 300,
+        unit: "mg",
+        role: "Primary API",
+        mechanism: "Hypoglycemic; modulates glucose metabolism via PPAR-γ",
+      },
+      {
+        name: "Neem Leaf Extract",
+        qty: 100,
+        unit: "mg",
+        role: "Secondary API",
+        mechanism: "Nimbidin reduces fasting glucose; insulin sensitizer",
+      },
+      {
+        name: "Turmeric (Curcumin)",
+        qty: 150,
+        unit: "mg",
+        role: "Anti-inflammatory",
+        mechanism: "NF-κB inhibition; reduces diabetic inflammation",
+      },
+    ],
+  },
+  Hypertension: {
+    Allopathic: [
+      {
+        name: "Amlodipine Besylate",
+        qty: 5,
+        unit: "mg",
+        role: "Primary API",
+        mechanism:
+          "Calcium channel blocker; reduces peripheral vascular resistance",
+      },
+      {
+        name: "Losartan Potassium",
+        qty: 50,
+        unit: "mg",
+        role: "Secondary API",
+        mechanism: "ARB; blocks angiotensin II AT1 receptors",
+      },
+      {
+        name: "Hydrochlorothiazide",
+        qty: 12.5,
+        unit: "mg",
+        role: "Diuretic",
+        mechanism: "Thiazide diuretic; reduces plasma volume",
+      },
+    ],
+    Herbal: [
+      {
+        name: "Hawthorn Berry Extract",
+        qty: 300,
+        unit: "mg",
+        role: "Primary API",
+        mechanism: "Oligomeric proanthocyanidins; vasodilatory via NO pathway",
+      },
+      {
+        name: "Garlic Extract (Allicin)",
+        qty: 200,
+        unit: "mg",
+        role: "Secondary API",
+        mechanism: "Allicin reduces platelet aggregation and vasodilates",
+      },
+      {
+        name: "Olive Leaf Extract",
+        qty: 150,
+        unit: "mg",
+        role: "Synergist",
+        mechanism: "Oleuropein ACE inhibition and calcium antagonism",
+      },
+    ],
+    Ayurvedic: [
+      {
+        name: "Sarpagandha (Rauwolfia serpentina)",
+        qty: 50,
+        unit: "mg",
+        role: "Primary API",
+        mechanism:
+          "Reserpine depletes catecholamines; reduces sympathetic tone",
+      },
+      {
+        name: "Arjuna Bark Extract",
+        qty: 300,
+        unit: "mg",
+        role: "Secondary API",
+        mechanism: "Glycosides strengthen myocardium; mild antihypertensive",
+      },
+    ],
+  },
+  Asthma: {
+    Allopathic: [
+      {
+        name: "Salbutamol Sulphate",
+        qty: 4,
+        unit: "mg",
+        role: "Primary API",
+        mechanism: "β2-adrenoceptor agonist; bronchodilation",
+      },
+      {
+        name: "Montelukast Sodium",
+        qty: 10,
+        unit: "mg",
+        role: "Secondary API",
+        mechanism:
+          "Leukotriene receptor antagonist; reduces airway inflammation",
+      },
+    ],
+    Herbal: [
+      {
+        name: "Boswellia Serrata Extract",
+        qty: 300,
+        unit: "mg",
+        role: "Primary API",
+        mechanism: "5-LOX inhibitor; reduces leukotriene synthesis",
+      },
+      {
+        name: "Ginkgo Biloba Extract",
+        qty: 120,
+        unit: "mg",
+        role: "Secondary API",
+        mechanism: "PAF antagonist; reduces airway hyperresponsiveness",
+      },
+    ],
+    Ayurvedic: [
+      {
+        name: "Vasa (Adhatoda vasica) Extract",
+        qty: 200,
+        unit: "mg",
+        role: "Primary API",
+        mechanism: "Vasicine: bronchodilator and mucolytic",
+      },
+      {
+        name: "Tulsi (Ocimum sanctum) Extract",
+        qty: 200,
+        unit: "mg",
+        role: "Anti-inflammatory",
+        mechanism: "Eugenol inhibits COX-2; reduces airway inflammation",
+      },
+    ],
+  },
+  Anxiety: {
+    Allopathic: [
+      {
+        name: "Alprazolam",
+        qty: 0.25,
+        unit: "mg",
+        role: "Primary API",
+        mechanism: "Benzodiazepine; enhances GABA-A receptor activity",
+      },
+      {
+        name: "Buspirone HCl",
+        qty: 10,
+        unit: "mg",
+        role: "Alternative API",
+        mechanism: "5-HT1A partial agonist; non-sedating anxiolytic",
+      },
+    ],
+    Herbal: [
+      {
+        name: "Ashwagandha Root Extract",
+        qty: 300,
+        unit: "mg",
+        role: "Primary API",
+        mechanism: "Withanolides reduce cortisol; GABA-mimetic effect",
+      },
+      {
+        name: "Passionflower Extract",
+        qty: 250,
+        unit: "mg",
+        role: "Secondary API",
+        mechanism: "Chrysin: GABA-A modulation; reduces anxiety scores",
+      },
+      {
+        name: "L-Theanine",
+        qty: 200,
+        unit: "mg",
+        role: "Synergist",
+        mechanism:
+          "Increases alpha brain wave activity; reduces stress response",
+      },
+    ],
+    Ayurvedic: [
+      {
+        name: "Brahmi (Bacopa monnieri) Extract",
+        qty: 300,
+        unit: "mg",
+        role: "Primary API",
+        mechanism: "Bacosides modulate serotonin and dopamine; adaptogenic",
+      },
+      {
+        name: "Jatamansi (Nardostachys jatamansi)",
+        qty: 200,
+        unit: "mg",
+        role: "Sedative",
+        mechanism: "Nardostachone modulates GABA; reduces CNS excitability",
+      },
+    ],
+  },
+  Depression: {
+    Allopathic: [
+      {
+        name: "Escitalopram Oxalate",
+        qty: 10,
+        unit: "mg",
+        role: "Primary API",
+        mechanism: "SSRI; selectively inhibits serotonin reuptake transporter",
+      },
+      {
+        name: "Bupropion HCl",
+        qty: 150,
+        unit: "mg",
+        role: "Alternative API",
+        mechanism: "NDRI; inhibits norepinephrine and dopamine reuptake",
+      },
+    ],
+    Herbal: [
+      {
+        name: "St. John's Wort Extract",
+        qty: 300,
+        unit: "mg",
+        role: "Primary API",
+        mechanism: "Hypericin/hyperforin: weak SSRI + MAO inhibition",
+      },
+      {
+        name: "Saffron Extract (Safranal)",
+        qty: 30,
+        unit: "mg",
+        role: "Secondary API",
+        mechanism: "Safranal modulates serotonin and dopamine reuptake",
+      },
+    ],
+    Ayurvedic: [
+      {
+        name: "Shankhpushpi Extract",
+        qty: 250,
+        unit: "mg",
+        role: "Primary API",
+        mechanism: "Flavonoids modulate MAO activity; neuroprotective",
+      },
+      {
+        name: "Ashwagandha Root Extract",
+        qty: 300,
+        unit: "mg",
+        role: "Adaptogen",
+        mechanism: "Reduces cortisol; enhances resilience to stress",
+      },
+    ],
+  },
+  "GERD (Acid Reflux)": {
+    Allopathic: [
+      {
+        name: "Omeprazole",
+        qty: 20,
+        unit: "mg",
+        role: "Primary API",
+        mechanism:
+          "PPI; irreversibly inhibits H+/K+-ATPase in gastric parietal cells",
+      },
+      {
+        name: "Domperidone",
+        qty: 10,
+        unit: "mg",
+        role: "Prokinetic",
+        mechanism:
+          "D2-receptor antagonist; increases LES pressure and gastric emptying",
+      },
+    ],
+    Herbal: [
+      {
+        name: "Licorice Root Extract (DGL)",
+        qty: 380,
+        unit: "mg",
+        role: "Primary API",
+        mechanism:
+          "Increases mucous secretion; cytoprotective for gastric mucosa",
+      },
+      {
+        name: "Slippery Elm Bark Extract",
+        qty: 200,
+        unit: "mg",
+        role: "Demulcent",
+        mechanism: "Mucilage coats esophageal and gastric mucosa",
+      },
+    ],
+    Ayurvedic: [
+      {
+        name: "Yashtimadhu (Glycyrrhiza glabra)",
+        qty: 300,
+        unit: "mg",
+        role: "Primary API",
+        mechanism: "Mucoadhesive; increases gastric mucus; anti-ulcerogenic",
+      },
+      {
+        name: "Amla (Emblica officinalis)",
+        qty: 250,
+        unit: "mg",
+        role: "Antioxidant",
+        mechanism:
+          "Tannins reduce acid secretion; vitamin C is gastroprotective",
+      },
+    ],
+  },
+  Malaria: {
+    Allopathic: [
+      {
+        name: "Artemether",
+        qty: 80,
+        unit: "mg",
+        role: "Primary API",
+        mechanism:
+          "Endoperoxide bridge generates free radicals; kills Plasmodium",
+      },
+      {
+        name: "Lumefantrine",
+        qty: 480,
+        unit: "mg",
+        role: "Partner drug",
+        mechanism: "Accumulates in food vacuole; inhibits heme polymerization",
+      },
+    ],
+    Herbal: [
+      {
+        name: "Artemisia annua Extract",
+        qty: 200,
+        unit: "mg",
+        role: "Primary API",
+        mechanism:
+          "Artemisinins: reactive oxygen species generation kills parasites",
+      },
+      {
+        name: "Neem Leaf Extract",
+        qty: 150,
+        unit: "mg",
+        role: "Synergist",
+        mechanism: "Limonoids suppress parasite growth and immune modulation",
+      },
+    ],
+    Ayurvedic: [
+      {
+        name: "Kiratatikta (Swertia chirayita)",
+        qty: 200,
+        unit: "mg",
+        role: "Primary API",
+        mechanism: "Swertiamarin: antiparasitic via mitochondrial disruption",
+      },
+      {
+        name: "Guduchi Stem Extract",
+        qty: 300,
+        unit: "mg",
+        role: "Immunomodulator",
+        mechanism:
+          "Polysaccharides enhance macrophage activity against Plasmodium",
+      },
+    ],
+  },
+  Anemia: {
+    Allopathic: [
+      {
+        name: "Ferrous Sulphate",
+        qty: 325,
+        unit: "mg",
+        role: "Primary API",
+        mechanism:
+          "Fe2+ absorbed in duodenum; replenishes iron stores for hemoglobin",
+      },
+      {
+        name: "Folic Acid",
+        qty: 5,
+        unit: "mg",
+        role: "Co-factor",
+        mechanism: "Essential for DNA synthesis and red blood cell maturation",
+      },
+      {
+        name: "Cyanocobalamin (B12)",
+        qty: 500,
+        unit: "mcg",
+        role: "Co-factor",
+        mechanism: "Essential for megaloblastic erythropoiesis",
+      },
+    ],
+    Herbal: [
+      {
+        name: "Spirulina Powder",
+        qty: 500,
+        unit: "mg",
+        role: "Primary",
+        mechanism: "Phycocyanin + iron-rich; supports erythropoiesis",
+      },
+      {
+        name: "Moringa Leaf Extract",
+        qty: 300,
+        unit: "mg",
+        role: "Iron source",
+        mechanism: "High bioavailable iron + vitamin C enhances absorption",
+      },
+    ],
+    Ayurvedic: [
+      {
+        name: "Mandura Bhasma",
+        qty: 250,
+        unit: "mg",
+        role: "Iron supplement",
+        mechanism:
+          "Purified iron oxide; bioavailable iron for hemoglobin synthesis",
+      },
+      {
+        name: "Draksha (Vitis vinifera) Extract",
+        qty: 200,
+        unit: "mg",
+        role: "Synergist",
+        mechanism: "Anthocyanins enhance iron bioavailability; antioxidant",
+      },
+    ],
+  },
+  Osteoarthritis: {
+    Allopathic: [
+      {
+        name: "Diclofenac Sodium",
+        qty: 50,
+        unit: "mg",
+        role: "Primary API",
+        mechanism:
+          "Non-selective COX inhibitor; reduces prostaglandin synthesis",
+      },
+      {
+        name: "Glucosamine Sulphate",
+        qty: 500,
+        unit: "mg",
+        role: "Chondroprotective",
+        mechanism: "Substrate for glycosaminoglycan synthesis in cartilage",
+      },
+      {
+        name: "Chondroitin Sulphate",
+        qty: 400,
+        unit: "mg",
+        role: "Chondroprotective",
+        mechanism:
+          "Inhibits degradative enzymes; provides cartilage matrix substrate",
+      },
+    ],
+    Herbal: [
+      {
+        name: "Boswellia Serrata Extract (AKBA)",
+        qty: 300,
+        unit: "mg",
+        role: "Primary API",
+        mechanism: "5-LOX inhibition; reduces MMP-3 production in cartilage",
+      },
+      {
+        name: "Turmeric (Curcumin 95%)",
+        qty: 250,
+        unit: "mg",
+        role: "Anti-inflammatory",
+        mechanism: "NF-κB and COX-2 inhibition; reduces joint inflammation",
+      },
+    ],
+    Ayurvedic: [
+      {
+        name: "Shallaki (Boswellia serrata)",
+        qty: 400,
+        unit: "mg",
+        role: "Primary API",
+        mechanism:
+          "Boswellic acids reduce leukotriene synthesis; anti-arthritic",
+      },
+      {
+        name: "Guggulu (Commiphora mukul)",
+        qty: 250,
+        unit: "mg",
+        role: "Synergist",
+        mechanism: "Guggulsterones reduce inflammatory cytokines",
+      },
+    ],
+  },
+  Insomnia: {
+    Allopathic: [
+      {
+        name: "Melatonin",
+        qty: 3,
+        unit: "mg",
+        role: "Primary API",
+        mechanism: "MT1/MT2 receptor agonist; regulates circadian rhythm",
+      },
+      {
+        name: "Zolpidem Tartrate",
+        qty: 5,
+        unit: "mg",
+        role: "Alternative API",
+        mechanism: "GABA-A (BZ1 subtype) agonist; hypnotic",
+      },
+    ],
+    Herbal: [
+      {
+        name: "Valerian Root Extract",
+        qty: 450,
+        unit: "mg",
+        role: "Primary API",
+        mechanism: "Isovaleric acid + valerenic acid modulate GABA-A receptors",
+      },
+      {
+        name: "Lemon Balm Extract",
+        qty: 300,
+        unit: "mg",
+        role: "Synergist",
+        mechanism:
+          "Rosmarinic acid inhibits GABA transaminase; anxiolytic-sedative",
+      },
+    ],
+    Ayurvedic: [
+      {
+        name: "Ashwagandha Root Extract",
+        qty: 300,
+        unit: "mg",
+        role: "Adaptogen",
+        mechanism:
+          "Triethylene glycol promotes sleep via GABA pathway modulation",
+      },
+      {
+        name: "Brahmi (Bacopa monnieri)",
+        qty: 200,
+        unit: "mg",
+        role: "Nervine tonic",
+        mechanism:
+          "Bacosides modulate GABA and serotonin; reduces sleep latency",
+      },
+    ],
+  },
+  Dyslipidemia: {
+    Allopathic: [
+      {
+        name: "Atorvastatin Calcium",
+        qty: 20,
+        unit: "mg",
+        role: "Primary API",
+        mechanism:
+          "HMG-CoA reductase inhibitor; reduces hepatic cholesterol synthesis",
+      },
+      {
+        name: "Fenofibrate",
+        qty: 145,
+        unit: "mg",
+        role: "Secondary API",
+        mechanism: "PPARα agonist; reduces triglycerides and increases HDL",
+      },
+    ],
+    Herbal: [
+      {
+        name: "Red Yeast Rice Extract",
+        qty: 600,
+        unit: "mg",
+        role: "Primary API",
+        mechanism: "Monacolin K (lovastatin); HMG-CoA reductase inhibition",
+      },
+      {
+        name: "Guggulu (E-guggulsterone)",
+        qty: 250,
+        unit: "mg",
+        role: "Secondary API",
+        mechanism:
+          "FXR antagonist; modulates bile acid and cholesterol metabolism",
+      },
+    ],
+    Ayurvedic: [
+      {
+        name: "Triphala Extract",
+        qty: 500,
+        unit: "mg",
+        role: "Primary API",
+        mechanism:
+          "Gallic acid reduces LDL oxidation; bile acid sequestrant effect",
+      },
+      {
+        name: "Arjuna Bark Extract",
+        qty: 250,
+        unit: "mg",
+        role: "Cardioprotective",
+        mechanism: "Oleanolic acid reduces triglycerides and LDL cholesterol",
+      },
+    ],
+  },
+  Epilepsy: {
+    Allopathic: [
+      {
+        name: "Levetiracetam",
+        qty: 500,
+        unit: "mg",
+        role: "Primary API",
+        mechanism:
+          "SV2A ligand; modulates synaptic vesicle neurotransmitter release",
+      },
+      {
+        name: "Valproic Acid",
+        qty: 200,
+        unit: "mg",
+        role: "Alternative API",
+        mechanism: "Blocks Na+ channels; increases GABA; broad-spectrum AED",
+      },
+    ],
+    Herbal: [
+      {
+        name: "Brahmi (Bacopa monnieri)",
+        qty: 300,
+        unit: "mg",
+        role: "Adjuvant",
+        mechanism: "Bacosides modulate GABA and serotonin; neuroprotective",
+      },
+      {
+        name: "Shankhpushpi Extract",
+        qty: 200,
+        unit: "mg",
+        role: "Nervine",
+        mechanism: "Flavonoids reduce neuronal excitability; sedative",
+      },
+    ],
+    Ayurvedic: [
+      {
+        name: "Vacha (Acorus calamus)",
+        qty: 150,
+        unit: "mg",
+        role: "Primary API",
+        mechanism: "β-asarone modulates GABA; anticonvulsant",
+      },
+      {
+        name: "Jatamansi Extract",
+        qty: 200,
+        unit: "mg",
+        role: "Synergist",
+        mechanism:
+          "Nardostachone reduces seizure threshold via GABA modulation",
+      },
+    ],
+  },
+  PCOS: {
+    Allopathic: [
+      {
+        name: "Metformin HCl",
+        qty: 500,
+        unit: "mg",
+        role: "Primary API",
+        mechanism: "Reduces insulin resistance; lowers androgens via AMPK",
+      },
+      {
+        name: "Inositol (Myo-inositol)",
+        qty: 2000,
+        unit: "mg",
+        role: "Insulin sensitizer",
+        mechanism: "Second messenger for FSH; improves oocyte quality",
+      },
+    ],
+    Herbal: [
+      {
+        name: "Spearmint Extract",
+        qty: 200,
+        unit: "mg",
+        role: "Anti-androgenic",
+        mechanism: "Reduces free testosterone; reduces hirsutism",
+      },
+      {
+        name: "Ashwagandha Root Extract",
+        qty: 300,
+        unit: "mg",
+        role: "Adaptogen",
+        mechanism: "Reduces cortisol and DHEA-S; balances hormonal axis",
+      },
+    ],
+    Ayurvedic: [
+      {
+        name: "Shatavari (Asparagus racemosus)",
+        qty: 400,
+        unit: "mg",
+        role: "Primary API",
+        mechanism: "Steroidal saponins modulate FSH/LH; estrogenic effect",
+      },
+      {
+        name: "Lodhra (Symplocos racemosa)",
+        qty: 200,
+        unit: "mg",
+        role: "Hormone modulator",
+        mechanism: "Loturine normalizes FSH and LH; reduces cyst formation",
+      },
+    ],
+  },
+  "Liver Disease (Hepatitis)": {
+    Allopathic: [
+      {
+        name: "Silymarin (Milk Thistle)",
+        qty: 140,
+        unit: "mg",
+        role: "Hepatoprotective",
+        mechanism:
+          "Antioxidant; inhibits lipid peroxidation; blocks toxin uptake",
+      },
+      {
+        name: "Ursodeoxycholic Acid",
+        qty: 250,
+        unit: "mg",
+        role: "Primary API",
+        mechanism: "Replaces hydrophobic bile acids; reduces hepatocyte injury",
+      },
+    ],
+    Herbal: [
+      {
+        name: "Phyllanthus niruri Extract",
+        qty: 200,
+        unit: "mg",
+        role: "Antiviral/Hepatoprotective",
+        mechanism: "Geraniin inhibits HBV polymerase and DNA polymerase",
+      },
+      {
+        name: "Kutki (Picrorhiza kurroa)",
+        qty: 150,
+        unit: "mg",
+        role: "Hepatoprotective",
+        mechanism: "Picroside II induces hepatocyte regeneration",
+      },
+    ],
+    Ayurvedic: [
+      {
+        name: "Bhumyamalaki (Phyllanthus fraternus)",
+        qty: 250,
+        unit: "mg",
+        role: "Primary API",
+        mechanism: "Hepatocellular protection; anti-HBsAg activity",
+      },
+      {
+        name: "Kalmegh (Andrographis paniculata)",
+        qty: 200,
+        unit: "mg",
+        role: "Cholagogue",
+        mechanism: "Andrographolide stimulates bile flow; hepatoprotective",
+      },
+    ],
+  },
+};
+
+const STANDARD_EXCIPIENTS: Record<string, NovelCompositionIngredient[]> = {
+  Tablet: [
+    {
+      name: "Microcrystalline Cellulose (MCC PH102)",
+      category: "fillers",
+      quantity: 150,
+      unit: "mg",
+      role: "Diluent/Disintegrant",
+    },
+    {
+      name: "Lactose Monohydrate",
+      category: "fillers",
+      quantity: 100,
+      unit: "mg",
+      role: "Filler",
+    },
+    {
+      name: "Crospovidone (PVPP)",
+      category: "disintegrants",
+      quantity: 20,
+      unit: "mg",
+      role: "Superdisintegrant",
+    },
+    {
+      name: "Magnesium Stearate",
+      category: "lubricants",
+      quantity: 5,
+      unit: "mg",
+      role: "Lubricant",
+    },
+    {
+      name: "Colloidal Silicon Dioxide",
+      category: "glidants",
+      quantity: 3,
+      unit: "mg",
+      role: "Glidant",
+    },
+  ],
+  Capsule: [
+    {
+      name: "Lactose Monohydrate",
+      category: "fillers",
+      quantity: 150,
+      unit: "mg",
+      role: "Filler",
+    },
+    {
+      name: "Croscarmellose Sodium",
+      category: "disintegrants",
+      quantity: 15,
+      unit: "mg",
+      role: "Disintegrant",
+    },
+    {
+      name: "Magnesium Stearate",
+      category: "lubricants",
+      quantity: 5,
+      unit: "mg",
+      role: "Lubricant",
+    },
+  ],
+  Syrup: [
+    {
+      name: "Sucrose",
+      category: "fillers",
+      quantity: 3000,
+      unit: "mg",
+      role: "Sweetener/Vehicle",
+    },
+    {
+      name: "Sorbitol Solution",
+      category: "fillers",
+      quantity: 1000,
+      unit: "mg",
+      role: "Co-solvent",
+    },
+    {
+      name: "Sodium Benzoate",
+      category: "preservatives",
+      quantity: 50,
+      unit: "mg",
+      role: "Preservative",
+    },
+    {
+      name: "Purified Water",
+      category: "fillers",
+      quantity: 5000,
+      unit: "mg",
+      role: "Vehicle",
+    },
+  ],
+  Cream: [
+    {
+      name: "White Petrolatum",
+      category: "fillers",
+      quantity: 20000,
+      unit: "mg",
+      role: "Ointment base",
+    },
+    {
+      name: "Cetyl Alcohol",
+      category: "fillers",
+      quantity: 3000,
+      unit: "mg",
+      role: "Stiffening agent",
+    },
+    {
+      name: "Polysorbate 80",
+      category: "fillers",
+      quantity: 2000,
+      unit: "mg",
+      role: "Emulsifier",
+    },
+  ],
+};
+
+export function generateDynamicCompositions(
+  disease: string,
+  dosageForm: string,
+  drugType: string,
+): NovelComposition[] {
+  const ingredientOptions =
+    DISEASE_INGREDIENT_MAP[disease]?.[drugType] ||
+    DISEASE_INGREDIENT_MAP[disease]?.Allopathic ||
+    [];
+
+  const excipients =
+    STANDARD_EXCIPIENTS[dosageForm] || STANDARD_EXCIPIENTS.Tablet;
+
+  if (ingredientOptions.length === 0) {
+    // Generic fallback
+    return [];
+  }
+
+  const primary = ingredientOptions[0];
+  const secondary = ingredientOptions[1];
+  const tertiary = ingredientOptions[2];
+
+  const makeIngredients = (
+    apis: DiseaseIngredient[],
+    extras: Partial<NovelCompositionIngredient>[] = [],
+  ): NovelCompositionIngredient[] => [
+    ...apis.map((a) => ({
+      name: a.name,
+      category: "api",
+      quantity: a.qty,
+      unit: a.unit,
+      role: a.role,
+    })),
+    ...excipients,
+    ...extras.map(
+      (e) =>
+        ({
+          category: "fillers",
+          unit: "mg",
+          role: "Modifier",
+          ...e,
+        }) as NovelCompositionIngredient,
+    ),
+  ];
+
+  const stabilityLabel = (months: number) =>
+    months >= 24
+      ? `Stable at 25°C/60% RH for ${months} months per ICH Q1A`
+      : `Stable at 25°C/60% RH for ${months} months; refrigerate if >30°C`;
+
+  const compositions: NovelComposition[] = [];
+
+  // Comp 1: Single primary API
+  compositions.push({
+    id: `DYN-${disease.slice(0, 3).toUpperCase()}-001`,
+    name: `${primary.name} ${dosageForm} — Standard Release`,
+    dosageForm,
+    ingredients: makeIngredients([primary]),
+    pharmacologicalEffects: `${primary.mechanism}. Immediate-release ${dosageForm.toLowerCase()} for ${disease}. ${drugType} approach targeting primary pathophysiology.`,
+    advantages: [
+      `${primary.name} is well-established for ${disease} management`,
+      "Simple formulation — low manufacturing cost",
+      "Immediate release ensures rapid onset of action",
+      "Single API reduces risk of drug-drug interactions",
+    ],
+    disadvantages: [
+      "May require multiple daily doses",
+      "No complementary mechanism for resistant cases",
+    ],
+    stabilityPrediction: stabilityLabel(24),
+    shelfLife: "24 months",
+    storageCondition: "Store below 25°C, protected from moisture and light.",
+    drugInteractions: [
+      `Monitor combination with other ${disease}-related medications`,
+      "Check renal/hepatic function before prescribing",
+    ],
+  });
+
+  // Comp 2: Primary + Secondary combination
+  if (secondary) {
+    compositions.push({
+      id: `DYN-${disease.slice(0, 3).toUpperCase()}-002`,
+      name: `${primary.name} + ${secondary.name} Combination ${dosageForm}`,
+      dosageForm,
+      ingredients: makeIngredients([primary, secondary]),
+      pharmacologicalEffects: `Dual-mechanism combination: ${primary.mechanism}. ${secondary.mechanism}. Synergistic action targets multiple pathways in ${disease} management.`,
+      advantages: [
+        "Dual-mechanism synergy provides superior efficacy",
+        `${primary.name} and ${secondary.name} complement each other's pharmacology`,
+        "Combination reduces required individual doses (dose-sparing effect)",
+        "Fixed-dose combination improves patient adherence",
+      ],
+      disadvantages: [
+        "Higher cost than monotherapy",
+        "Risk of additive side effects",
+        "Requires careful dose titration",
+      ],
+      stabilityPrediction: stabilityLabel(24),
+      shelfLife: "24 months",
+      storageCondition: "Store below 25°C, ≤60% RH, in tight containers.",
+      drugInteractions: [
+        `${primary.name}: standard interactions apply`,
+        `${secondary.name}: verify no pharmacokinetic conflict`,
+        "Monitor for additive adverse effects",
+      ],
+    });
+  }
+
+  // Comp 3: Extended release with HPMC
+  compositions.push({
+    id: `DYN-${disease.slice(0, 3).toUpperCase()}-003`,
+    name: `${primary.name} Extended-Release ${dosageForm} (ER)`,
+    dosageForm,
+    ingredients: makeIngredients(
+      [{ ...primary, qty: primary.qty * 2 }],
+      [
+        {
+          name: "HPMC K100M",
+          quantity: 50,
+          unit: "mg",
+          role: "Release Retardant",
+        },
+        {
+          name: "Eudragit RS 100",
+          quantity: 30,
+          unit: "mg",
+          role: "Matrix Former",
+        },
+      ],
+    ),
+    pharmacologicalEffects: `Sustained-release ${primary.mechanism}. Matrix-controlled release maintains therapeutic plasma levels for 12–24 hours, reducing dose frequency and improving patient compliance.`,
+    advantages: [
+      "Once or twice-daily dosing improves patient compliance",
+      "Reduced peak-trough plasma fluctuation minimizes side effects",
+      "Prolonged therapeutic effect with lower total daily dose",
+      "Reduced GI side effects due to slow release",
+    ],
+    disadvantages: [
+      "More complex manufacturing — higher cost",
+      "Cannot be crushed or split by patient",
+      "Slower onset — not suitable for acute management",
+    ],
+    stabilityPrediction: stabilityLabel(24),
+    shelfLife: "24 months",
+    storageCondition: "Store below 30°C, ≤65% RH. Do not refrigerate.",
+    drugInteractions: [
+      `${primary.name} ER: food may affect release rate; take consistently`,
+      "Avoid co-administration with pH-altering agents",
+    ],
+  });
+
+  // Comp 4: With tertiary/alternative API
+  if (tertiary) {
+    compositions.push({
+      id: `DYN-${disease.slice(0, 3).toUpperCase()}-004`,
+      name: `${tertiary.name} — Alternative Monotherapy ${dosageForm}`,
+      dosageForm,
+      ingredients: makeIngredients([tertiary]),
+      pharmacologicalEffects: `${tertiary.mechanism}. Alternative therapeutic approach for ${disease} in patients intolerant to primary agents.`,
+      advantages: [
+        `Alternative for patients unresponsive or intolerant to ${primary.name}`,
+        `${tertiary.mechanism.split(";")[0]}`,
+        "Well-tolerated in majority of patients",
+        "Cost-effective alternative formulation",
+      ],
+      disadvantages: [
+        "May be less potent than standard first-line therapy",
+        "Limited long-term evidence in some patient populations",
+      ],
+      stabilityPrediction: stabilityLabel(18),
+      shelfLife: "18 months",
+      storageCondition: "Store below 25°C, away from direct sunlight.",
+      drugInteractions: [
+        `${tertiary.name}: check for protein-binding interactions`,
+        "Monitor efficacy switch from primary therapy",
+      ],
+    });
+  }
+
+  // Comp 5: Triple combination (phytopharmaceutical synergy)
+  if (secondary && tertiary) {
+    compositions.push({
+      id: `DYN-${disease.slice(0, 3).toUpperCase()}-005`,
+      name: `${primary.name} + ${secondary.name} + ${tertiary.name} Synergistic ${dosageForm}`,
+      dosageForm,
+      ingredients: makeIngredients([primary, secondary, tertiary]),
+      pharmacologicalEffects: `Triple-mechanism synergy: ${primary.mechanism}. Additionally, ${secondary.mechanism}. Augmented by ${tertiary.mechanism}. This combination addresses ${disease} at 3 distinct molecular targets.`,
+      advantages: [
+        "Simultaneous targeting of 3 molecular pathways for superior disease control",
+        "Each component at sub-therapeutic dose — lower side effect profile",
+        "Reduced development of resistance or tachyphylaxis",
+        "Comprehensive management including inflammation, function, and protection",
+      ],
+      disadvantages: [
+        "Complex formulation requiring careful compatibility testing",
+        "Higher manufacturing cost",
+        "Difficult dose adjustment if adverse effects arise",
+        "Requires thorough drug interaction profiling",
+      ],
+      stabilityPrediction:
+        "Compatibility study required; predicted stable at 25°C for 24 months in optimized packaging",
+      shelfLife: "24 months",
+      storageCondition:
+        "Store at controlled room temperature (15–25°C), ≤60% RH.",
+      drugInteractions: [
+        `${primary.name}: standard interactions apply`,
+        `${secondary.name}: monitor for additive effects with ${primary.name}`,
+        `${tertiary.name}: verify physicochemical compatibility in blend`,
+        "Full pharmacokinetic interaction study recommended",
+      ],
+    });
+  }
+
+  // Comp 6: Novel nanoparticle/bioenhanced formulation
+  compositions.push({
+    id: `DYN-${disease.slice(0, 3).toUpperCase()}-006`,
+    name: `${primary.name} Nano-Enhanced Bioavailability ${dosageForm}`,
+    dosageForm,
+    ingredients: makeIngredients(
+      [{ ...primary, qty: Math.round(primary.qty * 0.6) }],
+      [
+        {
+          name: "PLGA Polymer",
+          quantity: 50,
+          unit: "mg",
+          role: "Nanoparticle matrix",
+        },
+        { name: "Poloxamer 407", quantity: 15, unit: "mg", role: "Stabilizer" },
+        {
+          name: "PVP K30",
+          quantity: 20,
+          unit: "mg",
+          role: "Solubility enhancer",
+        },
+      ],
+    ),
+    pharmacologicalEffects: `Nanoformulation of ${primary.name}: ${primary.mechanism}. PLGA nanoparticles (100–300 nm) enhance oral bioavailability by 2–3× via improved solubility, permeability, and mucoadhesion. Reduces required dose by 40% while maintaining therapeutic efficacy.`,
+    advantages: [
+      "40% dose reduction due to improved bioavailability — lower adverse effects",
+      "Controlled release from PLGA matrix over 8–12 hours",
+      "Enhanced permeability across GI epithelium via nanoparticle endocytosis",
+      "Improved patient compliance with lower dose strength",
+    ],
+    disadvantages: [
+      "Complex nanomanufacturing — significantly higher cost",
+      "Requires specialized characterization (DLS, TEM, zeta potential)",
+      "Regulatory pathway more complex (nanomedicine classification)",
+      "Scale-up challenges for commercial manufacturing",
+    ],
+    stabilityPrediction:
+      "Nanoparticles sensitive to aggregation; lyophilization recommended. Predicted stable 18 months at 2–8°C",
+    shelfLife: "18 months (refrigerated)",
+    storageCondition: "Store at 2–8°C. Protect from freezing and light.",
+    drugInteractions: [
+      `${primary.name} nanoparticles may alter absorption kinetics of co-administered drugs`,
+      "Poloxamer 407 may interact with CYP3A4 substrates",
+      "Monitor for altered drug release in high-pH gastric environments",
+    ],
+  });
+
+  return compositions;
+}

@@ -10,7 +10,7 @@ import {
   Zap,
 } from "lucide-react";
 import { motion } from "motion/react";
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Bar,
   BarChart,
@@ -46,6 +46,149 @@ const TOOLTIP_STYLE = {
   color: "oklch(0.14 0.02 250)",
   fontSize: 12,
 };
+
+// ─── FDA News Ticker ──────────────────────────────────────────────────────────
+
+const FALLBACK_HEADLINES = [
+  "FDA approves new treatment for metastatic non-small cell lung cancer | Safety Update",
+  "Drug Safety Communication: New warnings for fluoroquinolone antibiotics | FDA Alert",
+  "FDA grants accelerated approval for Alzheimer's disease treatment | Label Update",
+  "New Drug Application approved: once-daily pill for Type 2 Diabetes management | FDA News",
+  "FDA issues safety communication regarding blood pressure medications | Market Update",
+  "Breakthrough therapy designation granted for rare pediatric disease treatment | FDA",
+];
+
+function FdaNewsTicker() {
+  const [headlines, setHeadlines] = useState<string[]>([]);
+  const [paused, setPaused] = useState(false);
+  const tickerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    async function fetchNews() {
+      try {
+        const [eventsRes, labelsRes] = await Promise.all([
+          fetch(
+            "https://api.fda.gov/drug/event.json?limit=10&sort=receiptdate:desc",
+          ),
+          fetch(
+            "https://api.fda.gov/drug/label.json?limit=5&sort=effective_time:desc",
+          ),
+        ]);
+        const items: string[] = [];
+
+        if (eventsRes.ok) {
+          const evData = await eventsRes.json();
+          for (const r of evData.results?.slice(0, 6) || []) {
+            const drug =
+              r?.patient?.drug?.[0]?.medicinalproduct ||
+              r?.patient?.drug?.[0]?.openfda?.brand_name?.[0] ||
+              "Unknown Drug";
+            const reaction =
+              r?.patient?.reaction?.[0]?.reactionmeddrapt || "Adverse Event";
+            const date = r?.receiptdate?.slice(0, 4) || "";
+            items.push(
+              `Safety Report: ${drug} — ${reaction} ${date ? `(${date})` : ""}`,
+            );
+          }
+        }
+
+        if (labelsRes.ok) {
+          const lblData = await labelsRes.json();
+          for (const r of lblData.results?.slice(0, 4) || []) {
+            const name =
+              r?.openfda?.brand_name?.[0] ||
+              r?.openfda?.generic_name?.[0] ||
+              "Drug";
+            const time = r?.effective_time?.slice(0, 4) || "";
+            items.push(
+              `Label Update: ${name} — Prescribing information updated${time ? ` (${time})` : ""}`,
+            );
+          }
+        }
+
+        setHeadlines(items.length >= 4 ? items : FALLBACK_HEADLINES);
+      } catch {
+        setHeadlines(FALLBACK_HEADLINES);
+      }
+    }
+    fetchNews();
+  }, []);
+
+  const displayHeadlines =
+    headlines.length > 0 ? headlines : FALLBACK_HEADLINES;
+  return (
+    <div
+      className="flex items-center overflow-hidden rounded-xl border"
+      style={{
+        background: "oklch(1.0 0 0)",
+        borderColor: "oklch(0.65 0.15 24 / 0.3)",
+        borderLeft: "4px solid oklch(0.54 0.174 24)",
+      }}
+      data-ocid="dashboard.section"
+    >
+      {/* Badge */}
+      <div
+        className="flex items-center gap-1.5 px-3 py-2 shrink-0 border-r"
+        style={{
+          background: "oklch(0.54 0.174 24 / 0.08)",
+          borderColor: "oklch(0.54 0.174 24 / 0.2)",
+        }}
+      >
+        <span
+          className="w-1.5 h-1.5 rounded-full animate-pulse"
+          style={{ background: "oklch(0.54 0.174 24)" }}
+        />
+        <span
+          className="text-[10px] font-bold tracking-widest uppercase"
+          style={{ color: "oklch(0.54 0.174 24)" }}
+        >
+          FDA LIVE
+        </span>
+      </div>
+
+      {/* Scrolling ticker */}
+      <div className="flex-1 overflow-hidden">
+        <div
+          ref={tickerRef}
+          className="py-2 px-3 whitespace-nowrap"
+          style={{
+            animation: paused ? "none" : "fdaTicker 40s linear infinite",
+            display: "inline-block",
+          }}
+          onMouseEnter={() => setPaused(true)}
+          onMouseLeave={() => setPaused(false)}
+        >
+          {displayHeadlines.map((h) => (
+            <a
+              key={`h1-${h.substring(0, 30)}`}
+              href="https://www.fda.gov/drugs/drug-safety-and-availability/drug-safety-communications"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs text-foreground hover:text-primary transition-colors cursor-pointer"
+              style={{ marginRight: "2.5rem" }}
+              data-ocid="dashboard.link"
+            >
+              {h}
+            </a>
+          ))}
+          {displayHeadlines.map((h) => (
+            <a
+              key={`h2-${h.substring(0, 30)}`}
+              href="https://www.fda.gov/drugs/drug-safety-and-availability/drug-safety-communications"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs text-foreground hover:text-primary transition-colors cursor-pointer"
+              style={{ marginRight: "2.5rem" }}
+              data-ocid="dashboard.link"
+            >
+              {h}
+            </a>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function StatCard({
   icon: Icon,
@@ -208,6 +351,9 @@ export function Dashboard() {
 
   return (
     <div className="space-y-6 p-6">
+      {/* FDA News Ticker */}
+      <FdaNewsTicker />
+
       {/* Hero */}
       <motion.div
         initial={{ opacity: 0, y: -10 }}

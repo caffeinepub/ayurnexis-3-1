@@ -286,6 +286,8 @@ persistent actor class AyurNexis() = self {
   };
 
   var userRecords : Map.Map<Text, UserRecord> = Map.empty<Text, UserRecord>();
+  // Separate map for code expiry days (avoids schema migration on userRecords)
+  var codeExpiryMap : Map.Map<Text, Nat> = Map.empty<Text, Nat>();
 
   // Anyone can submit a request
   public shared func submitAccessRequest(
@@ -348,8 +350,17 @@ persistent actor class AyurNexis() = self {
     };
   };
 
-  // Admin: generate access code for user
-  public shared func adminGenerateCode(userId : Text, adminToken : Text) : async ?Text {
+  // Admin: delete a user request entirely
+  public shared func adminDeleteUser(userId : Text, adminToken : Text) : async Bool {
+    if (adminToken != ADMIN_TOKEN) { return false };
+    switch (userRecords.get(userId)) {
+      case (null) { false };
+      case (?_) { userRecords.remove(userId); true };
+    };
+  };
+
+  // Admin: generate access code for user with custom expiry days
+  public shared func adminGenerateCode(userId : Text, adminToken : Text, expiryDays : Nat) : async ?Text {
     if (adminToken != ADMIN_TOKEN) { return null };
     switch (userRecords.get(userId)) {
       case (null) { null };
@@ -357,6 +368,7 @@ persistent actor class AyurNexis() = self {
         let tNat = Prim.nat64ToNat(Prim.time());
         let code = ((tNat % 900000) + 100000).toText();
         let now : Int = tNat;
+        codeExpiryMap.add(userId, expiryDays);
         userRecords.add(userId, {
           id = u.id; name = u.name; institution = u.institution; email = u.email;
           purpose = u.purpose; registeredAt = u.registeredAt;
@@ -368,7 +380,7 @@ persistent actor class AyurNexis() = self {
     };
   };
 
-  // Anyone can verify a code by email
+  // Verify a code by email — returns userId if valid and not expired
   public query func verifyUserCode(email : Text, code : Text) : async ?Text {
     for (u in userRecords.values()) {
       if (u.email == email) {
@@ -377,15 +389,32 @@ persistent actor class AyurNexis() = self {
             if (c == code and u.status == "approved") {
               switch (u.codeGeneratedAt) {
                 case (?genAt) {
+                  let expiryD : Nat = switch (codeExpiryMap.get(u.id)) { case (?d) d; case (null) 30 };
                   let now : Int = Prim.nat64ToNat(Prim.time());
-                  let thirtyDays : Int = 30 * 24 * 60 * 60 * 1_000_000_000;
-                  if (now - genAt < thirtyDays) {
+                  let expiryNs : Int = expiryD * 24 * 60 * 60 * 1_000_000_000;
+                  if (now - genAt < expiryNs) {
                     return ?u.id;
                   };
                 };
                 case (null) {};
               };
             };
+          };
+          case (null) {};
+        };
+      };
+    };
+    null;
+  };
+
+  // Get code expiry info for a user by email (for expiry warnings)
+  public query func getUserCodeExpiry(email : Text) : async ?(Int, Nat) {
+    for (u in userRecords.values()) {
+      if (u.email == email and u.status == "approved") {
+        switch (u.codeGeneratedAt) {
+          case (?genAt) {
+            let expiryD : Nat = switch (codeExpiryMap.get(u.id)) { case (?d) d; case (null) 30 };
+            return ?(genAt, expiryD);
           };
           case (null) {};
         };

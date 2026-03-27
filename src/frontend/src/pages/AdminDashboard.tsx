@@ -22,6 +22,7 @@ import {
   RefreshCw,
   Search,
   Shield,
+  Trash2,
   UserCheck,
   UserMinus,
   Users,
@@ -299,8 +300,41 @@ function UserCard({
   };
 
   const handleGenerateCode = async () => {
-    const localCode = generateCodeForUser(localUser.id, expiryDays);
     setShowDaysInput(false);
+    // Try backend first — backend code is authoritative for cross-device access
+    if (actor) {
+      try {
+        const result = await actor.adminGenerateCode(
+          localUser.id,
+          ADMIN_PASSWORD,
+          BigInt(expiryDays),
+        );
+        let code: string | undefined;
+        if (Array.isArray(result)) {
+          code = result.length > 0 ? String(result[0]) : undefined;
+        } else if (result?.__kind__ === "Some") {
+          code = result.value;
+        }
+        if (code) {
+          // Save backend code locally too
+          generateCodeForUser(localUser.id, expiryDays, code);
+          setLocalUser((u) => ({
+            ...u,
+            accessCode: code,
+            codeGeneratedAt: Date.now(),
+            codeExpiryDays: expiryDays,
+          }));
+          setGeneratedCode(code);
+          setShowCodeModal(true);
+          onRefresh();
+          return;
+        }
+      } catch {
+        console.warn("Backend generate code failed, falling back to local");
+      }
+    }
+    // Fallback: local-only code
+    const localCode = generateCodeForUser(localUser.id, expiryDays);
     setLocalUser((u) => ({
       ...u,
       accessCode: localCode,
@@ -309,25 +343,28 @@ function UserCard({
     }));
     setGeneratedCode(localCode);
     setShowCodeModal(true);
+    toast.warning("Code saved locally only — backend unavailable");
     onRefresh();
-    if (!actor) return;
-    try {
-      const result = await actor.adminGenerateCode(
-        localUser.id,
-        ADMIN_PASSWORD,
-      );
-      let code: string | undefined;
-      if (Array.isArray(result)) {
-        code = result.length > 0 ? String(result[0]) : undefined;
-      } else if (result?.__kind__ === "Some") {
-        code = result.value;
+  };
+
+  const handleDelete = async () => {
+    if (
+      !confirm(`Delete request for ${localUser.name}? This cannot be undone.`)
+    )
+      return;
+    // Remove from localStorage
+    const allUsers = getAllUsers();
+    saveAllUsers(allUsers.filter((u) => u.id !== localUser.id));
+    // Remove from backend
+    if (actor) {
+      try {
+        await actor.adminDeleteUser(localUser.id, ADMIN_PASSWORD);
+      } catch {
+        console.warn("Backend sync for delete failed");
       }
-      if (code && code !== localCode) {
-        console.log("Backend returned different code, keeping local");
-      }
-    } catch {
-      console.warn("Backend sync for generate code failed, using local code");
     }
+    toast.success(`${localUser.name}'s request deleted`);
+    onRefresh();
   };
 
   const statusBadge = {
@@ -392,6 +429,18 @@ function UserCard({
           <p className="text-xs text-muted-foreground mt-0.5 italic line-clamp-1">
             {localUser.purpose}
           </p>
+          <p className="text-xs text-muted-foreground mt-1">
+            Joined:{" "}
+            <span className="font-medium text-foreground">
+              {new Date(localUser.registeredAt).toLocaleString("en-IN", {
+                day: "2-digit",
+                month: "short",
+                year: "numeric",
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
+            </span>
+          </p>
         </div>
         <div className="flex-shrink-0">
           <div
@@ -420,13 +469,27 @@ function UserCard({
           {isCodeExpired && (
             <span className="text-red-500 text-[10px] ml-1">Expired</span>
           )}
+          {!isCodeExpired &&
+            codeExpiry &&
+            (() => {
+              const remMs = codeExpiry.getTime() - Date.now();
+              const remDays = Math.ceil(remMs / (24 * 60 * 60 * 1000));
+              return (
+                <span
+                  className={`text-[10px] ml-1 font-semibold ${remDays <= 2 ? "text-red-500" : remDays <= 7 ? "text-amber-500" : "text-green-600"}`}
+                >
+                  {remDays}d left
+                </span>
+              );
+            })()}
           {!isCodeExpired && codeExpiry && (
             <span className="text-muted-foreground text-[10px] ml-1">
-              Expires{" "}
+              (Expires{" "}
               {codeExpiry.toLocaleDateString("en-IN", {
                 day: "2-digit",
                 month: "short",
               })}
+              )
             </span>
           )}
         </div>
@@ -526,6 +589,15 @@ function UserCard({
             <RefreshCw size={12} className="mr-1" /> Reactivate
           </Button>
         )}
+        <Button
+          data-ocid="admin.users.delete_request_button"
+          size="sm"
+          variant="outline"
+          className="h-7 text-xs px-3 text-red-500 border-red-200 hover:bg-red-50 ml-auto"
+          onClick={handleDelete}
+        >
+          <Trash2 size={12} className="mr-1" /> Delete Request
+        </Button>
 
         {(localUser.claimedFormulations?.length ?? 0) > 0 && (
           <div className="mt-3">

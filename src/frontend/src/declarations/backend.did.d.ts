@@ -45,7 +45,9 @@ export interface _SERVICE {
   getAccessRequests: ActorMethod<[string], UserRecord[]>;
   adminApproveUser: ActorMethod<[string, string], boolean>;
   adminRevokeUser: ActorMethod<[string, string], boolean>;
-  adminGenerateCode: ActorMethod<[string, string], [] | [string]>;
+  adminDeleteUser: ActorMethod<[string, string], boolean>;
+  adminGenerateCode: ActorMethod<[string, string, bigint], [] | [string]>;
+  getUserCodeExpiry: ActorMethod<[string], [] | [[bigint, bigint]]>;
   verifyUserCode: ActorMethod<[string, string], [] | [string]>;
 }
 export declare const idlService: IDL.ServiceClass;

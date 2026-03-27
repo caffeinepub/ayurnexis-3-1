@@ -62,14 +62,40 @@ export function AccessGate({ children }: AccessGateProps) {
     // Sync access level on mount
     const level = getCurrentAccessLevel();
     setAccessLevelState(level);
-    // Check expiry warning: if user has full access and <=2 days remaining
     if (level === "full") {
       const user = getCurrentUser();
       if (user?.id) {
+        // Check expiry warning
         const remaining = getCodeRemainingDays(user.id);
         if (remaining > 0 && remaining <= 2) {
           setExpiryRemainingDays(remaining);
           setShowExpiryWarning(true);
+        }
+        // Check revocation: query backend to see if user still has a valid code
+        // If admin revoked the user, the backend will have no code for them
+        if (user.email) {
+          (async () => {
+            try {
+              const freshActor = await createActorWithConfig();
+              const result = await (freshActor as any).getUserCodeExpiry(
+                user.email,
+              );
+              // Determine if backend returned a valid expiry
+              let hasCode = false;
+              if (Array.isArray(result) && result.length > 0) hasCode = true;
+              else if (result && result.__kind__ === "Some") hasCode = true;
+              if (!hasCode) {
+                // Backend says no active code — user was revoked or code expired
+                setAccessLevel("readonly");
+                setAccessLevelState("readonly");
+                toast.error(
+                  "Your access has been revoked or expired. Contact your administrator.",
+                );
+              }
+            } catch {
+              // Backend unreachable — maintain current access (fail open for UX)
+            }
+          })();
         }
       }
     }
@@ -169,7 +195,26 @@ export function AccessGate({ children }: AccessGateProps) {
             setAccessLevel("full");
             setAccessLevelState("full");
             setShowCodeDialog(false);
-            const remDays = getCodeRemainingDays(userId);
+            // Get expiry info from backend (authoritative, works cross-device)
+            let remDays = 30;
+            try {
+              const expiryResult = await (verifyActor as any).getUserCodeExpiry(
+                codeEmail.trim(),
+              );
+              if (Array.isArray(expiryResult) && expiryResult.length > 0) {
+                const [genAt, expDays] = expiryResult[0];
+                const genMs = Number(genAt) / 1_000_000; // nanoseconds to ms
+                const expMs = Number(expDays) * 24 * 60 * 60 * 1000;
+                remDays = Math.max(
+                  1,
+                  Math.ceil(
+                    (genMs + expMs - Date.now()) / (24 * 60 * 60 * 1000),
+                  ),
+                );
+              }
+            } catch {
+              remDays = getCodeRemainingDays(userId) || 30;
+            }
             setActivationDays(remDays);
             setShowActivationPopup(true);
             granted = true;

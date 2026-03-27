@@ -34,6 +34,48 @@ const USERS_KEY = "ayurnexis_users";
 const CURRENT_USER_KEY = "ayurnexis_current_user_id";
 const ACCESS_LEVEL_KEY = "ayurnexis_access_level";
 const ADMIN_AUTHED_KEY = "ayurnexis_admin_authed";
+const LOCKED_FORMULATIONS_KEY = "ayurnexis_locked_formulations";
+
+export interface LockedFormulation {
+  hash: string;
+  lockedBy: string;
+  lockedAt: number;
+  formulationName: string;
+}
+
+function computeFormulationHash(
+  ingredients: Array<{ name: string; quantity: number; unit: string }>,
+): string {
+  const sorted = [...ingredients].sort((a, b) => a.name.localeCompare(b.name));
+  return sorted
+    .map((i) => `${i.name.toLowerCase()}:${i.quantity}${i.unit}`)
+    .join("|");
+}
+
+export function lockFormulation(
+  ingredients: Array<{ name: string; quantity: number; unit: string }>,
+  lockedBy: string,
+  formulationName: string,
+): void {
+  const hash = computeFormulationHash(ingredients);
+  const existing: LockedFormulation[] = JSON.parse(
+    localStorage.getItem(LOCKED_FORMULATIONS_KEY) || "[]",
+  );
+  if (!existing.find((f) => f.hash === hash)) {
+    existing.push({ hash, lockedBy, lockedAt: Date.now(), formulationName });
+    localStorage.setItem(LOCKED_FORMULATIONS_KEY, JSON.stringify(existing));
+  }
+}
+
+export function getFormulationLockInfo(
+  ingredients: Array<{ name: string; quantity: number; unit: string }>,
+): LockedFormulation | null {
+  const hash = computeFormulationHash(ingredients);
+  const existing: LockedFormulation[] = JSON.parse(
+    localStorage.getItem(LOCKED_FORMULATIONS_KEY) || "[]",
+  );
+  return existing.find((f) => f.hash === hash) || null;
+}
 
 export function getAllUsers(): UserRegistration[] {
   try {
@@ -178,11 +220,15 @@ export function revokeUser(userId: string): void {
   }
 }
 
-export function generateCodeForUser(userId: string, expiryDays = 30): string {
+export function generateCodeForUser(
+  userId: string,
+  expiryDays = 30,
+  presetCode?: string,
+): string {
   const users = getAllUsers();
   const idx = users.findIndex((u) => u.id === userId);
   if (idx < 0) return "";
-  const code = generateCode();
+  const code = presetCode || generateCode();
   users[idx].accessCode = code;
   users[idx].codeGeneratedAt = Date.now();
   users[idx].codeExpiryDays = expiryDays;
@@ -251,18 +297,23 @@ export function backendUserToLocal(r: any): UserRegistration {
     if (v.__kind__ === "Some") return Number(v.value);
     return undefined;
   };
+  // ICP Prim.time() returns nanoseconds — convert to milliseconds
+  const nsToMs = (ns: number | undefined): number | undefined =>
+    ns !== undefined ? ns / 1_000_000 : undefined;
   return {
     id: r.id,
     name: r.name,
     institution: r.institution,
     email: r.email,
     purpose: r.purpose,
-    registeredAt: Number(r.registeredAt),
+    registeredAt: r.registeredAt
+      ? Number(r.registeredAt) / 1_000_000
+      : Date.now(),
     status: r.status as "pending" | "approved" | "revoked",
     accessCode: getOptStr(r.accessCode),
-    codeGeneratedAt: getOptNum(r.codeGeneratedAt),
+    codeGeneratedAt: nsToMs(getOptNum(r.codeGeneratedAt)),
     codeExpiryDays: getOptNum(r.codeExpiryDays) ?? 30,
-    approvedAt: getOptNum(r.approvedAt),
+    approvedAt: nsToMs(getOptNum(r.approvedAt)),
     activityLog: [],
     claimedFormulations: [],
   };
