@@ -1,20 +1,34 @@
-// Gemini API Service for AyurNexis 3.1
-const GEMINI_API_KEY = "AIzaSyCkAAD9UcBo5KH1edlmz4vs61rAPJpRHQU";
-const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+// AI Service for AyurNexis 3.1 (powered by Puter.js)
 
-async function callGemini(prompt: string): Promise<string | null> {
+/* global puter */
+declare const puter: {
+  ai: {
+    chat: (
+      prompt: string,
+      options?: { model?: string; stream?: boolean },
+    ) => Promise<
+      | { message?: { content?: { text?: string }[] }; toString?: () => string }
+      | string
+    >;
+  };
+};
+
+async function callAI(prompt: string): Promise<string | null> {
   try {
-    const res = await fetch(GEMINI_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.8, maxOutputTokens: 8192 },
-      }),
-    });
-    if (!res.ok) return null;
-    const data = await res.json();
-    return data?.candidates?.[0]?.content?.parts?.[0]?.text ?? null;
+    const response = await puter.ai.chat(prompt);
+    if (!response) return null;
+    if (typeof response === "string") return response;
+    // Claude-style response
+    const msg = (response as { message?: { content?: { text?: string }[] } })
+      .message;
+    if (msg?.content?.[0]?.text) return msg.content[0].text;
+    // Fallback toString
+    if (
+      typeof (response as { toString?: () => string }).toString === "function"
+    ) {
+      return (response as { toString: () => string }).toString();
+    }
+    return JSON.stringify(response);
   } catch {
     return null;
   }
@@ -31,7 +45,6 @@ function parseJSON<T>(text: string): T | null {
   try {
     return JSON.parse(stripMarkdown(text)) as T;
   } catch {
-    // Try extracting JSON from text
     const arrMatch = text.match(/(\[\s*\{[\s\S]*\}\s*\])/m);
     if (arrMatch) {
       try {
@@ -151,7 +164,7 @@ export interface FormulationAnalysis {
 
 export async function searchDiseases(query: string): Promise<string[]> {
   const prompt = `List 30 medical diseases, disorders, syndromes, or conditions that match or relate to: '${query}'. Include common conditions like fever, cold, headache, diabetes, hypertension, infections, skin diseases, GI issues, respiratory, neurological, rare diseases, pediatric, geriatric, and specialty conditions. Return ONLY a JSON array of 30 strings (disease/condition names only), no explanation. Example: ["Type 2 Diabetes Mellitus", "Acute Febrile Illness", "Common Cold (Rhinovirus)"]`;
-  const result = await callGemini(prompt);
+  const result = await callAI(prompt);
   if (!result) return [];
   const parsed = parseJSON<string[]>(result);
   return Array.isArray(parsed)
@@ -181,7 +194,7 @@ For each, return a JSON array of objects with these exact fields:
 - dosageInstructions (string): dosage and administration instructions
 
 Return ONLY valid JSON array, no markdown, no explanation.`;
-  const result = await callGemini(prompt);
+  const result = await callAI(prompt);
   if (!result) return [];
   const parsed = parseJSON<FormulationIdea[]>(result);
   return Array.isArray(parsed) ? parsed : [];
@@ -203,7 +216,7 @@ export async function analyzeFormulation(
 - dscProfile: array of {ingredient (string), event (string), temperature (number in celsius), enthalpy (number in J/g)}
 - dissolutionProfile: array of {timeMinutes (number), percentReleased (number)}
 Return ONLY valid JSON, no markdown.`;
-  const result = await callGemini(prompt);
+  const result = await callAI(prompt);
   if (!result) return null;
   return parseJSON<FormulationAnalysis>(result);
 }
@@ -224,7 +237,7 @@ export async function getMarketedDrugs(
   _dosageForm: string,
 ): Promise<MarketedDrugResult[]> {
   const prompt = `List 20 real marketed pharmaceutical drugs for treating ${disease}. Include ALL available dosage forms (tablets, capsules, injections, syrups, creams, patches, suppositories, inhalers, etc.) and both allopathic and herbal/Ayurvedic brands. Use real brand names, manufacturers, and strengths from pharmacopoeia. Return ONLY a JSON array of objects with fields: brandName (string), genericName (string), manufacturer (string), dosageForm (string), strength (string). Example: [{"brandName":"Glucophage","genericName":"Metformin HCl","manufacturer":"Merck","dosageForm":"Tablet","strength":"500 mg"}]. Return ONLY valid JSON array, no markdown.`;
-  const result = await callGemini(prompt);
+  const result = await callAI(prompt);
   if (!result) return [];
   const parsed = parseJSON<MarketedDrugResult[]>(result);
   return Array.isArray(parsed) ? parsed : [];
@@ -251,7 +264,7 @@ Return a JSON object with:
 - instruments: array of 8-12 laboratory instruments required (e.g. "Tablet Compression Machine", "Analytical Balance", "Dissolution Apparatus USP Type II")
 - glassware: array of 6-10 glassware items required (e.g. "250 mL Beaker", "100 mL Volumetric Flask", "Conical Flask 500 mL")
 Return ONLY valid JSON, no markdown.`;
-  const result = await callGemini(prompt);
+  const result = await callAI(prompt);
   if (!result) return null;
   return parseJSON<FormulationSummaryData>(result);
 }
@@ -264,6 +277,6 @@ export async function getCompositionPharmacology(
   disease?: string,
 ): Promise<string> {
   const prompt = `Describe the combined pharmacological effects of this ${dosageForm} formulation${disease ? ` for treating ${disease}` : ""}: ${ingredients.map((i) => `${i.name} ${i.quantity}${i.unit} (${i.role})`).join(", ")}. Write a comprehensive 4-6 sentence paragraph covering: overall mechanism of action, key active constituents and their targets, therapeutic effects, bioavailability considerations, and clinical rationale. Be specific and pharmacopeia-accurate. Return ONLY the paragraph text, no JSON, no headers.`;
-  const result = await callGemini(prompt);
+  const result = await callAI(prompt);
   return result ?? "Pharmacological effects data unavailable.";
 }
