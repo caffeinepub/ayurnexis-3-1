@@ -123,6 +123,8 @@ export const idlService = IDL.Service({
   isCallerAdmin: IDL.Func([], [IDL.Bool], ['query']),
   setAppRole: IDL.Func([IDL.Principal, AppRole], [], []),
   getMyAppRole: IDL.Func([], [IDL.Opt(AppRole)], ['query']),
+  // AI Proxy
+  callDeepSeek: IDL.Func([IDL.Text], [IDL.Text], []),
   // Batch CRUD
   createBatch: IDL.Func([BatchInput], [IDL.Nat], []),
   getBatch: IDL.Func([IDL.Nat], [IDL.Opt(Batch)], ['query']),
@@ -149,9 +151,11 @@ export const idlService = IDL.Service({
   adminApproveUser: IDL.Func([IDL.Text, IDL.Text], [IDL.Bool], []),
   adminRevokeUser: IDL.Func([IDL.Text, IDL.Text], [IDL.Bool], []),
   adminDeleteUser: IDL.Func([IDL.Text, IDL.Text], [IDL.Bool], []),
-    adminGenerateCode: IDL.Func([IDL.Text, IDL.Text, IDL.Nat], [IDL.Opt(IDL.Text)], []),
-    getUserCodeExpiry: IDL.Func([IDL.Text], [IDL.Opt(IDL.Tuple(IDL.Int, IDL.Nat))], ['query']),
+  adminGenerateCode: IDL.Func([IDL.Text, IDL.Text, IDL.Nat], [IDL.Opt(IDL.Text)], []),
+  getUserCodeExpiry: IDL.Func([IDL.Text], [IDL.Opt(IDL.Tuple(IDL.Int, IDL.Nat))], ['query']),
   verifyUserCode: IDL.Func([IDL.Text, IDL.Text], [IDL.Opt(IDL.Text)], ['query']),
+  checkUserAccess: IDL.Func([IDL.Text], [IDL.Text], ['query']),
+  getUserRecord: IDL.Func([IDL.Text, IDL.Text], [IDL.Opt(UserRecord)], ['query']),
 });
 
 export const idlInitArgs = [];
@@ -264,6 +268,7 @@ export const idlFactory = ({ IDL }) => {
     isCallerAdmin: IDL.Func([], [IDL.Bool], ['query']),
     setAppRole: IDL.Func([IDL.Principal, AppRole], [], []),
     getMyAppRole: IDL.Func([], [IDL.Opt(AppRole)], ['query']),
+    callDeepSeek: IDL.Func([IDL.Text], [IDL.Text], []),
     createBatch: IDL.Func([BatchInput], [IDL.Nat], []),
     getBatch: IDL.Func([IDL.Nat], [IDL.Opt(Batch)], ['query']),
     getAllBatches: IDL.Func([], [IDL.Vec(Batch)], ['query']),
@@ -287,8 +292,8 @@ export const idlFactory = ({ IDL }) => {
     adminGenerateCode: IDL.Func([IDL.Text, IDL.Text, IDL.Nat], [IDL.Opt(IDL.Text)], []),
     getUserCodeExpiry: IDL.Func([IDL.Text], [IDL.Opt(IDL.Tuple(IDL.Int, IDL.Nat))], ['query']),
     verifyUserCode: IDL.Func([IDL.Text, IDL.Text], [IDL.Opt(IDL.Text)], ['query']),
-    getUserRecord: IDL.Func([IDL.Text, IDL.Text], [IDL.Opt(UserRecord)], ['query']),
     checkUserAccess: IDL.Func([IDL.Text], [IDL.Text], ['query']),
+    getUserRecord: IDL.Func([IDL.Text, IDL.Text], [IDL.Opt(UserRecord)], ['query']),
   });
 };
 

@@ -140,11 +140,14 @@ export function AccessGate({ children }: AccessGateProps) {
       claimedFormulations: [],
     };
 
-    // Try backend up to 3 times
+    // Try backend up to 5 times with increasing delays
+    const DELAYS = [0, 2000, 3000, 4000, 5000];
     let saved = false;
-    for (let attempt = 0; attempt < 3; attempt++) {
+    for (let attempt = 0; attempt < 5; attempt++) {
       try {
-        if (attempt > 0) await new Promise((r) => setTimeout(r, 3000));
+        if (DELAYS[attempt] > 0)
+          await new Promise((r) => setTimeout(r, DELAYS[attempt]));
+        // Create a fresh actor on each attempt to avoid stale connections
         const actor = await createActorWithConfig();
         const ok = await (actor as any).submitAccessRequest(
           userId,
@@ -155,18 +158,18 @@ export function AccessGate({ children }: AccessGateProps) {
           BigInt(newUser.registeredAt),
         );
         if (ok === true || ok === false) {
-          // false means user ID already exists (should not happen with fresh ID)
           saved = true;
+          console.log("Registration saved to backend:", userId);
           break;
         }
       } catch (err) {
-        console.warn(`Registration attempt ${attempt + 1}/3 failed:`, err);
+        console.warn(`Registration attempt ${attempt + 1}/5 failed:`, err);
       }
     }
 
     if (!saved) {
       setRegError(
-        "Could not reach server after 3 attempts. Please check your connection and try again.",
+        "Could not reach server. Please wait 30 seconds and try again.",
       );
       setRegLoading(false);
       return;

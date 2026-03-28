@@ -230,6 +230,8 @@ export interface backendInterface {
     adminGenerateCode(userId: string, adminToken: string, expiryDays: bigint): Promise<Option<string>>;
     getUserCodeExpiry(email: string): Promise<Option<[bigint, bigint]>>;
     verifyUserCode(email: string, code: string): Promise<Option<string>>;
+    callDeepSeek(prompt: string): Promise<string>;
+    checkUserAccess(userId: string): Promise<string>;
 }
 export class Backend implements backendInterface {
     constructor(private actor: ActorSubclass<_SERVICE>, private _uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, private _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, private processError?: (error: unknown) => never){}
@@ -262,6 +264,9 @@ export class Backend implements backendInterface {
     async adminGenerateCode(userId: string, adminToken: string, expiryDays: bigint): Promise<Option<string>> { const r = await (this.actor as any).adminGenerateCode(userId, adminToken, expiryDays); return r.length > 0 ? some(r[0] as string) : none(); }
     async getUserCodeExpiry(email: string): Promise<Option<[bigint, bigint]>> { return (this.actor as any).getUserCodeExpiry(email); }
     async verifyUserCode(email: string, code: string): Promise<Option<string>> { const r = await this.actor.verifyUserCode(email, code); return r.length > 0 ? some(r[0] as string) : none(); }
+    async callDeepSeek(prompt: string): Promise<string> { return (this.actor as any).callDeepSeek(prompt); }
+    async checkUserAccess(userId: string): Promise<string> { return (this.actor as any).checkUserAccess(userId); }
+    async getUserRecord(userId: string, adminToken: string): Promise<Option<any>> { const r = await (this.actor as any).getUserRecord(userId, adminToken); return r && r.length > 0 ? some(r[0]) : none(); }
 }
 export interface CreateActorOptions {
     agent?: Agent;

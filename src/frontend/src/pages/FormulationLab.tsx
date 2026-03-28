@@ -35,6 +35,7 @@ import {
   Droplets,
   FlaskConical,
   Layers,
+  Loader2,
   Package,
   Pill,
   Plus,
@@ -81,6 +82,14 @@ import {
   preservatives,
 } from "../data/formulationData";
 import { type HerbMonograph, pharmacopeiaData } from "../data/pharmacopeiaData";
+import {
+  type CompatibilityResult,
+  type PharmacologyResult,
+  type SOPResult,
+  analyzeCompatibility,
+  analyzePharmacology,
+  generateSOP,
+} from "../utils/aiService";
 // ─── Pharmacopeia Incompatibility Database ────────────────────────────────────
 const INCOMPATIBILITY_DB: Array<{
   a: string;
@@ -2933,6 +2942,73 @@ export function FormulationLab({
     j: number;
     reason: string;
   } | null>(null);
+
+  // ── AI Analysis State ─────────────────────────────────────────────────────
+  const [aiPharmacology, setAiPharmacology] =
+    useState<PharmacologyResult | null>(null);
+  const [aiPharmacologyLoading, setAiPharmacologyLoading] = useState(false);
+  const [aiPharmacologyError, setAiPharmacologyError] = useState(false);
+  const [aiCompat, setAiCompat] = useState<CompatibilityResult[]>([]);
+  const [aiCompatLoading, setAiCompatLoading] = useState(false);
+  const [_aiCompatError, setAiCompatError] = useState(false);
+  const [aiSOP, setAiSOP] = useState<SOPResult | null>(null);
+  const [aiSOPLoading, setAiSOPLoading] = useState(false);
+  const aiIngredientsCacheRef = useRef<string>("");
+
+  const fetchAIAnalysis = async () => {
+    if (ingredients.length === 0) return;
+    const key = `${ingredients.map((i) => `${i.name}:${i.quantity}:${i.unit}`).join("|")}:${dosageForm}`;
+    if (key === aiIngredientsCacheRef.current) return;
+    aiIngredientsCacheRef.current = key;
+
+    const ingList = ingredients.map((i) => ({
+      name: i.name,
+      quantity: i.quantity,
+      unit: i.unit,
+      category: i.category,
+    }));
+
+    // Fetch pharmacology and compatibility in parallel
+    setAiPharmacologyLoading(true);
+    setAiPharmacologyError(false);
+    setAiCompatLoading(true);
+    setAiCompatError(false);
+    setAiSOPLoading(true);
+
+    const [pharmResult, compatResult, sopResult] = await Promise.allSettled([
+      analyzePharmacology(
+        ingList,
+        dosageForm ?? "Tablet",
+        "general indication",
+      ),
+      analyzeCompatibility(ingList),
+      generateSOP(
+        ingList,
+        dosageForm ?? "Tablet",
+        method ?? "Direct Compression",
+      ),
+    ]);
+
+    if (pharmResult.status === "fulfilled") {
+      setAiPharmacology(pharmResult.value);
+    } else {
+      setAiPharmacologyError(true);
+    }
+    setAiPharmacologyLoading(false);
+
+    if (compatResult.status === "fulfilled") {
+      setAiCompat(compatResult.value);
+    } else {
+      setAiCompatError(true);
+    }
+    setAiCompatLoading(false);
+
+    if (sopResult.status === "fulfilled") {
+      setAiSOP(sopResult.value);
+    }
+    setAiSOPLoading(false);
+  };
+
   // ── Derived ───────────────────────────────────────────────────────────────
   const methods = dosageForm ? (DOSAGE_METHODS[dosageForm] ?? []) : [];
   const selectedMethod = methods.find((m) => m.method === method);
@@ -4294,6 +4370,132 @@ export function FormulationLab({
                       );
                     })
                   )}
+                  {/* AI Pharmacology Section */}
+                  {ingredients.length > 0 && (
+                    <Card className="border-border">
+                      <CardHeader className="pb-2">
+                        <div className="flex items-center justify-between">
+                          <CardTitle className="text-sm flex items-center gap-2">
+                            <Zap className="w-4 h-4 text-amber-500" />
+                            AI Pharmacological Analysis
+                          </CardTitle>
+                          <div className="flex items-center gap-2">
+                            <Badge className="text-[10px] bg-primary/10 text-primary border-0">
+                              AI-Predicted
+                            </Badge>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 text-xs gap-1"
+                              onClick={() => {
+                                aiIngredientsCacheRef.current = "";
+                                fetchAIAnalysis();
+                              }}
+                              disabled={aiPharmacologyLoading}
+                              data-ocid="formulation.api.button"
+                            >
+                              {aiPharmacologyLoading ? (
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                              ) : (
+                                <RefreshCw className="w-3 h-3" />
+                              )}
+                              {aiPharmacologyLoading
+                                ? "Loading…"
+                                : "Get AI Analysis"}
+                            </Button>
+                          </div>
+                        </div>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        {aiPharmacologyLoading && (
+                          <div
+                            data-ocid="formulation.api.loading_state"
+                            className="space-y-2"
+                          >
+                            {[1, 2, 3].map((i) => (
+                              <div
+                                key={i}
+                                className="h-10 bg-muted/50 rounded animate-pulse"
+                              />
+                            ))}
+                          </div>
+                        )}
+                        {!aiPharmacologyLoading && aiPharmacologyError && (
+                          <div
+                            data-ocid="formulation.api.error_state"
+                            className="text-center py-4"
+                          >
+                            <p className="text-xs text-red-600 mb-2">
+                              Could not load AI predictions.
+                            </p>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 text-xs"
+                              onClick={() => {
+                                aiIngredientsCacheRef.current = "";
+                                fetchAIAnalysis();
+                              }}
+                            >
+                              Retry
+                            </Button>
+                          </div>
+                        )}
+                        {!aiPharmacologyLoading && aiPharmacology && (
+                          <div className="space-y-3 text-xs">
+                            <div>
+                              <p className="font-semibold text-foreground mb-1">
+                                Mechanism of Action
+                              </p>
+                              <p className="text-muted-foreground leading-relaxed">
+                                {aiPharmacology.mechanismOfAction}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="font-semibold text-foreground mb-1">
+                                Pharmacokinetics
+                              </p>
+                              <p className="text-muted-foreground">
+                                {aiPharmacology.pharmacokinetics}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="font-semibold text-foreground mb-1">
+                                Clinical Rationale
+                              </p>
+                              <p className="text-muted-foreground leading-relaxed">
+                                {aiPharmacology.clinicalRationale}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="font-semibold text-foreground mb-1">
+                                Therapeutic Effects
+                              </p>
+                              <div className="flex flex-wrap gap-1.5">
+                                {aiPharmacology.therapeuticEffects.map((te) => (
+                                  <Badge
+                                    key={te}
+                                    variant="outline"
+                                    className="text-xs text-green-600 border-green-200"
+                                  >
+                                    {te}
+                                  </Badge>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                        {!aiPharmacologyLoading &&
+                          !aiPharmacology &&
+                          !aiPharmacologyError && (
+                            <p className="text-xs text-muted-foreground text-center py-3">
+                              Click "Get AI Analysis" to fetch real
+                              pharmacological predictions for this formulation.
+                            </p>
+                          )}
+                      </CardContent>
+                    </Card>
+                  )}
                 </TabsContent>
 
                 <TabsContent value="recs" className="space-y-4">
@@ -4542,21 +4744,212 @@ export function FormulationLab({
                       <p className="text-sm font-medium mb-1">
                         Add 2+ ingredients
                       </p>
-                      <p className="text-xs">
-                        Inter-ingredient compatibility is assessed using the
-                        static pharmacopeia incompatibility database.
-                      </p>
                     </div>
                   ) : (
-                    <div className="space-y-3">
-                      <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">
-                        Pharmacopeia Incompatibility Analysis
-                      </p>
-                      <p className="text-sm text-muted-foreground">
-                        Compatibility assessment is based on the pharmacopeia
-                        incompatibility database. Refer to the Compatibility
-                        Matrix tab for detailed pair-wise analysis.
-                      </p>
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider flex items-center gap-1.5">
+                          <Zap className="w-3.5 h-3.5 text-amber-500" /> AI
+                          Reaction Analysis
+                        </p>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs gap-1"
+                          onClick={() => {
+                            aiIngredientsCacheRef.current = "";
+                            fetchAIAnalysis();
+                          }}
+                          disabled={aiCompatLoading || aiPharmacologyLoading}
+                          data-ocid="formulation.reactions.button"
+                        >
+                          {aiCompatLoading || aiPharmacologyLoading ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          ) : (
+                            <RefreshCw className="w-3 h-3" />
+                          )}
+                          {aiCompatLoading || aiPharmacologyLoading
+                            ? "Analyzing…"
+                            : "Run AI Analysis"}
+                        </Button>
+                      </div>
+
+                      {aiPharmacologyLoading && (
+                        <div
+                          data-ocid="formulation.reactions.loading_state"
+                          className="space-y-2"
+                        >
+                          {[1, 2, 3].map((i) => (
+                            <div
+                              key={i}
+                              className="h-12 bg-muted/50 rounded-lg animate-pulse"
+                            />
+                          ))}
+                        </div>
+                      )}
+
+                      {!aiPharmacologyLoading && aiPharmacologyError && (
+                        <div
+                          data-ocid="formulation.reactions.error_state"
+                          className="rounded-lg border border-red-200 bg-red-50 p-4 text-center"
+                        >
+                          <p className="text-xs text-red-600 mb-2">
+                            Could not load AI predictions.
+                          </p>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 text-xs"
+                            onClick={() => {
+                              aiIngredientsCacheRef.current = "";
+                              fetchAIAnalysis();
+                            }}
+                          >
+                            Retry
+                          </Button>
+                        </div>
+                      )}
+
+                      {!aiPharmacologyLoading && aiPharmacology && (
+                        <div className="space-y-3">
+                          <Card className="border-border">
+                            <CardHeader className="pb-2">
+                              <CardTitle className="text-sm flex items-center gap-2">
+                                <Shield className="w-4 h-4 text-primary" /> Drug
+                                Interactions
+                                <Badge className="ml-auto text-[10px] bg-primary/10 text-primary border-0">
+                                  AI-Predicted
+                                </Badge>
+                              </CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                              {aiPharmacology.drugInteractions.length === 0 ? (
+                                <p className="text-xs text-muted-foreground">
+                                  No significant drug interactions predicted.
+                                </p>
+                              ) : (
+                                <ul className="space-y-1.5">
+                                  {aiPharmacology.drugInteractions.map((di) => (
+                                    <li
+                                      key={di}
+                                      className="text-xs text-muted-foreground flex gap-2"
+                                    >
+                                      <AlertTriangle className="w-3 h-3 mt-0.5 shrink-0 text-yellow-500" />
+                                      {di}
+                                    </li>
+                                  ))}
+                                </ul>
+                              )}
+                            </CardContent>
+                          </Card>
+                          <Card className="border-border">
+                            <CardHeader className="pb-2">
+                              <CardTitle className="text-sm">
+                                Adverse Effects
+                              </CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                              <div className="flex flex-wrap gap-1.5">
+                                {aiPharmacology.adverseEffects.map((ae) => (
+                                  <Badge
+                                    key={ae}
+                                    variant="outline"
+                                    className="text-xs text-amber-600 border-amber-200"
+                                  >
+                                    {ae}
+                                  </Badge>
+                                ))}
+                              </div>
+                            </CardContent>
+                          </Card>
+                          <Card className="border-border">
+                            <CardHeader className="pb-2">
+                              <CardTitle className="text-sm">
+                                Contraindications
+                              </CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                              <div className="flex flex-wrap gap-1.5">
+                                {aiPharmacology.contraindications.map((ci) => (
+                                  <Badge
+                                    key={ci}
+                                    variant="outline"
+                                    className="text-xs text-red-600 border-red-200"
+                                  >
+                                    {ci}
+                                  </Badge>
+                                ))}
+                              </div>
+                            </CardContent>
+                          </Card>
+                        </div>
+                      )}
+
+                      {!aiPharmacologyLoading &&
+                        !aiPharmacology &&
+                        !aiPharmacologyError && (
+                          <div className="text-center py-8 text-muted-foreground">
+                            <p className="text-sm mb-3">
+                              Click "Run AI Analysis" to get real-time drug
+                              interaction predictions
+                            </p>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => fetchAIAnalysis()}
+                              data-ocid="formulation.reactions.secondary_button"
+                            >
+                              <Zap className="w-3 h-3 mr-1" /> Analyze Now
+                            </Button>
+                          </div>
+                        )}
+
+                      {aiCompat.length > 0 && (
+                        <Card className="border-border">
+                          <CardHeader className="pb-2">
+                            <CardTitle className="text-sm flex items-center gap-2">
+                              <Layers className="w-4 h-4 text-primary" /> AI
+                              Compatibility Pairs
+                              <Badge className="ml-auto text-[10px] bg-primary/10 text-primary border-0">
+                                AI-Predicted
+                              </Badge>
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            <div className="space-y-2">
+                              {aiCompat
+                                .filter((r) => r.compatibility !== "compatible")
+                                .map((r) => (
+                                  <div
+                                    key={`${r.ingredient1}-${r.ingredient2}`}
+                                    className={`p-2.5 rounded-lg text-xs ${r.compatibility === "incompatible" ? "bg-red-50 border border-red-100" : "bg-yellow-50 border border-yellow-100"}`}
+                                  >
+                                    <p className="font-medium mb-0.5">
+                                      {r.ingredient1} + {r.ingredient2}
+                                    </p>
+                                    <p
+                                      className={
+                                        r.compatibility === "incompatible"
+                                          ? "text-red-700"
+                                          : "text-yellow-700"
+                                      }
+                                    >
+                                      {r.reason}
+                                    </p>
+                                  </div>
+                                ))}
+                              {aiCompat.filter(
+                                (r) => r.compatibility !== "compatible",
+                              ).length === 0 && (
+                                <p className="text-xs text-green-600">
+                                  ✓ All ingredient pairs appear compatible per
+                                  AI analysis.
+                                </p>
+                              )}
+                            </div>
+                          </CardContent>
+                        </Card>
+                      )}
                     </div>
                   )}
                 </TabsContent>
@@ -5176,6 +5569,133 @@ export function FormulationLab({
                         );
                       })}
                     </div>
+                  )}
+                </CardContent>
+              </Card>
+              {/* AI SOP Preview */}
+              <Card className="border-border">
+                <CardHeader className="pb-2">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <BookOpen className="w-4 h-4 text-primary" />
+                      AI Manufacturing Procedure
+                    </CardTitle>
+                    <div className="flex items-center gap-2">
+                      <Badge className="text-[10px] bg-primary/10 text-primary border-0">
+                        AI-Predicted
+                      </Badge>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-xs gap-1"
+                        onClick={() => {
+                          aiIngredientsCacheRef.current = "";
+                          fetchAIAnalysis();
+                        }}
+                        disabled={aiSOPLoading}
+                        data-ocid="formulation.summary.button"
+                      >
+                        {aiSOPLoading ? (
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                        ) : (
+                          <RefreshCw className="w-3 h-3" />
+                        )}
+                        {aiSOPLoading ? "Generating…" : "Generate SOP"}
+                      </Button>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {aiSOPLoading && (
+                    <div
+                      data-ocid="formulation.summary.loading_state"
+                      className="space-y-2"
+                    >
+                      {[1, 2, 3, 4].map((i) => (
+                        <div
+                          key={i}
+                          className="h-8 bg-muted/50 rounded animate-pulse"
+                        />
+                      ))}
+                    </div>
+                  )}
+                  {!aiSOPLoading && aiSOP && (
+                    <div className="space-y-4 text-xs">
+                      <div>
+                        <p className="font-semibold text-foreground mb-2">
+                          Step-by-Step Procedure
+                        </p>
+                        <ol className="space-y-1.5 list-none">
+                          {aiSOP.procedure.map((step, i) => (
+                            <li
+                              key={`sop-step-${step.slice(0, 20)}`}
+                              className="flex gap-2 text-muted-foreground"
+                            >
+                              <span className="font-mono text-primary shrink-0">
+                                {String(i + 1).padStart(2, "0")}.
+                              </span>
+                              <span>{step}</span>
+                            </li>
+                          ))}
+                        </ol>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <p className="font-semibold text-foreground mb-1.5">
+                            Instruments Required
+                          </p>
+                          <ul className="space-y-1">
+                            {aiSOP.instruments.map((inst) => (
+                              <li
+                                key={inst}
+                                className="text-muted-foreground flex gap-1.5"
+                              >
+                                <span className="text-primary">•</span>
+                                {inst}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                        <div>
+                          <p className="font-semibold text-foreground mb-1.5">
+                            Glassware
+                          </p>
+                          <ul className="space-y-1">
+                            {aiSOP.glassware.map((gw) => (
+                              <li
+                                key={gw}
+                                className="text-muted-foreground flex gap-1.5"
+                              >
+                                <span className="text-primary">•</span>
+                                {gw}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      </div>
+                      <div>
+                        <p className="font-semibold text-foreground mb-1.5">
+                          Quality Checks
+                        </p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {aiSOP.qualityChecks.map((qc) => (
+                            <Badge
+                              key={qc}
+                              variant="outline"
+                              className="text-xs"
+                            >
+                              {qc}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  {!aiSOPLoading && !aiSOP && (
+                    <p className="text-xs text-muted-foreground text-center py-3">
+                      Click "Generate SOP" to get an AI-predicted step-by-step
+                      manufacturing procedure.
+                    </p>
                   )}
                 </CardContent>
               </Card>

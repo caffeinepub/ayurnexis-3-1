@@ -1,5 +1,6 @@
 import AccessControl "./authorization/access-control";
 import MixinAuthorization "./authorization/MixinAuthorization";
+import Outcall "./http-outcalls/outcall";
 import Map "mo:core/Map";
 import Float "mo:core/Float";
 import Nat "mo:core/Nat";
@@ -9,9 +10,8 @@ persistent actor class AyurNexis() = self {
 
   let authState = AccessControl.initState();
 
-  // Kept for upgrade compatibility — previously used for AI proxy (now removed)
-  let DEEPSEEK_API_KEY : Text = "";
-  let DEEPSEEK_URL : Text = "";
+  let DEEPSEEK_API_KEY : Text = "sk-2d7fcf900b344a198815df1f571fce11";
+  let DEEPSEEK_URL : Text = "https://api.deepseek.com/v1/chat/completions";
   include MixinAuthorization(authState);
 
   public type AppRole = { #admin; #qaManager; #labTechnician };
@@ -24,6 +24,108 @@ persistent actor class AyurNexis() = self {
 
   public query ({ caller }) func getMyAppRole() : async ?AppRole {
     appRoles.get(caller);
+  };
+
+  // ─── DeepSeek AI Proxy ───────────────────────────────────────────────────────
+
+  public query func _transform(input : Outcall.TransformationInput) : async Outcall.TransformationOutput {
+    { input.response with headers = [] };
+  };
+
+  public shared func callDeepSeek(prompt : Text) : async Text {
+    let body = "{\"model\":\"deepseek-chat\",\"messages\":[{\"role\":\"user\",\"content\":\"" # escapeJson(prompt) # "\"}],\"max_tokens\":2000,\"temperature\":0.7}";
+    let headers : [Outcall.Header] = [
+      { name = "Content-Type"; value = "application/json" },
+      { name = "Authorization"; value = "Bearer " # DEEPSEEK_API_KEY },
+    ];
+    try {
+      let response = await Outcall.httpPostRequest(DEEPSEEK_URL, headers, body, _transform);
+      // Extract content from: {"choices":[{"message":{"content":"..."}}]}
+      extractDeepSeekContent(response);
+    } catch (e) {
+      "ERROR: " # Prim.errorMessage(e);
+    };
+  };
+
+  func escapeJson(s : Text) : Text {
+    var result = "";
+    for (c in s.chars()) {
+      if (c == '\"') { result #= "\\\"" }
+      else if (c == '\\') { result #= "\\\\" }
+      else if (c == '\n') { result #= "\\n" }
+      else if (c == '\r') { result #= "\\r" }
+      else if (c == '\t') { result #= "\\t" }
+      else { result #= Prim.charToText(c) };
+    };
+    result;
+  };
+
+  func extractDeepSeekContent(json : Text) : Text {
+    // Simple extraction: find "content":" ... " after message
+    let marker = "\"content\":\"";
+    switch (textFind(json, marker)) {
+      case (null) { json };
+      case (?start) {
+        let contentStart = start + marker.size();
+        let rest = textSubstring(json, contentStart, json.size());
+        // Find the closing quote (handling escapes naively: find next unescaped ")
+        findUnescapedEnd(rest);
+      };
+    };
+  };
+
+  func textFind(haystack : Text, needle : Text) : ?Nat {
+    let hs = haystack.size();
+    let ns = needle.size();
+    if (ns == 0) { return ?0 };
+    if (hs < ns) { return null };
+    var i = 0;
+    while (i + ns <= hs) {
+      if (textSubstring(haystack, i, i + ns) == needle) {
+        return ?i;
+      };
+      i += 1;
+    };
+    null;
+  };
+
+  func textSubstring(t : Text, start : Nat, end_ : Nat) : Text {
+    let chars = t.chars().toArray();
+    let len = chars.size();
+    let s = if (start > len) len else start;
+    let e = if (end_ > len) len else end_;
+    var result = "";
+    var i = s;
+    while (i < e) {
+      result #= Prim.charToText(chars[i]);
+      i += 1;
+    };
+    result;
+  };
+
+  func findUnescapedEnd(s : Text) : Text {
+    let chars = s.chars().toArray();
+    var i = 0;
+    var result = "";
+    var escaped = false;
+    while (i < chars.size()) {
+      let c = chars[i];
+      if (escaped) {
+        if (c == 'n') { result #= "\n" }
+        else if (c == 't') { result #= "\t" }
+        else if (c == 'r') { result #= "\r" }
+        else { result #= Prim.charToText(c) };
+        escaped := false;
+      } else if (c == '\\') {
+        escaped := true;
+      } else if (c == '\"') {
+        return result; // end of content
+      } else {
+        result #= Prim.charToText(c);
+      };
+      i += 1;
+    };
+    result;
   };
 
   public type Batch = {

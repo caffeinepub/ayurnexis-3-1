@@ -670,22 +670,36 @@ export function AdminDashboard() {
   const loadUsers = useCallback(async () => {
     setLoading(true);
     setBackendError("");
-    try {
-      const actor = await createActorWithConfig();
-      const records: any[] = await actor.getAccessRequests(ADMIN_TOKEN);
-      const parsed: UserRegistration[] = records.map(backendUserToLocal);
-      // Sort newest first
-      parsed.sort((a, b) => b.registeredAt - a.registeredAt);
-      setUsers(parsed);
-      console.log(`Admin panel: loaded ${parsed.length} users from backend`);
-    } catch (err) {
-      console.error("Failed to load users from backend:", err);
-      setBackendError(
-        "Could not reach backend. Check your connection and click Refresh.",
-      );
-    } finally {
-      setLoading(false);
+    const MAX_RETRIES = 3;
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      try {
+        if (attempt > 0) {
+          setBackendError(`Auto-retrying… (${attempt}/${MAX_RETRIES - 1})`);
+          await new Promise((r) => setTimeout(r, 3000));
+        }
+        const actor = await createActorWithConfig();
+        const records: any[] = await actor.getAccessRequests(ADMIN_TOKEN);
+        const parsed: UserRegistration[] = records.map(backendUserToLocal);
+        // Sort newest first
+        parsed.sort((a, b) => b.registeredAt - a.registeredAt);
+        setUsers(parsed);
+        setBackendError("");
+        console.log(`Admin panel: loaded ${parsed.length} users from backend`);
+        setLoading(false);
+        return;
+      } catch (err) {
+        console.warn(
+          `Admin load attempt ${attempt + 1}/${MAX_RETRIES} failed:`,
+          err,
+        );
+        if (attempt === MAX_RETRIES - 1) {
+          setBackendError(
+            "Could not reach backend. Check your connection and click Refresh.",
+          );
+        }
+      }
     }
+    setLoading(false);
   }, []);
 
   useEffect(() => {

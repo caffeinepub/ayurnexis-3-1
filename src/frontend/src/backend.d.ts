@@ -120,6 +120,9 @@ export interface backendInterface {
   setAppRole(user: Principal, role: AppRole): Promise<void>;
   getMyAppRole(): Promise<Option<AppRole>>;
 
+  // AI Proxy — routes all AI calls through the backend canister to avoid CORS
+  callDeepSeek(prompt: string): Promise<string>;
+
   // Batch CRUD
   createBatch(input: BatchInput): Promise<bigint>;
   getBatch(id: bigint): Promise<Option<Batch>>;
@@ -154,4 +157,6 @@ export interface backendInterface {
   adminGenerateCode(userId: string, adminToken: string, expiryDays: bigint): Promise<Option<string>>;
   verifyUserCode(email: string, code: string): Promise<Option<string>>;
   getUserCodeExpiry(email: string): Promise<Option<[bigint, bigint]>>;
+  checkUserAccess(userId: string): Promise<string>;
+  getUserRecord(userId: string, adminToken: string): Promise<Option<UserRecord>>;
 }
