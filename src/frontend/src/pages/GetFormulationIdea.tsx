@@ -24,13 +24,7 @@ import {
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import {
-  DISEASES,
-  MARKETED_DRUGS,
-  type MarketedDrug,
-  NOVEL_COMPOSITIONS,
-  type NovelComposition,
-} from "../data/formulationIdeaData";
+import type { NovelComposition } from "../data/formulationIdeaData";
 import {
   type FormulationIdea,
   type MarketedDrugResult,
@@ -141,11 +135,7 @@ function DiseaseSearch({ onSelect }: { onSelect: (disease: string) => void }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const preloadedFiltered = DISEASES.filter((d) =>
-    d.toLowerCase().includes(query.toLowerCase()),
-  ).slice(0, 8);
-
-  const filtered = aiResults.length > 0 ? aiResults : preloadedFiltered;
+  const filtered = aiResults;
 
   const [aiSearching, setAiSearching] = useState(false);
 
@@ -617,9 +607,6 @@ function NovelCompositionsStep({
       .finally(() => setIsLoadingMore(false));
   };
 
-  // Static fallback data (used if AI unavailable)
-  const directComps: NovelComposition[] = NOVEL_COMPOSITIONS[key] ?? [];
-
   // Convert AI ideas to NovelComposition format for display
   const aiConverted: NovelComposition[] | null = aiComps
     ? aiComps.map((idea, idx) => ({
@@ -652,8 +639,7 @@ function NovelCompositionsStep({
       }))
     : null;
 
-  const displayComps =
-    aiConverted && aiConverted.length > 0 ? aiConverted : directComps;
+  const displayComps: NovelComposition[] = aiConverted ?? [];
 
   const isAiSource = !!(aiConverted && aiConverted.length > 0);
   const isDynamic = false;
@@ -707,13 +693,29 @@ function NovelCompositionsStep({
       ) : !comp ? (
         <Card className="border-dashed">
           <CardContent className="py-12 text-center">
-            <FlaskConical className="w-10 h-10 mx-auto mb-3 text-muted-foreground opacity-40 animate-pulse" />
+            <FlaskConical className="w-10 h-10 mx-auto mb-3 text-muted-foreground opacity-40" />
             <p className="font-medium text-foreground mb-1">
-              Generating compositions…
+              No formulations generated
             </p>
-            <p className="text-sm text-muted-foreground">
-              Fetching novel formulations for {disease}
+            <p className="text-sm text-muted-foreground mb-4">
+              AI could not generate formulations — please retry
             </p>
+            <Button
+              onClick={() => {
+                setAiComps(null);
+                setIsLoadingAi(true);
+                getFormulationIdeas(disease, dosageForm, drugType)
+                  .then((ideas) => {
+                    if (ideas && ideas.length > 0) setAiComps(ideas);
+                    else setAiComps(null);
+                  })
+                  .catch(() => setAiComps(null))
+                  .finally(() => setIsLoadingAi(false));
+              }}
+              className="gap-2"
+            >
+              <Zap className="w-4 h-4" /> Retry
+            </Button>
           </CardContent>
         </Card>
       ) : (

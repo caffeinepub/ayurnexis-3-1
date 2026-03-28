@@ -38,6 +38,7 @@ import {
   Package,
   Pill,
   Plus,
+  RefreshCw,
   Shield,
   Syringe,
   Tag,
@@ -62,6 +63,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { toast } from "sonner";
 import {
   type APIIngredient,
   type ExcipientCategory,
@@ -2955,6 +2957,7 @@ export function FormulationLab({
   const [geminiAnalysis, setGeminiAnalysis] =
     useState<FormulationAnalysis | null>(null);
   const [geminiLoading, setGeminiLoading] = useState(false);
+  const [geminiAnalysisError, setGeminiAnalysisError] = useState(false);
   const [summaryData, setSummaryData] = useState<FormulationSummaryData | null>(
     null,
   );
@@ -2963,7 +2966,7 @@ export function FormulationLab({
   const geminiCacheRef = useRef<Record<string, FormulationAnalysis>>({});
 
   // ── Gemini Analysis Trigger ──────────────────────────────────────────────
-  useEffect(() => {
+  const runGeminiAnalysis = async (force = false) => {
     if (ingredients.length < 2) {
       setGeminiAnalysis(null);
       return;
@@ -2972,33 +2975,52 @@ export function FormulationLab({
       .map((i) => `${i.name}:${i.quantity}`)
       .sort()
       .join("|");
-    if (geminiCacheRef.current[cacheKey]) {
+    if (!force && geminiCacheRef.current[cacheKey]) {
       setGeminiAnalysis(geminiCacheRef.current[cacheKey]);
+      setGeminiAnalysisError(false);
       return;
     }
-    if (geminiTimerRef.current) clearTimeout(geminiTimerRef.current);
-    geminiTimerRef.current = setTimeout(async () => {
-      setGeminiLoading(true);
-      try {
-        const result = await analyzeFormulation(
-          ingredients.map((i) => ({
-            name: i.name,
-            quantity: i.quantity,
-            unit: i.unit,
-            role: i.category,
-          })),
-        );
-        if (result) {
-          geminiCacheRef.current[cacheKey] = result;
-          setGeminiAnalysis(result);
-        }
-      } catch {
-        // Keep static fallback
-      } finally {
-        setGeminiLoading(false);
+    setGeminiLoading(true);
+    setGeminiAnalysisError(false);
+    try {
+      const result = await analyzeFormulation(
+        ingredients.map((i) => ({
+          name: i.name,
+          quantity: i.quantity,
+          unit: i.unit,
+          role: i.category,
+        })),
+      );
+      if (result) {
+        geminiCacheRef.current[cacheKey] = result;
+        setGeminiAnalysis(result);
+        setGeminiAnalysisError(false);
+      } else {
+        setGeminiAnalysisError(true);
       }
-    }, 1500);
-  }, [ingredients]);
+    } catch {
+      setGeminiAnalysisError(true);
+    } finally {
+      setGeminiLoading(false);
+    }
+  };
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: step 4 trigger
+  useEffect(() => {
+    if (step === 4 && ingredients.length >= 2) {
+      const cacheKey = ingredients
+        .map((i) => `${i.name}:${i.quantity}`)
+        .sort()
+        .join("|");
+      if (geminiCacheRef.current[cacheKey]) {
+        setGeminiAnalysis(geminiCacheRef.current[cacheKey]);
+        setGeminiAnalysisError(false);
+        return;
+      }
+      if (geminiTimerRef.current) clearTimeout(geminiTimerRef.current);
+      geminiTimerRef.current = setTimeout(() => runGeminiAnalysis(), 500);
+    }
+  }, [step, ingredients]);
 
   // ── Summary Data Trigger ──────────────────────────────────────────────────
   // biome-ignore lint/correctness/useExhaustiveDependencies: only trigger when step changes
@@ -4480,6 +4502,20 @@ export function FormulationLab({
                         </div>
                       ))}
                     </div>
+                  ) : geminiAnalysisError ? (
+                    <div className="flex flex-col items-center gap-3 py-8">
+                      <p className="text-xs text-red-500">
+                        Could not load AI recommendations.
+                      </p>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => runGeminiAnalysis(true)}
+                        className="gap-2"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5" /> Retry
+                      </Button>
+                    </div>
                   ) : (
                     <div className="flex flex-col items-center gap-3 py-8">
                       <div className="w-7 h-7 border-2 border-primary border-t-transparent rounded-full animate-spin" />
@@ -4698,6 +4734,20 @@ export function FormulationLab({
                         data
                       </p>
                     </div>
+                  ) : !geminiAnalysis && geminiAnalysisError ? (
+                    <div className="flex flex-col items-center gap-3 py-12 text-center">
+                      <p className="text-sm text-red-500">
+                        Could not load Full Composition Analytics.
+                      </p>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => runGeminiAnalysis(true)}
+                        className="gap-2"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5" /> Retry
+                      </Button>
+                    </div>
                   ) : (
                     <FullCompositionAnalytics
                       ingredients={ingredients}
@@ -4713,6 +4763,20 @@ export function FormulationLab({
                       <p className="text-sm text-muted-foreground">
                         AI analyzing inter-ingredient reactions…
                       </p>
+                    </div>
+                  ) : geminiAnalysisError && !geminiAnalysis ? (
+                    <div className="flex flex-col items-center gap-3 py-12 text-center">
+                      <p className="text-sm text-red-500">
+                        Could not load AI Reactions analysis.
+                      </p>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => runGeminiAnalysis(true)}
+                        className="gap-2"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5" /> Retry
+                      </Button>
                     </div>
                   ) : geminiAnalysis?.interIngredientReactions &&
                     geminiAnalysis.interIngredientReactions.length > 0 ? (
@@ -6156,6 +6220,29 @@ export function FormulationLab({
                                 advancedStability.stabilityScore) /
                                 2,
                             );
+                            // Check locking
+                            const compHash = ingredients
+                              .map((i) => `${i.name}:${i.quantity}`)
+                              .sort()
+                              .join("|");
+                            const currentUser =
+                              localStorage.getItem("ayurnexis_user_name") ??
+                              "unknown";
+                            const locked: Record<string, string> = JSON.parse(
+                              localStorage.getItem(
+                                "ayurnexis_locked_formulations",
+                              ) ?? "{}",
+                            );
+                            if (
+                              locked[compHash] &&
+                              locked[compHash] !== currentUser
+                            ) {
+                              toast.error(
+                                "This formulation composition has already been certified by another user. Modify quantities to create a unique formulation.",
+                              );
+                              setCertExporting(false);
+                              return;
+                            }
                             await generateCertificatePDF({
                               formulationName:
                                 formulationName || `${dosageForm} Formulation`,
@@ -6181,6 +6268,12 @@ export function FormulationLab({
                                 year: "numeric",
                               }),
                             });
+                            // Lock the formulation after successful certificate generation
+                            locked[compHash] = currentUser;
+                            localStorage.setItem(
+                              "ayurnexis_locked_formulations",
+                              JSON.stringify(locked),
+                            );
                           } finally {
                             setCertExporting(false);
                           }

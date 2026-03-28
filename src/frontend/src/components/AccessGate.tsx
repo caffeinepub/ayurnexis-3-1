@@ -15,10 +15,12 @@ import { toast } from "sonner";
 import { createActorWithConfig } from "../config";
 import { useActor } from "../hooks/useActor";
 import {
+  type UserRegistration,
+  getAllUsers,
   getCodeRemainingDays,
   getCurrentAccessLevel,
   getCurrentUser,
-  registerUser,
+  saveAllUsers,
   setAccessLevel,
   setAdminAuthed,
   verifyAccessCodeByEmail,
@@ -113,49 +115,61 @@ export function AccessGate({ children }: AccessGateProps) {
     }
     setRegLoading(true);
     try {
-      // Save to localStorage FIRST — this always works regardless of backend state
-      const newUser = registerUser({
+      // Generate a stable user ID
+      const userId = `user_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+
+      // Try backend FIRST — this is the source of truth
+      let backendSaved = false;
+      for (let attempt = 0; attempt < 3 && !backendSaved; attempt++) {
+        try {
+          if (attempt > 0) await new Promise((r) => setTimeout(r, 2000));
+          const freshActor = await createActorWithConfig();
+          await (freshActor as any).submitAccessRequest(
+            userId,
+            regName.trim(),
+            regInstitution.trim(),
+            regEmail.trim(),
+            regPurpose.trim(),
+            BigInt(Date.now()),
+          );
+          backendSaved = true;
+        } catch (err) {
+          console.warn(
+            `Backend registration attempt ${attempt + 1} failed:`,
+            err,
+          );
+        }
+      }
+
+      if (!backendSaved) {
+        toast.error(
+          "Could not reach server. Please check your connection and try again.",
+        );
+        return;
+      }
+
+      // Backend confirmed — now save locally so user can browse in read-only mode
+      const users = getAllUsers();
+      const newUser: UserRegistration = {
+        id: userId,
         name: regName.trim(),
         institution: regInstitution.trim(),
         email: regEmail.trim(),
         purpose: regPurpose.trim(),
+        registeredAt: Date.now(),
+        status: "pending",
         activityLog: [],
         claimedFormulations: [],
-      });
+      };
+      users.push(newUser);
+      saveAllUsers(users);
+      localStorage.setItem("ayurnexis_current_user_id", userId);
+      localStorage.setItem("ayurnexis_access_level", "readonly");
       setAccessLevelState("readonly");
+
       toast.success(
         "Registration submitted! You can now browse in read-only mode. Contact admin for your access code.",
       );
-      // Sync to backend — create a fresh actor directly so it doesn't depend on hook state
-      (async () => {
-        let synced = false;
-        for (let attempt = 0; attempt < 3 && !synced; attempt++) {
-          try {
-            if (attempt > 0) await new Promise((r) => setTimeout(r, 2000));
-            const freshActor = actor || (await createActorWithConfig());
-            await (freshActor as any).submitAccessRequest(
-              newUser.id,
-              regName.trim(),
-              regInstitution.trim(),
-              regEmail.trim(),
-              regPurpose.trim(),
-              BigInt(Date.now()),
-            );
-            synced = true;
-            console.log("Registration synced to backend successfully");
-          } catch (err) {
-            console.warn(
-              `Backend registration attempt ${attempt + 1} failed:`,
-              err,
-            );
-          }
-        }
-        if (!synced) {
-          console.error(
-            "Failed to sync registration to backend after 3 attempts",
-          );
-        }
-      })();
     } catch (err) {
       console.error("Registration failed:", err);
       toast.error("Failed to register. Please try again.");
@@ -836,7 +850,7 @@ export function AccessGate({ children }: AccessGateProps) {
               style={{ background: "oklch(0.50 0.12 78)", color: "white" }}
               onClick={() => setShowExpiryWarning(false)}
             >
-              OK, I'll Renew
+              OK, I&apos;ll Renew
             </Button>
           </div>
         </div>
