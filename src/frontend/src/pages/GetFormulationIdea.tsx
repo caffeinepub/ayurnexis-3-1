@@ -4,7 +4,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   AlertTriangle,
@@ -22,16 +21,17 @@ import {
   Zap,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { useEffect, useRef, useState } from "react";
-import { toast } from "sonner";
-import type { NovelComposition } from "../data/formulationIdeaData";
+import { useState } from "react";
+import type {
+  MarketedDrug,
+  NovelComposition,
+} from "../data/formulationIdeaData";
 import {
-  type FormulationIdea,
-  type MarketedDrugResult,
-  getFormulationIdeas,
-  getMarketedDrugs,
-  searchDiseases,
-} from "../services/aiService";
+  DISEASES,
+  MARKETED_DRUGS,
+  NOVEL_COMPOSITIONS,
+  generateDynamicCompositions,
+} from "../data/formulationIdeaData";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -45,6 +45,14 @@ interface Props {
       unit: string;
     }>;
   }) => void;
+}
+
+interface MarketedDrugResult {
+  brandName: string;
+  genericName: string;
+  manufacturer: string;
+  dosageForm: string;
+  strength: string;
 }
 
 const DOSAGE_FORMS = [
@@ -69,6 +77,50 @@ const DRUG_TYPES = [
   "Homeopathic",
   "Combination",
 ];
+
+const EXTRA_COMMON = [
+  "Fever",
+  "Common Cold",
+  "Cough",
+  "Headache",
+  "Diarrhea",
+  "Constipation",
+  "Nausea",
+  "Vomiting",
+  "Skin Rash",
+  "Wound/Injury",
+];
+
+const ALL_DISEASES = Array.from(new Set([...DISEASES, ...EXTRA_COMMON]));
+
+function getMarketedDrugsStatic(
+  disease: string,
+  drugType: string,
+  dosageForm: string,
+): MarketedDrugResult[] {
+  const byDisease = MARKETED_DRUGS[disease];
+  if (!byDisease) return [];
+  const drugs: MarketedDrug[] =
+    byDisease[drugType] ?? byDisease.Allopathic ?? [];
+  return drugs.map((drug) => ({
+    brandName: drug.name,
+    genericName: drug.generic,
+    manufacturer: drug.manufacturer,
+    dosageForm: dosageForm,
+    strength: drug.dose,
+  }));
+}
+
+function getNovelCompositions(
+  disease: string,
+  dosageForm: string,
+  drugType: string,
+): NovelComposition[] {
+  return (
+    NOVEL_COMPOSITIONS[disease] ??
+    generateDynamicCompositions(disease, dosageForm, drugType)
+  );
+}
 
 // ─── Step Indicator ───────────────────────────────────────────────────────────
 
@@ -130,38 +182,13 @@ function DiseaseSearch({ onSelect }: { onSelect: (disease: string) => void }) {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
-  const [aiResults, setAiResults] = useState<string[]>([]);
-  const [aiConnected, setAiConnected] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const filtered = aiResults;
-
-  const [aiSearching, setAiSearching] = useState(false);
-
-  useEffect(() => {
-    if (query.length < 1) {
-      setAiResults([]);
-      return;
-    }
-    if (timerRef.current) clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(async () => {
-      setAiSearching(true);
-      try {
-        const results = await searchDiseases(query);
-        if (results.length > 0) {
-          setAiResults(results);
-          setAiConnected(true);
-        } else {
-          setAiResults([]);
-        }
-      } catch {
-        setAiResults([]);
-      } finally {
-        setAiSearching(false);
-      }
-    }, 300);
-  }, [query]);
+  const filtered =
+    query.length >= 1
+      ? ALL_DISEASES.filter((d) =>
+          d.toLowerCase().includes(query.toLowerCase()),
+        ).slice(0, 20)
+      : [];
 
   const handleSelect = (d: string) => {
     setSelected(d);
@@ -184,28 +211,13 @@ function DiseaseSearch({ onSelect }: { onSelect: (disease: string) => void }) {
           What condition are you formulating for?
         </h2>
         <p className="text-muted-foreground">
-          Search any disease or condition — AI-Powered intelligent search finds
-          relevant results
+          Search any disease or condition to explore formulation options
         </p>
-        {aiConnected && (
-          <div
-            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium mt-2"
-            style={{
-              background: "oklch(0.42 0.14 145 / 0.1)",
-              color: "oklch(0.42 0.14 145)",
-              border: "1px solid oklch(0.42 0.14 145 / 0.3)",
-            }}
-          >
-            <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse inline-block" />
-            Live Search Active
-          </div>
-        )}
       </div>
 
       <div className="relative" data-ocid="idea.search_input">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
         <Input
-          ref={inputRef}
           value={query}
           onChange={(e) => {
             setQuery(e.target.value);
@@ -218,11 +230,6 @@ function DiseaseSearch({ onSelect }: { onSelect: (disease: string) => void }) {
           className="pl-9 pr-10 h-12 text-base"
           data-ocid="idea.input"
         />
-        {aiSearching && (
-          <div className="absolute right-3 top-1/2 -translate-y-1/2">
-            <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-          </div>
-        )}
         <AnimatePresence>
           {open && filtered.length > 0 && (
             <motion.div
@@ -417,17 +424,7 @@ function MarketedDrugsStep({
   onNext: () => void;
   onBack: () => void;
 }) {
-  const [drugs, setDrugs] = useState<MarketedDrugResult[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    setLoading(true);
-    setDrugs([]);
-    getMarketedDrugs(disease, drugType, dosageForm)
-      .then((results) => setDrugs(results))
-      .catch(() => setDrugs([]))
-      .finally(() => setLoading(false));
-  }, [disease, drugType, dosageForm]);
+  const drugs = getMarketedDrugsStatic(disease, drugType, dosageForm);
 
   return (
     <motion.div
@@ -452,40 +449,18 @@ function MarketedDrugsStep({
             {disease} · {drugType} · {dosageForm}
           </p>
         </div>
-        <Badge
-          variant="outline"
-          className="text-xs bg-violet-100 text-violet-700 border-violet-200"
-        >
-          ✦ AI-Powered
-        </Badge>
       </div>
 
-      {loading ? (
-        <div className="space-y-3">
-          {[1, 2, 3, 4, 5].map((i) => (
-            <Card key={i} className="border-border">
-              <CardContent className="py-4 flex items-center gap-3">
-                <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin shrink-0" />
-                <div className="flex-1">
-                  <div className="h-4 bg-muted rounded animate-pulse mb-2 w-2/3" />
-                  <div className="h-3 bg-muted rounded animate-pulse w-1/2" />
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-          <p className="text-center text-xs text-muted-foreground animate-pulse">
-            Fetching real marketed drugs for {disease}…
-          </p>
-        </div>
-      ) : drugs.length === 0 ? (
+      {drugs.length === 0 ? (
         <Card className="border-dashed">
           <CardContent className="py-12 text-center">
             <Package className="w-10 h-10 mx-auto mb-3 opacity-30" />
             <p className="text-sm font-medium text-foreground mb-1">
-              No marketed drugs found
+              Reference data not available
             </p>
             <p className="text-xs text-muted-foreground">
-              Try a different drug type or dosage form
+              Reference data not available for this disease/type combination.
+              Consult pharmacopeia reference guides.
             </p>
           </CardContent>
         </Card>
@@ -563,87 +538,8 @@ function NovelCompositionsStep({
   onAdd: (comp: NovelComposition) => void;
   onBack: () => void;
 }) {
-  const key = `${disease}|${dosageForm}|${drugType}`;
   const [index, setIndex] = useState(0);
-  const [aiComps, setAiComps] = useState<FormulationIdea[] | null>(null);
-  const [isLoadingAi, setIsLoadingAi] = useState(false);
-  const [isLoadingMore, setIsLoadingMore] = useState(false);
-
-  // Fetch AI ideas on mount / when key changes
-  // biome-ignore lint/correctness/useExhaustiveDependencies: key is a derived string
-  useEffect(() => {
-    setIndex(0);
-    setAiComps(null);
-    setIsLoadingAi(true);
-    getFormulationIdeas(disease, dosageForm, drugType)
-      .then((ideas) => {
-        if (ideas && ideas.length > 0) setAiComps(ideas);
-        else setAiComps(null);
-      })
-      .catch(() => setAiComps(null))
-      .finally(() => setIsLoadingAi(false));
-  }, [key]);
-
-  const generateMore = () => {
-    if (isLoadingMore || (aiComps && aiComps.length >= 20)) return;
-    setIsLoadingMore(true);
-    getFormulationIdeas(disease, dosageForm, drugType)
-      .then((ideas) => {
-        if (ideas && ideas.length > 0) {
-          setAiComps((prev) => {
-            const combined = [...(prev ?? []), ...ideas];
-            // Cap at 20, deduplicate by name
-            const seen = new Set<string>();
-            const unique = combined.filter((c) => {
-              if (seen.has(c.compositionName)) return false;
-              seen.add(c.compositionName);
-              return true;
-            });
-            return unique.slice(0, 20);
-          });
-        }
-      })
-      .catch(() => {})
-      .finally(() => setIsLoadingMore(false));
-  };
-
-  // Convert AI ideas to NovelComposition format for display
-  const aiConverted: NovelComposition[] | null = aiComps
-    ? aiComps.map((idea, idx) => ({
-        id: `AI-COMP-${Date.now()}-${String(idx + 1).padStart(3, "0")}`,
-        name: idea.compositionName,
-        ingredients: idea.ingredients.map((ing) => ({
-          name: ing.name,
-          quantity: ing.quantity,
-          unit: ing.unit,
-          role: ing.role,
-          category: "api",
-        })),
-        pharmacologicalEffects:
-          idea.pharmacologicalEffects ?? idea.mechanismOfAction,
-        advantages: idea.advantages,
-        disadvantages: idea.disadvantages,
-        stabilityPrediction: idea.stabilityPrediction,
-        shelfLife: idea.stabilityPrediction.includes("24")
-          ? "24 months"
-          : "18 months",
-        storageCondition:
-          "Store at 25\u00b0C/60% RH, protect from light and moisture",
-        drugInteractions: idea.drugInteractions,
-        dosageForm: dosageForm,
-        analyticalData: {
-          hplcMethod: "RP-HPLC, C18 column, UV detection",
-          uvLambdaMax: "254 nm",
-          ftirPeaks: "3300-3500 (O-H), 1700-1750 (C=O), 1600-1650 (C=C)",
-        },
-      }))
-    : null;
-
-  const displayComps: NovelComposition[] = aiConverted ?? [];
-
-  const isAiSource = !!(aiConverted && aiConverted.length > 0);
-  const isDynamic = false;
-
+  const displayComps = getNovelCompositions(disease, dosageForm, drugType);
   const total = displayComps.length;
   const comp = displayComps[index] ?? null;
 
@@ -675,53 +571,22 @@ function NovelCompositionsStep({
         )}
       </div>
 
-      {isLoadingAi ? (
-        <Card className="border-primary/20 bg-primary/5">
-          <CardContent className="py-12 text-center">
-            <div className="flex flex-col items-center gap-3">
-              <div className="w-10 h-10 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-              <p className="font-medium text-foreground">
-                Generating novel formulations with AyurNexis AI…
-              </p>
-              <p className="text-sm text-muted-foreground">
-                Analyzing {disease} treatment options for {dosageForm} (
-                {drugType})
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-      ) : !comp ? (
+      {!comp ? (
         <Card className="border-dashed">
           <CardContent className="py-12 text-center">
             <FlaskConical className="w-10 h-10 mx-auto mb-3 text-muted-foreground opacity-40" />
             <p className="font-medium text-foreground mb-1">
-              No formulations generated
+              No formulations available
             </p>
-            <p className="text-sm text-muted-foreground mb-4">
-              AI could not generate formulations — please retry
+            <p className="text-sm text-muted-foreground">
+              Try a different dosage form or drug type combination
             </p>
-            <Button
-              onClick={() => {
-                setAiComps(null);
-                setIsLoadingAi(true);
-                getFormulationIdeas(disease, dosageForm, drugType)
-                  .then((ideas) => {
-                    if (ideas && ideas.length > 0) setAiComps(ideas);
-                    else setAiComps(null);
-                  })
-                  .catch(() => setAiComps(null))
-                  .finally(() => setIsLoadingAi(false));
-              }}
-              className="gap-2"
-            >
-              <Zap className="w-4 h-4" /> Retry
-            </Button>
           </CardContent>
         </Card>
       ) : (
         <AnimatePresence mode="wait">
           <motion.div
-            key={`${key}-${index}`}
+            key={index}
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -20 }}
@@ -736,16 +601,6 @@ function NovelCompositionsStep({
                       <Badge className="text-xs" variant="outline">
                         {comp.id}
                       </Badge>
-                      {isAiSource && (
-                        <Badge className="text-xs bg-violet-100 text-violet-700 border-violet-200">
-                          ✦ AyurNexis AI — Real-time Generated
-                        </Badge>
-                      )}
-                      {isDynamic && !isAiSource && (
-                        <Badge className="text-xs bg-violet-100 text-violet-700 border-violet-200">
-                          ✦ AI-Generated Composition
-                        </Badge>
-                      )}
                     </div>
                     <CardTitle className="text-lg">{comp.name}</CardTitle>
                     <p className="text-sm text-muted-foreground mt-1">
@@ -781,9 +636,6 @@ function NovelCompositionsStep({
                         <th className="px-4 py-2 text-left font-medium hidden sm:table-cell">
                           Role
                         </th>
-                        <th className="px-4 py-2 text-left font-medium hidden md:table-cell">
-                          Pharmacological Effect
-                        </th>
                       </tr>
                     </thead>
                     <tbody>
@@ -806,9 +658,6 @@ function NovelCompositionsStep({
                           <td className="px-4 py-2 text-muted-foreground hidden sm:table-cell">
                             {ing.role}
                           </td>
-                          <td className="px-4 py-2 text-muted-foreground text-xs hidden md:table-cell max-w-[180px]">
-                            {(ing as any).pharmacologicalEffect ?? "—"}
-                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -825,59 +674,15 @@ function NovelCompositionsStep({
                   Pharmacological Effects
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-3">
+              <CardContent>
                 <div>
                   <p className="text-xs font-semibold text-amber-600 mb-1">
                     Combined Mechanism of Action
                   </p>
                   <p className="text-xs text-muted-foreground leading-relaxed">
-                    {(comp as any).pharmacologicalEffects ??
-                      comp.pharmacologicalEffects}
+                    {comp.pharmacologicalEffects}
                   </p>
                 </div>
-                {(comp as any).indicationsForDisease &&
-                  (comp as any).indicationsForDisease.length > 3 && (
-                    <div>
-                      <p className="text-xs font-semibold text-primary mb-1">
-                        Indications
-                      </p>
-                      <p className="text-xs text-muted-foreground leading-relaxed">
-                        {(comp as any).indicationsForDisease}
-                      </p>
-                    </div>
-                  )}
-                {(comp as any).dosageInstructions &&
-                  (comp as any).dosageInstructions.length > 3 && (
-                    <div>
-                      <p className="text-xs font-semibold text-foreground mb-1">
-                        Dosage & Administration
-                      </p>
-                      <p className="text-xs text-muted-foreground leading-relaxed">
-                        {(comp as any).dosageInstructions}
-                      </p>
-                    </div>
-                  )}
-                {(comp as any).contraindications &&
-                  (comp as any).contraindications.length > 0 && (
-                    <div>
-                      <p className="text-xs font-semibold text-red-500 mb-1">
-                        Contraindications
-                      </p>
-                      <ul className="space-y-0.5">
-                        {((comp as any).contraindications as string[]).map(
-                          (c: string) => (
-                            <li
-                              key={c}
-                              className="text-xs text-muted-foreground flex gap-1.5"
-                            >
-                              <span className="text-red-400 shrink-0">•</span>
-                              {c}
-                            </li>
-                          ),
-                        )}
-                      </ul>
-                    </div>
-                  )}
               </CardContent>
             </Card>
 
@@ -1026,34 +831,6 @@ function NovelCompositionsStep({
                 Add to Formulation Lab
               </Button>
             </div>
-            {/* Generate More */}
-            {!isLoadingAi && (aiComps ?? []).length < 20 && (
-              <div className="mt-3">
-                <Button
-                  variant="outline"
-                  className="w-full gap-2"
-                  onClick={generateMore}
-                  disabled={isLoadingMore}
-                  data-ocid="idea.secondary_button"
-                >
-                  {isLoadingMore ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />{" "}
-                      Generating more…
-                    </>
-                  ) : (
-                    <>
-                      <Zap className="w-4 h-4" /> Generate More Formulations
-                    </>
-                  )}
-                </Button>
-                {aiComps && aiComps.length > 0 && (
-                  <p className="text-xs text-muted-foreground text-center mt-1">
-                    {aiComps.length}/20 compositions generated
-                  </p>
-                )}
-              </div>
-            )}
           </motion.div>
         </AnimatePresence>
       )}
@@ -1152,7 +929,7 @@ export function GetFormulationIdea({ onAddToFormulationLab }: Props) {
 
         {/* Footer */}
         <p className="text-center text-xs text-muted-foreground mt-6">
-          \u00a9 {new Date().getFullYear()}. Built with love using{" "}
+          &copy; {new Date().getFullYear()}. Built with love using{" "}
           <a
             href={`https://caffeine.ai?utm_source=caffeine-footer&utm_medium=referral&utm_content=${encodeURIComponent(window.location.hostname)}`}
             className="text-primary hover:underline"

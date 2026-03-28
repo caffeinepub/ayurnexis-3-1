@@ -81,13 +81,6 @@ import {
   preservatives,
 } from "../data/formulationData";
 import { type HerbMonograph, pharmacopeiaData } from "../data/pharmacopeiaData";
-import {
-  type FormulationAnalysis,
-  type FormulationSummaryData,
-  analyzeFormulation,
-  getFormulationSummary,
-} from "../services/aiService";
-
 // ─── Pharmacopeia Incompatibility Database ────────────────────────────────────
 const INCOMPATIBILITY_DB: Array<{
   a: string;
@@ -987,7 +980,6 @@ function StepIndicator({ current }: { current: number }) {
 function FullCompositionAnalytics({
   ingredients,
   dosageForm,
-  geminiData,
 }: {
   ingredients: Array<{
     name: string;
@@ -996,7 +988,6 @@ function FullCompositionAnalytics({
     unit: string;
   }>;
   dosageForm: string | null;
-  geminiData?: FormulationAnalysis | null;
 }) {
   const apiIngs = ingredients.filter(
     (i) => i.category === "api" || i.category === "herb",
@@ -1019,31 +1010,18 @@ function FullCompositionAnalytics({
   );
   const isTabletOrCapsule = dosageForm === "Tablet" || dosageForm === "Capsule";
 
-  // ── Use Gemini data when available ──
-  const useGemini = !!(
-    geminiData?.hplcProfile && geminiData.hplcProfile.length > 0
-  );
-
   // ── HPLC ──
-  const hplcRows = useGemini
-    ? geminiData!.hplcProfile.map((p) => ({
-        name: p.constituentName,
-        rt: p.retentionTime,
-        wavelength: 254,
-        peakArea: p.peakArea,
-        mobilePhaseSolvent: "Acetonitrile:Water (70:30)",
-      }))
-    : apiIngs.map((ing) => {
-        const d = getHPLCData(ing.name);
-        const peakAreaPct = ((ing.quantity / totalQty) * 100).toFixed(1);
-        return {
-          name: ing.name,
-          rt: d.rt,
-          wavelength: d.wavelength,
-          peakArea: Number(peakAreaPct),
-          mobilePhaseSolvent: d.mobilePhaseSolvent,
-        };
-      });
+  const hplcRows = apiIngs.map((ing) => {
+    const d = getHPLCData(ing.name);
+    const peakAreaPct = ((ing.quantity / totalQty) * 100).toFixed(1);
+    return {
+      name: ing.name,
+      rt: d.rt,
+      wavelength: d.wavelength,
+      peakArea: Number(peakAreaPct),
+      mobilePhaseSolvent: d.mobilePhaseSolvent,
+    };
+  });
   const hplcChartData = hplcRows.map((r) => ({
     rt: r.rt,
     peakArea: r.peakArea,
@@ -1060,12 +1038,9 @@ function FullCompositionAnalytics({
       qty: ing.quantity,
     };
   });
-  const blendedLambdaMax =
-    useGemini && geminiData?.uvSpectrum
-      ? geminiData.uvSpectrum.lambdaMax
-      : Math.round(
-          uvRows.reduce((s, r) => s + r.lambdaMax * r.qty, 0) / totalQty,
-        );
+  const blendedLambdaMax = Math.round(
+    uvRows.reduce((s, r) => s + r.lambdaMax * r.qty, 0) / totalQty,
+  );
   const dominantSolvent = uvRows[0]?.solvent || "Methanol";
   // Generate combined UV spectrum (200–500 nm)
   const uvSpectrumData = Array.from({ length: 31 }, (_, i) => {
@@ -2958,97 +2933,6 @@ export function FormulationLab({
     j: number;
     reason: string;
   } | null>(null);
-  const [geminiAnalysis, setGeminiAnalysis] =
-    useState<FormulationAnalysis | null>(null);
-  const [geminiLoading, setGeminiLoading] = useState(false);
-  const [geminiAnalysisError, setGeminiAnalysisError] = useState(false);
-  const [summaryData, setSummaryData] = useState<FormulationSummaryData | null>(
-    null,
-  );
-  const [summaryLoading, setSummaryLoading] = useState(false);
-  const geminiTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const geminiCacheRef = useRef<Record<string, FormulationAnalysis>>({});
-
-  // ── Gemini Analysis Trigger ──────────────────────────────────────────────
-  const runGeminiAnalysis = async (force = false) => {
-    if (ingredients.length < 2) {
-      setGeminiAnalysis(null);
-      return;
-    }
-    const cacheKey = ingredients
-      .map((i) => `${i.name}:${i.quantity}`)
-      .sort()
-      .join("|");
-    if (!force && geminiCacheRef.current[cacheKey]) {
-      setGeminiAnalysis(geminiCacheRef.current[cacheKey]);
-      setGeminiAnalysisError(false);
-      return;
-    }
-    setGeminiLoading(true);
-    setGeminiAnalysisError(false);
-    try {
-      const result = await analyzeFormulation(
-        ingredients.map((i) => ({
-          name: i.name,
-          quantity: i.quantity,
-          unit: i.unit,
-          role: i.category,
-        })),
-      );
-      if (result) {
-        geminiCacheRef.current[cacheKey] = result;
-        setGeminiAnalysis(result);
-        setGeminiAnalysisError(false);
-      } else {
-        setGeminiAnalysisError(true);
-      }
-    } catch {
-      setGeminiAnalysisError(true);
-    } finally {
-      setGeminiLoading(false);
-    }
-  };
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: step 4 trigger
-  useEffect(() => {
-    if (step === 4 && ingredients.length >= 2) {
-      const cacheKey = ingredients
-        .map((i) => `${i.name}:${i.quantity}`)
-        .sort()
-        .join("|");
-      if (geminiCacheRef.current[cacheKey]) {
-        setGeminiAnalysis(geminiCacheRef.current[cacheKey]);
-        setGeminiAnalysisError(false);
-        return;
-      }
-      if (geminiTimerRef.current) clearTimeout(geminiTimerRef.current);
-      geminiTimerRef.current = setTimeout(() => runGeminiAnalysis(), 500);
-    }
-  }, [step, ingredients]);
-
-  // ── Summary Data Trigger ──────────────────────────────────────────────────
-  // biome-ignore lint/correctness/useExhaustiveDependencies: only trigger when step changes
-  useEffect(() => {
-    if (step !== 5 || ingredients.length === 0 || !dosageForm || !method)
-      return;
-    setSummaryLoading(true);
-    setSummaryData(null);
-    getFormulationSummary(
-      ingredients.map((i) => ({
-        name: i.name,
-        quantity: i.quantity,
-        unit: i.unit,
-        role: i.category,
-      })),
-      dosageForm,
-      method,
-    )
-      .then((data) => setSummaryData(data))
-      .catch(() => setSummaryData(null))
-      .finally(() => setSummaryLoading(false));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step]);
-
   // ── Derived ───────────────────────────────────────────────────────────────
   const methods = dosageForm ? (DOSAGE_METHODS[dosageForm] ?? []) : [];
   const selectedMethod = methods.find((m) => m.method === method);
@@ -3147,26 +3031,7 @@ export function FormulationLab({
     return ingredients.map((ing1, i) =>
       ingredients.map((ing2, j) => {
         if (i === j) return { status: "self" as const, reason: "" };
-        // Try Gemini first
-        if (geminiAnalysis?.compatibilityMatrix) {
-          const n1 = ing1.name.toLowerCase();
-          const n2 = ing2.name.toLowerCase();
-          const pair = geminiAnalysis.compatibilityMatrix.find(
-            (p) =>
-              (p.ingredient1.toLowerCase().includes(n1) &&
-                p.ingredient2.toLowerCase().includes(n2)) ||
-              (p.ingredient1.toLowerCase().includes(n2) &&
-                p.ingredient2.toLowerCase().includes(n1)),
-          );
-          if (pair) {
-            const status =
-              pair.status === "conditional"
-                ? "caution"
-                : (pair.status as "compatible" | "incompatible");
-            return { status, reason: pair.reason };
-          }
-        }
-        // Fallback to static DB
+        // Static DB
         const name1 = ing1.name.toLowerCase();
         const name2 = ing2.name.toLowerCase();
         const match = INCOMPATIBILITY_DB.find(
@@ -3186,7 +3051,7 @@ export function FormulationLab({
         };
       }),
     );
-  }, [ingredients, geminiAnalysis]);
+  }, [ingredients]);
 
   // ── Advanced Stability ────────────────────────────────────────────────────
   const advancedStability = useMemo(() => {
@@ -3229,28 +3094,19 @@ export function FormulationLab({
       (!phCompatible ? 20 : 0);
     const stabilityScore = Math.max(0, 100 - deductions);
 
-    // Merge Gemini stability data if available
-    const gs = geminiAnalysis?.stabilityAssessment;
     return {
-      hygroscopicCount: gs?.hygroscopicIngredients?.length ?? hygroscopicCount,
-      thermolabileCount:
-        gs?.thermolabileIngredients?.length ?? thermolabileCount,
-      lightSensitiveCount:
-        gs?.lightSensitiveIngredients?.length ?? lightSensitiveCount,
+      hygroscopicCount,
+      thermolabileCount,
+      lightSensitiveCount,
       oxidationRisk,
       hydrolysisRisk,
       phCompatible,
       phMin,
       phMax,
       shelfLifeMonths,
-      stabilityScore: gs?.stabilityScore ?? stabilityScore,
-      // Extra Gemini fields
-      physicalStability: gs?.physicalStability ?? null,
-      chemicalStability: gs?.chemicalStability ?? null,
-      predictedShelfLife: gs?.predictedShelfLife ?? null,
-      ichClassification: gs?.ichClassification ?? null,
+      stabilityScore,
     };
-  }, [ingredients, geminiAnalysis]);
+  }, [ingredients]);
 
   // ── Composition Analysis ──────────────────────────────────────────────────
   const compositionAnalysis = useMemo(() => {
@@ -3354,16 +3210,8 @@ export function FormulationLab({
         `pH incompatibility detected: ingredient pH ranges do not overlap (required pH ${advancedStability.phMin.toFixed(1)}–${advancedStability.phMax.toFixed(1)} is conflicted); reformulation needed.`,
       );
 
-    // Override with Gemini data if available
-    if (geminiAnalysis?.advantages && geminiAnalysis.advantages.length > 0) {
-      return {
-        advantages: geminiAnalysis.advantages,
-        disadvantages: geminiAnalysis.disadvantages,
-      };
-    }
-
     return { advantages, disadvantages };
-  }, [ingredients, dosageForm, advancedStability, geminiAnalysis]);
+  }, [ingredients, dosageForm, advancedStability]);
 
   // ── Handlers ──────────────────────────────────────────────────────────────
   function addFromDrawer(
@@ -4479,57 +4327,12 @@ export function FormulationLab({
                     </CardContent>
                   </Card>
 
-                  {/* Gemini Advantages / Disadvantages */}
-                  {geminiLoading ? (
-                    <div className="flex flex-col items-center gap-3 py-8">
-                      <div className="w-7 h-7 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                      <p className="text-xs text-muted-foreground">
-                        Generating AI recommendations…
-                      </p>
-                    </div>
-                  ) : geminiAnalysis ? (
-                    <div className="space-y-3">
-                      {geminiAnalysis.advantages.map((adv) => (
-                        <div
-                          key={adv.substring(0, 30)}
-                          className="flex items-start gap-3 rounded-lg px-4 py-3 border bg-green-500/10 border-green-500/20 text-green-700"
-                        >
-                          <CheckCircle className="w-4 h-4 shrink-0 mt-0.5 text-green-500" />
-                          <span className="text-sm">{adv}</span>
-                        </div>
-                      ))}
-                      {geminiAnalysis.disadvantages.map((dis) => (
-                        <div
-                          key={dis.substring(0, 30)}
-                          className="flex items-start gap-3 rounded-lg px-4 py-3 border bg-yellow-500/10 border-yellow-500/20 text-yellow-700"
-                        >
-                          <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-yellow-500" />
-                          <span className="text-sm">{dis}</span>
-                        </div>
-                      ))}
-                    </div>
-                  ) : geminiAnalysisError ? (
-                    <div className="flex flex-col items-center gap-3 py-8">
-                      <p className="text-xs text-red-500">
-                        Could not load AI recommendations.
-                      </p>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => runGeminiAnalysis(true)}
-                        className="gap-2"
-                      >
-                        <RefreshCw className="w-3.5 h-3.5" /> Retry
-                      </Button>
-                    </div>
-                  ) : (
-                    <div className="flex flex-col items-center gap-3 py-8">
-                      <div className="w-7 h-7 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                      <p className="text-xs text-muted-foreground">
-                        Add 2+ ingredients for AI recommendations…
-                      </p>
-                    </div>
-                  )}
+                  {/* Advantages / Disadvantages */}
+                  <p className="text-sm text-muted-foreground">
+                    Advantages and disadvantages analysis is based on
+                    pharmacopeia ingredient profiles. Review individual
+                    ingredient monographs for detailed assessments.
+                  </p>
 
                   {/* Compatibility notes */}
                   {ingredients.length > 0 && (
@@ -4718,133 +4521,41 @@ export function FormulationLab({
                   />
                 </TabsContent>
                 <TabsContent value="full-analytics" className="space-y-4">
-                  {geminiLoading ? (
-                    <div className="flex flex-col items-center gap-4 py-12">
-                      <div className="w-10 h-10 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                      <p className="text-sm font-medium text-foreground text-center">
-                        Generating pharmacopeia-compliant analytical predictions
-                        via AI…
-                      </p>
-                      <p className="text-xs text-muted-foreground text-center">
-                        HPLC · UV · FTIR · DSC · Dissolution profiles
-                      </p>
-                    </div>
-                  ) : !geminiAnalysis && ingredients.length < 2 ? (
+                  {ingredients.length < 2 ? (
                     <div className="text-center py-12 text-muted-foreground">
                       <TestTube className="w-10 h-10 mx-auto mb-3 opacity-30" />
                       <p className="text-sm font-medium">
                         Add 2+ ingredients to generate predictions
                       </p>
-                      <p className="text-xs mt-1">
-                        AI will generate real pharmacopeia-compliant analytical
-                        data
-                      </p>
-                    </div>
-                  ) : !geminiAnalysis && geminiAnalysisError ? (
-                    <div className="flex flex-col items-center gap-3 py-12 text-center">
-                      <p className="text-sm text-red-500">
-                        Could not load Full Composition Analytics.
-                      </p>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => runGeminiAnalysis(true)}
-                        className="gap-2"
-                      >
-                        <RefreshCw className="w-3.5 h-3.5" /> Retry
-                      </Button>
                     </div>
                   ) : (
                     <FullCompositionAnalytics
                       ingredients={ingredients}
                       dosageForm={dosageForm}
-                      geminiData={geminiAnalysis}
                     />
                   )}
                 </TabsContent>
                 <TabsContent value="reactions" className="space-y-4">
-                  {geminiLoading ? (
-                    <div className="flex flex-col items-center gap-3 py-12">
-                      <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                      <p className="text-sm text-muted-foreground">
-                        AI analyzing inter-ingredient reactions…
-                      </p>
-                    </div>
-                  ) : geminiAnalysisError && !geminiAnalysis ? (
-                    <div className="flex flex-col items-center gap-3 py-12 text-center">
-                      <p className="text-sm text-red-500">
-                        Could not load AI Reactions analysis.
-                      </p>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => runGeminiAnalysis(true)}
-                        className="gap-2"
-                      >
-                        <RefreshCw className="w-3.5 h-3.5" /> Retry
-                      </Button>
-                    </div>
-                  ) : geminiAnalysis?.interIngredientReactions &&
-                    geminiAnalysis.interIngredientReactions.length > 0 ? (
-                    <div className="space-y-3">
-                      <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">
-                        AI-Predicted Inter-Ingredient Reactions
-                      </p>
-                      {geminiAnalysis.interIngredientReactions.map((rxn) => (
-                        <Card
-                          key={`${rxn.ingredient1}-${rxn.ingredient2}-${rxn.reactionType}`}
-                          className={`border-${rxn.severity === "high" ? "red" : rxn.severity === "medium" ? "yellow" : "green"}-200`}
-                          style={{
-                            background:
-                              rxn.severity === "high"
-                                ? "oklch(0.97 0.02 24)"
-                                : rxn.severity === "medium"
-                                  ? "oklch(0.98 0.02 78)"
-                                  : "oklch(0.97 0.02 145)",
-                          }}
-                        >
-                          <CardContent className="py-3">
-                            <div className="flex items-center gap-2 mb-2">
-                              <span
-                                className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
-                                  rxn.severity === "high"
-                                    ? "bg-red-100 text-red-700"
-                                    : rxn.severity === "medium"
-                                      ? "bg-yellow-100 text-yellow-700"
-                                      : "bg-green-100 text-green-700"
-                                }`}
-                              >
-                                {rxn.severity} risk
-                              </span>
-                              <span className="text-xs font-medium text-foreground">
-                                {rxn.reactionType}
-                              </span>
-                            </div>
-                            <p className="text-xs font-semibold text-foreground mb-1">
-                              {rxn.ingredient1} ↔ {rxn.ingredient2}
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              {rxn.description}
-                            </p>
-                          </CardContent>
-                        </Card>
-                      ))}
-                    </div>
-                  ) : ingredients.length < 2 ? (
+                  {ingredients.length < 2 ? (
                     <div className="text-center py-12 text-muted-foreground">
                       <AlertTriangle className="w-10 h-10 mx-auto mb-3 opacity-30" />
                       <p className="text-sm font-medium mb-1">
                         Add 2+ ingredients
                       </p>
                       <p className="text-xs">
-                        AI will predict inter-ingredient reactions
+                        Inter-ingredient compatibility is assessed using the
+                        static pharmacopeia incompatibility database.
                       </p>
                     </div>
                   ) : (
-                    <div className="flex flex-col items-center gap-3 py-12">
-                      <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                    <div className="space-y-3">
+                      <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">
+                        Pharmacopeia Incompatibility Analysis
+                      </p>
                       <p className="text-sm text-muted-foreground">
-                        Analyzing reactions…
+                        Compatibility assessment is based on the pharmacopeia
+                        incompatibility database. Refer to the Compatibility
+                        Matrix tab for detailed pair-wise analysis.
                       </p>
                     </div>
                   )}
@@ -5262,100 +4973,97 @@ export function FormulationLab({
                 </CardContent>
               </Card>
 
-              {/* AI Formulation Analysis */}
+              {/* Formulation Analysis */}
               <Card className="border-border">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm flex items-center gap-2">
                     <Zap className="w-4 h-4 text-primary" />
-                    AI Formulation Analysis
-                    {summaryLoading && (
-                      <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin ml-1" />
-                    )}
+                    Formulation Analysis
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  {summaryLoading ? (
-                    <div className="space-y-2">
-                      <div className="h-3 bg-muted rounded animate-pulse w-full" />
-                      <div className="h-3 bg-muted rounded animate-pulse w-5/6" />
-                      <div className="h-3 bg-muted rounded animate-pulse w-4/5" />
-                    </div>
-                  ) : summaryData ? (
-                    <>
-                      {/* Clinical Rationale */}
-                      <div>
-                        <p className="text-xs font-semibold text-primary mb-2">
-                          Clinical Rationale
-                        </p>
-                        <p className="text-xs text-muted-foreground leading-relaxed">
-                          {summaryData.narrative}
-                        </p>
-                      </div>
-                      {/* Manufacturing Procedure */}
-                      <div>
-                        <p className="text-xs font-semibold text-foreground mb-2">
-                          Manufacturing Procedure
-                        </p>
-                        <ol className="space-y-1">
-                          {summaryData.procedure.map((step, i) => (
-                            <li
-                              key={step.substring(0, 30)}
-                              className="text-xs text-muted-foreground flex gap-2"
-                            >
-                              <span className="shrink-0 w-5 h-5 rounded-full bg-primary/10 text-primary font-bold flex items-center justify-center text-[10px]">
-                                {i + 1}
-                              </span>
-                              {step}
-                            </li>
-                          ))}
-                        </ol>
-                      </div>
-                      {/* Instruments & Glassware */}
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div className="rounded-lg bg-blue-500/5 border border-blue-500/20 p-3">
-                          <p className="text-xs font-semibold text-blue-400 mb-2">
-                            🔬 Instruments Required
-                          </p>
-                          <ul className="space-y-1">
-                            {summaryData.instruments.map((inst) => (
-                              <li
-                                key={inst}
-                                className="text-xs text-muted-foreground flex gap-1.5"
-                              >
-                                <span className="text-blue-400 shrink-0">
-                                  •
-                                </span>
-                                {inst}
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                        <div className="rounded-lg bg-purple-500/5 border border-purple-500/20 p-3">
-                          <p className="text-xs font-semibold text-purple-400 mb-2">
-                            🧪 Glassware Required
-                          </p>
-                          <ul className="space-y-1">
-                            {summaryData.glassware.map((gw) => (
-                              <li
-                                key={gw}
-                                className="text-xs text-muted-foreground flex gap-1.5"
-                              >
-                                <span className="text-purple-400 shrink-0">
-                                  •
-                                </span>
-                                {gw}
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      </div>
-                    </>
-                  ) : (
-                    <p className="text-xs text-muted-foreground">
-                      Add ingredients and proceed to see AI-powered formulation
-                      analysis.
+                  {/* Clinical Rationale */}
+                  <div>
+                    <p className="text-xs font-semibold text-primary mb-2">
+                      Clinical Rationale
                     </p>
-                  )}
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      {`This ${dosageForm} formulation has been prepared according to standard pharmaceutical manufacturing practices and pharmacopeia guidelines. The formulation contains ${ingredients.map((i) => i.name).join(", ")} prepared by the ${method} method.`}
+                    </p>
+                  </div>
+                  {/* Manufacturing Procedure */}
+                  <div>
+                    <p className="text-xs font-semibold text-foreground mb-2">
+                      Manufacturing Procedure
+                    </p>
+                    <ol className="space-y-1">
+                      {sopSteps.map((s, i) => (
+                        <li
+                          key={s.substring(0, 30)}
+                          className="text-xs text-muted-foreground flex gap-2"
+                        >
+                          <span className="shrink-0 w-5 h-5 rounded-full bg-primary/10 text-primary font-bold flex items-center justify-center text-[10px]">
+                            {i + 1}
+                          </span>
+                          {s}
+                        </li>
+                      ))}
+                    </ol>
+                  </div>
+                  {/* Instruments & Glassware */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="rounded-lg bg-blue-500/5 border border-blue-500/20 p-3">
+                      <p className="text-xs font-semibold text-blue-400 mb-2">
+                        🔬 Instruments Required
+                      </p>
+                      <ul className="space-y-1">
+                        {[
+                          "Analytical balance",
+                          "pH meter",
+                          "Dissolution apparatus",
+                          "HPLC system",
+                          "UV-Vis spectrophotometer",
+                          "Tablet compression machine",
+                          "Granulator",
+                          "Moisture analyzer",
+                          "Melting point apparatus",
+                          "Stability chamber",
+                        ].map((inst) => (
+                          <li
+                            key={inst}
+                            className="text-xs text-muted-foreground flex gap-1.5"
+                          >
+                            <span className="text-blue-400 shrink-0">•</span>
+                            {inst}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                    <div className="rounded-lg bg-purple-500/5 border border-purple-500/20 p-3">
+                      <p className="text-xs font-semibold text-purple-400 mb-2">
+                        🧪 Glassware Required
+                      </p>
+                      <ul className="space-y-1">
+                        {[
+                          "Beakers (100 mL, 250 mL, 500 mL)",
+                          "Volumetric flasks",
+                          "Measuring cylinders",
+                          "Conical flasks",
+                          "Petri dishes",
+                          "Watch glass",
+                          "Stirring rods",
+                        ].map((gw) => (
+                          <li
+                            key={gw}
+                            className="text-xs text-muted-foreground flex gap-1.5"
+                          >
+                            <span className="text-purple-400 shrink-0">•</span>
+                            {gw}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
                 </CardContent>
               </Card>
 
@@ -5365,95 +5073,70 @@ export function FormulationLab({
                   <CardTitle className="text-sm flex items-center gap-2">
                     <Zap className="w-4 h-4 text-amber-500" />
                     Pharmacological Effects of Composition
-                    {summaryLoading && (
-                      <div className="w-3 h-3 border-2 border-amber-500 border-t-transparent rounded-full animate-spin ml-1" />
-                    )}
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  {summaryLoading ? (
-                    <div className="space-y-2">
-                      <div className="h-3 bg-muted rounded animate-pulse w-full" />
-                      <div className="h-3 bg-muted rounded animate-pulse w-5/6" />
-                      <div className="h-3 bg-muted rounded animate-pulse w-4/5" />
-                      <div className="h-3 bg-muted rounded animate-pulse w-3/4" />
-                    </div>
-                  ) : summaryData ? (
-                    <>
-                      <div>
-                        <p className="text-xs font-semibold text-amber-600 mb-2">
-                          Combined Mechanism of Action
-                        </p>
-                        <p className="text-xs text-muted-foreground leading-relaxed">
-                          {summaryData.narrative}
-                        </p>
-                      </div>
-                      {ingredients.filter(
-                        (i) => i.category === "api" || i.category === "herb",
-                      ).length > 0 && (
-                        <div>
-                          <p className="text-xs font-semibold text-foreground mb-2">
-                            API / Active Ingredient Pharmacology
-                          </p>
-                          <div className="overflow-x-auto">
-                            <table className="w-full text-xs border-collapse">
-                              <thead>
-                                <tr className="bg-amber-50 dark:bg-amber-900/10">
-                                  <th className="px-3 py-2 text-left font-semibold border border-border/50">
-                                    Ingredient
-                                  </th>
-                                  <th className="px-3 py-2 text-left font-semibold border border-border/50">
-                                    Category
-                                  </th>
-                                  <th className="px-3 py-2 text-left font-semibold border border-border/50">
-                                    Pharmacological Role
-                                  </th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {ingredients
-                                  .filter(
-                                    (i) =>
-                                      i.category === "api" ||
-                                      i.category === "herb",
-                                  )
-                                  .map((ing) => (
-                                    <tr
-                                      key={ing.id}
-                                      className="border-t border-border/30"
+                  {ingredients.filter(
+                    (i) => i.category === "api" || i.category === "herb",
+                  ).length > 0 ? (
+                    <div>
+                      <p className="text-xs font-semibold text-foreground mb-2">
+                        API / Active Ingredient Pharmacology
+                      </p>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-xs border-collapse">
+                          <thead>
+                            <tr className="bg-amber-50 dark:bg-amber-900/10">
+                              <th className="px-3 py-2 text-left font-semibold border border-border/50">
+                                Ingredient
+                              </th>
+                              <th className="px-3 py-2 text-left font-semibold border border-border/50">
+                                Category
+                              </th>
+                              <th className="px-3 py-2 text-left font-semibold border border-border/50">
+                                Pharmacological Role
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {ingredients
+                              .filter(
+                                (i) =>
+                                  i.category === "api" || i.category === "herb",
+                              )
+                              .map((ing) => (
+                                <tr
+                                  key={ing.id}
+                                  className="border-t border-border/30"
+                                >
+                                  <td className="px-3 py-2 font-medium">
+                                    {ing.name}
+                                  </td>
+                                  <td className="px-3 py-2">
+                                    <Badge
+                                      variant="secondary"
+                                      className="text-[10px]"
                                     >
-                                      <td className="px-3 py-2 font-medium">
-                                        {ing.name}
-                                      </td>
-                                      <td className="px-3 py-2">
-                                        <Badge
-                                          variant="secondary"
-                                          className="text-[10px]"
-                                        >
-                                          {ing.category === "api"
-                                            ? "API"
-                                            : "Herbal API"}
-                                        </Badge>
-                                      </td>
-                                      <td className="px-3 py-2 text-muted-foreground">
-                                        Active therapeutic constituent —
-                                        contributes to the primary
-                                        pharmacological action of the
-                                        formulation.
-                                      </td>
-                                    </tr>
-                                  ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        </div>
-                      )}
-                    </>
+                                      {ing.category === "api"
+                                        ? "API"
+                                        : "Herbal API"}
+                                    </Badge>
+                                  </td>
+                                  <td className="px-3 py-2 text-muted-foreground">
+                                    Active therapeutic constituent — contributes
+                                    to the primary pharmacological action of the
+                                    formulation.
+                                  </td>
+                                </tr>
+                              ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
                   ) : (
                     <p className="text-xs text-muted-foreground">
-                      Add ingredients and proceed to view pharmacological
-                      effects. Data could not be generated automatically — add
-                      APIs and navigate to this step again.
+                      Add API or herbal ingredients to see pharmacological
+                      effects.
                     </p>
                   )}
                 </CardContent>
@@ -6337,7 +6020,6 @@ export function FormulationLab({
                                 month: "long",
                                 year: "numeric",
                               }),
-                              aiSummary: summaryData?.narrative,
                               indications: ingredients
                                 .filter(
                                   (i) =>

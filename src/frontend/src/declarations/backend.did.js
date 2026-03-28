@@ -287,6 +287,8 @@ export const idlFactory = ({ IDL }) => {
     adminGenerateCode: IDL.Func([IDL.Text, IDL.Text, IDL.Nat], [IDL.Opt(IDL.Text)], []),
     getUserCodeExpiry: IDL.Func([IDL.Text], [IDL.Opt(IDL.Tuple(IDL.Int, IDL.Nat))], ['query']),
     verifyUserCode: IDL.Func([IDL.Text, IDL.Text], [IDL.Opt(IDL.Text)], ['query']),
+    getUserRecord: IDL.Func([IDL.Text, IDL.Text], [IDL.Opt(UserRecord)], ['query']),
+    checkUserAccess: IDL.Func([IDL.Text], [IDL.Text], ['query']),
   });
 };
 
