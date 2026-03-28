@@ -33,97 +33,31 @@ persistent actor class AyurNexis() = self {
   };
 
   public shared func callDeepSeek(prompt : Text) : async Text {
-    let body = "{\"model\":\"deepseek-chat\",\"messages\":[{\"role\":\"user\",\"content\":\"" # escapeJson(prompt) # "\"}],\"max_tokens\":2000,\"temperature\":0.7}";
+    // Return raw JSON response — frontend parses choices[0].message.content
+    // This avoids expensive O(n^2) string processing in Motoko
+    let escaped = escapeJsonSimple(prompt);
+    let body = "{\"model\":\"deepseek-chat\",\"messages\":[{\"role\":\"user\",\"content\":\"" # escaped # "\"}],\"max_tokens\":1500,\"temperature\":0.7}";
     let headers : [Outcall.Header] = [
       { name = "Content-Type"; value = "application/json" },
       { name = "Authorization"; value = "Bearer " # DEEPSEEK_API_KEY },
     ];
     try {
-      let response = await Outcall.httpPostRequest(DEEPSEEK_URL, headers, body, _transform);
-      // Extract content from: {"choices":[{"message":{"content":"..."}}]}
-      extractDeepSeekContent(response);
+      await Outcall.httpPostRequest(DEEPSEEK_URL, headers, body, _transform);
     } catch (e) {
-      "ERROR: " # Prim.errorMessage(e);
+      "{\"error\":\"" # Prim.errorMessage(e) # "\"}";
     };
   };
 
-  func escapeJson(s : Text) : Text {
+  func escapeJsonSimple(s : Text) : Text {
     var result = "";
     for (c in s.chars()) {
-      if (c == '\"') { result #= "\\\"" }
-      else if (c == '\\') { result #= "\\\\" }
-      else if (c == '\n') { result #= "\\n" }
-      else if (c == '\r') { result #= "\\r" }
-      else if (c == '\t') { result #= "\\t" }
+      let n = Prim.charToNat32(c);
+      if (n == 34) { result #= "\\\"" }
+      else if (n == 92) { result #= "\\\\" }
+      else if (n == 10) { result #= "\\n" }
+      else if (n == 13) { result #= "\\r" }
+      else if (n == 9) { result #= "\\t" }
       else { result #= Prim.charToText(c) };
-    };
-    result;
-  };
-
-  func extractDeepSeekContent(json : Text) : Text {
-    // Simple extraction: find "content":" ... " after message
-    let marker = "\"content\":\"";
-    switch (textFind(json, marker)) {
-      case (null) { json };
-      case (?start) {
-        let contentStart = start + marker.size();
-        let rest = textSubstring(json, contentStart, json.size());
-        // Find the closing quote (handling escapes naively: find next unescaped ")
-        findUnescapedEnd(rest);
-      };
-    };
-  };
-
-  func textFind(haystack : Text, needle : Text) : ?Nat {
-    let hs = haystack.size();
-    let ns = needle.size();
-    if (ns == 0) { return ?0 };
-    if (hs < ns) { return null };
-    var i = 0;
-    while (i + ns <= hs) {
-      if (textSubstring(haystack, i, i + ns) == needle) {
-        return ?i;
-      };
-      i += 1;
-    };
-    null;
-  };
-
-  func textSubstring(t : Text, start : Nat, end_ : Nat) : Text {
-    let chars = t.chars().toArray();
-    let len = chars.size();
-    let s = if (start > len) len else start;
-    let e = if (end_ > len) len else end_;
-    var result = "";
-    var i = s;
-    while (i < e) {
-      result #= Prim.charToText(chars[i]);
-      i += 1;
-    };
-    result;
-  };
-
-  func findUnescapedEnd(s : Text) : Text {
-    let chars = s.chars().toArray();
-    var i = 0;
-    var result = "";
-    var escaped = false;
-    while (i < chars.size()) {
-      let c = chars[i];
-      if (escaped) {
-        if (c == 'n') { result #= "\n" }
-        else if (c == 't') { result #= "\t" }
-        else if (c == 'r') { result #= "\r" }
-        else { result #= Prim.charToText(c) };
-        escaped := false;
-      } else if (c == '\\') {
-        escaped := true;
-      } else if (c == '\"') {
-        return result; // end of content
-      } else {
-        result #= Prim.charToText(c);
-      };
-      i += 1;
     };
     result;
   };

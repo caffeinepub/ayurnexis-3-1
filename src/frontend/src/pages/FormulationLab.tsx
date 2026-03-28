@@ -2170,277 +2170,257 @@ async function generateCertificatePDF(data: {
   await loadJsPDF();
   const JsPDF = getJsPDF();
   const doc = new JsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
-  const pageW = doc.internal.pageSize.getWidth();
+  const W = 210;
+  const H = 297;
+  const M = 20;
 
-  // Background white with diagonal pattern
+  // White background
   doc.setFillColor(255, 255, 255);
-  doc.rect(0, 0, pageW, 297, "F");
-  // Diagonal lines pattern
-  doc.setDrawColor(235, 245, 235);
-  doc.setLineWidth(0.3);
-  for (let i = -297; i < pageW + 297; i += 8) {
-    doc.line(i, 0, i + 297, 297);
-  }
+  doc.rect(0, 0, W, H, "F");
 
-  // Outer gold border (3px)
-  doc.setDrawColor(180, 130, 30);
-  doc.setLineWidth(3);
-  doc.rect(6, 6, pageW - 12, 285, "S");
-  // Inner green border (1px)
-  doc.setDrawColor(20, 83, 45);
-  doc.setLineWidth(1);
-  doc.rect(12, 12, pageW - 24, 273, "S");
+  // Outer thin teal border
+  doc.setDrawColor(0, 137, 123);
+  doc.setLineWidth(0.8);
+  doc.rect(M - 5, M - 5, W - (M - 5) * 2, H - (M - 5) * 2, "S");
 
-  // Corner diamond ornaments
-  for (const [cx, cy] of [
-    [12, 12],
-    [pageW - 12, 12],
-    [12, 285],
-    [pageW - 12, 285],
-  ] as [number, number][]) {
-    doc.setFontSize(11);
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(180, 130, 30);
-    doc.text("◆", cx, cy + 1, { align: "center" });
-  }
+  // Header band: light teal
+  doc.setFillColor(232, 245, 240);
+  doc.rect(M - 5, M - 5, W - (M - 5) * 2, 28, "F");
+  doc.setDrawColor(0, 137, 123);
+  doc.setLineWidth(0.5);
+  doc.line(M - 5, M + 23, W - M + 5, M + 23);
 
-  // Full-width dark green header band
-  doc.setFillColor(20, 83, 45);
-  doc.rect(12, 12, pageW - 24, 32, "F");
-  // Logo left
-  doc.setFontSize(13);
+  // Platform name
+  doc.setFontSize(11);
   doc.setFont("helvetica", "bold");
-  doc.setTextColor(255, 255, 255);
-  doc.text("AyurNexis 3.1", 22, 26);
+  doc.setTextColor(27, 94, 32);
+  doc.text("AyurNexis 3.1", M, M + 6);
   doc.setFontSize(7);
   doc.setFont("helvetica", "normal");
-  doc.setTextColor(167, 243, 208);
-  doc.text("AI-Enabled Ayurvedic QA Platform", 22, 33);
+  doc.setTextColor(100, 100, 100);
+  doc.text("Pharmacopeia-Compliant QA Platform", M, M + 12);
+
   // ISO badge right
   doc.setFontSize(7);
   doc.setFont("helvetica", "bold");
-  doc.setTextColor(255, 220, 100);
-  doc.text("ISO 9001:2015 | IP 2022", pageW - 22, 26, { align: "right" });
-  doc.setFontSize(6);
+  doc.setTextColor(0, 96, 100);
+  doc.text("ISO 9001:2015 | IP 2022 | BP 2023", W - M, M + 6, {
+    align: "right",
+  });
+  doc.setFontSize(6.5);
   doc.setFont("helvetica", "normal");
-  doc.setTextColor(167, 243, 208);
-  doc.text("Pharmacopeia Compliant", pageW - 22, 33, { align: "right" });
+  doc.setTextColor(100, 100, 100);
+  doc.text("Certificate of Analysis", W - M, M + 12, { align: "right" });
 
   // Title
-  doc.setFontSize(15);
+  let y = M + 38;
+  doc.setFontSize(16);
   doc.setFont("helvetica", "bold");
-  doc.setTextColor(20, 83, 45);
-  doc.text("CERTIFICATE OF FORMULATION EXCELLENCE", pageW / 2, 58, {
+  doc.setTextColor(27, 94, 32);
+  doc.text("CERTIFICATE OF PHARMACEUTICAL FORMULATION", W / 2, y, {
     align: "center",
   });
-
-  // Gold divider
-  doc.setDrawColor(180, 130, 30);
-  doc.setLineWidth(0.7);
-  doc.line(25, 63, pageW - 25, 63);
-
-  // Certification body text
-  doc.setFontSize(9);
-  doc.setFont("helvetica", "normal");
-  doc.setTextColor(80, 80, 80);
-  doc.text("THIS IS TO CERTIFY THAT", pageW / 2, 72, { align: "center" });
-
-  doc.setFontSize(17);
-  doc.setFont("helvetica", "bold");
-  doc.setTextColor(20, 83, 45);
-  doc.text(data.ownerName.toUpperCase(), pageW / 2, 83, { align: "center" });
-
-  if (data.designation) {
-    doc.setFontSize(10);
-    doc.setFont("helvetica", "italic");
-    doc.setTextColor(80, 80, 80);
-    doc.text(data.designation, pageW / 2, 91, { align: "center" });
-  }
-  if (data.institution) {
-    doc.setFontSize(9);
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(100, 100, 100);
-    doc.text(data.institution, pageW / 2, 99, { align: "center" });
-  }
-
-  doc.setFontSize(9);
-  doc.setFont("helvetica", "normal");
-  doc.setTextColor(80, 80, 80);
+  y += 6;
+  doc.setFontSize(8);
+  doc.setFont("helvetica", "italic");
+  doc.setTextColor(100, 100, 100);
   doc.text(
-    "has successfully developed, validated, and documented the following pharmaceutical",
-    pageW / 2,
-    110,
+    "This certifies that the following formulation has been evaluated in compliance with pharmacopeia guidelines",
+    W / 2,
+    y,
     { align: "center" },
   );
-  doc.text(
-    "formulation using AyurNexis 3.1 AI-Enabled Ayurvedic Quality Assurance Platform.",
-    pageW / 2,
-    117,
-    { align: "center" },
-  );
+  y += 2;
+  doc.setDrawColor(0, 137, 123);
+  doc.setLineWidth(0.4);
+  doc.line(M, y + 2, W - M, y + 2);
+  y += 8;
 
-  // Formulation details box with green background
-  doc.setFillColor(240, 253, 244);
-  doc.setDrawColor(20, 83, 45);
-  doc.setLineWidth(0.5);
-  doc.rect(22, 123, pageW - 44, 32, "FD");
-  doc.setFontSize(13);
-  doc.setFont("helvetica", "bold");
-  doc.setTextColor(20, 83, 45);
-  doc.text(
-    (data.formulationName || `${data.dosageForm} Formulation`).toUpperCase(),
-    pageW / 2,
-    135,
-    { align: "center" },
-  );
-  doc.setFontSize(9);
-  doc.setFont("helvetica", "normal");
-  doc.setTextColor(80, 80, 80);
-  doc.text(
-    `${data.dosageForm}  ·  ${data.method}  ·  ${data.ingredients.length} Ingredients  ·  ${data.date}`,
-    pageW / 2,
-    145,
-    { align: "center" },
-  );
-
-  // Composition table
-  doc.setFontSize(9);
-  doc.setFont("helvetica", "bold");
-  doc.setTextColor(20, 83, 45);
-  doc.text("Composition", 22, 165);
-  doc.setDrawColor(20, 83, 45);
+  // Formulator info box
+  doc.setFillColor(246, 246, 246);
+  doc.setDrawColor(204, 204, 204);
   doc.setLineWidth(0.3);
-  // Table header
-  doc.setFillColor(20, 83, 45);
-  doc.rect(22, 167, pageW - 44, 7, "F");
+  doc.rect(M, y, (W - M * 2 - 4) / 2, 24, "FD");
   doc.setFontSize(7.5);
   doc.setFont("helvetica", "bold");
-  doc.setTextColor(255, 255, 255);
-  doc.text("Ingredient", 25, 172.5);
-  doc.text("Qty", 125, 172.5, { align: "right" });
-  doc.text("Unit", 145, 172.5, { align: "right" });
-  // Table rows
-  const maxRows = Math.min(data.ingredients.length, 8);
-  for (let i = 0; i < maxRows; i++) {
-    const row = data.ingredients[i];
-    const ry = 174 + i * 7;
-    if (i % 2 === 0) {
-      doc.setFillColor(248, 252, 248);
-      doc.rect(22, ry, pageW - 44, 7, "F");
-    }
-    doc.setFontSize(7.5);
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(40, 40, 40);
-    const nm = row.name.length > 55 ? `${row.name.slice(0, 55)}…` : row.name;
-    doc.text(nm, 25, ry + 5);
-    doc.text(String(row.qty), 125, ry + 5, { align: "right" });
-    doc.text(row.unit, 145, ry + 5, { align: "right" });
-  }
-  if (data.ingredients.length > 8) {
+  doc.setTextColor(80, 80, 80);
+  doc.text("Formulator", M + 4, y + 7);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(40, 40, 40);
+  doc.setFontSize(9);
+  doc.text(data.ownerName || "—", M + 4, y + 14);
+  if (data.designation) {
     doc.setFontSize(7);
     doc.setTextColor(100, 100, 100);
-    doc.text(
-      `+${data.ingredients.length - 8} more ingredients`,
-      25,
-      174 + 8 * 7 + 4,
-    );
+    doc.text(data.designation, M + 4, y + 20);
   }
 
-  // Quality metrics - two column
-  const metricsY = 174 + maxRows * 7 + (data.ingredients.length > 8 ? 12 : 8);
-  doc.setFillColor(248, 252, 248);
-  doc.setDrawColor(20, 83, 45);
+  // Formulation details box
+  const col2x = M + (W - M * 2 - 4) / 2 + 4;
+  doc.setFillColor(232, 245, 240);
+  doc.setDrawColor(0, 137, 123);
   doc.setLineWidth(0.3);
-  doc.rect(22, metricsY, (pageW - 48) / 2, 22, "FD");
-  doc.rect(22 + (pageW - 48) / 2 + 4, metricsY, (pageW - 48) / 2, 22, "FD");
-  doc.setFontSize(7);
+  doc.rect(col2x, y, (W - M * 2 - 4) / 2, 24, "FD");
+  doc.setFontSize(7.5);
   doc.setFont("helvetica", "bold");
-  doc.setTextColor(80, 80, 80);
-  const col1x = 22 + (pageW - 48) / 4;
-  const col2x = 22 + ((pageW - 48) * 3) / 4 + 4;
-  doc.text("Stability Score", col1x, metricsY + 7, { align: "center" });
-  doc.text(`${data.stabilityScore}/100`, col1x, metricsY + 14, {
-    align: "center",
-  });
-  doc.setFontSize(6.5);
+  doc.setTextColor(27, 94, 32);
+  doc.text("Formulation", col2x + 4, y + 7);
   doc.setFont("helvetica", "normal");
-  doc.setTextColor(100, 100, 100);
-  doc.text(`Shelf Life: ${data.shelfLifeMonths} months`, col1x, metricsY + 19, {
-    align: "center",
-  });
+  doc.setTextColor(40, 40, 40);
+  doc.setFontSize(8.5);
+  doc.text(
+    (data.formulationName || `${data.dosageForm} Formulation`).slice(0, 38),
+    col2x + 4,
+    y + 14,
+  );
   doc.setFontSize(7);
-  doc.setFont("helvetica", "bold");
-  doc.setTextColor(80, 80, 80);
-  doc.text("Overall Score", col2x, metricsY + 7, { align: "center" });
-  doc.text(`${data.overallScore}/100`, col2x, metricsY + 14, {
-    align: "center",
-  });
-  doc.setFontSize(6.5);
-  doc.setFont("helvetica", "normal");
   doc.setTextColor(100, 100, 100);
   doc.text(
-    data.approved ? "Pharmacopeia Compliant" : "Below Threshold",
-    col2x,
-    metricsY + 19,
-    { align: "center" },
+    `${data.dosageForm} · ${data.method} · ${data.date}`,
+    col2x + 4,
+    y + 20,
   );
+  y += 30;
 
-  // Approval status banner
-  const bannerY = metricsY + 27;
-  if (data.approved) {
-    doc.setFillColor(20, 83, 45);
-  } else {
-    doc.setFillColor(180, 30, 30);
+  // Institution row
+  if (data.institution) {
+    doc.setFontSize(7.5);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(80, 80, 80);
+    doc.text(`Institution: ${data.institution}`, M, y + 4);
+    doc.setTextColor(100, 100, 100);
+    doc.text(`Certificate No: ${data.certNum}`, W - M, y + 4, {
+      align: "right",
+    });
+    y += 10;
   }
-  doc.rect(22, bannerY, pageW - 44, 13, "F");
-  doc.setFontSize(10);
-  doc.setFont("helvetica", "bold");
-  doc.setTextColor(255, 255, 255);
-  const bannerText = data.approved
-    ? "✓  APPROVED FOR PLATFORM RELEASE"
-    : "✗  NOT APPROVED — QUALITY SCORE BELOW THRESHOLD";
-  doc.text(bannerText, pageW / 2, bannerY + 9, { align: "center" });
 
-  // Three signature lines
-  const sigY = bannerY + 22;
-  const sigCols = [pageW * 0.2, pageW / 2, pageW * 0.8];
-  const sigLabels = ["Formulator", "QA Head", "Platform Authority"];
+  // Composition table
+  doc.setFontSize(9.5);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(27, 94, 32);
+  doc.text("Composition", M, y + 4);
+  y += 6;
+  autoTable(doc, {
+    startY: y,
+    head: [["Ingredient", "Quantity", "Unit", "Category"]],
+    body: data.ingredients
+      .slice(0, 10)
+      .map((i) => [
+        i.name,
+        String(i.qty),
+        i.unit,
+        i.unit === "mg" || i.unit === "g" ? "Active Ingredient" : "Excipient",
+      ]),
+    theme: "striped",
+    headStyles: { fillColor: [0, 137, 123], textColor: 255, fontSize: 8 },
+    bodyStyles: { fontSize: 7.5, textColor: [40, 40, 40] },
+    alternateRowStyles: { fillColor: [245, 250, 250] },
+    margin: { left: M, right: M },
+  });
+  y = (doc as any).lastAutoTable.finalY + 8;
+
+  // Quality metrics 2-column grid
+  doc.setFontSize(9.5);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(27, 94, 32);
+  doc.text("Quality Metrics", M, y);
+  y += 4;
+  const metrics = [
+    ["Stability Score", `${data.stabilityScore}/100`],
+    ["Shelf Life", `${data.shelfLifeMonths} months`],
+    ["Quality Score", `${data.overallScore}/100`],
+    ["Assessment", data.approved ? "Compliant" : "Review Required"],
+  ];
+  const cellW = (W - M * 2 - 4) / 2;
+  for (let i = 0; i < metrics.length; i++) {
+    const col = i % 2;
+    const row = Math.floor(i / 2);
+    const bx = M + col * (cellW + 4);
+    const by = y + row * 14;
+    doc.setFillColor(
+      col === 0 ? 232 : 240,
+      col === 0 ? 245 : 253,
+      col === 0 ? 240 : 244,
+    );
+    doc.setDrawColor(204, 204, 204);
+    doc.setLineWidth(0.3);
+    doc.rect(bx, by, cellW, 12, "FD");
+    doc.setFontSize(7);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(80, 80, 80);
+    doc.text(metrics[i][0], bx + 4, by + 5);
+    doc.setFontSize(8.5);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(27, 94, 32);
+    doc.text(metrics[i][1], bx + 4, by + 10);
+  }
+  y += 34;
+
+  // Approval banner
+  if (data.approved) {
+    doc.setFillColor(200, 230, 201); // light green
+    doc.setDrawColor(76, 175, 80);
+  } else {
+    doc.setFillColor(255, 205, 210); // light red
+    doc.setDrawColor(229, 115, 115);
+  }
+  doc.setLineWidth(0.5);
+  doc.rect(M, y, W - M * 2, 14, "FD");
+  doc.setFontSize(11);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(
+    data.approved ? 27 : 183,
+    data.approved ? 94 : 28,
+    data.approved ? 32 : 28,
+  );
+  const bannerTxt = data.approved
+    ? "✓  APPROVED FOR PHARMACEUTICAL USE"
+    : "✗  NOT APPROVED — Below Quality Threshold";
+  doc.text(bannerTxt, W / 2, y + 10, { align: "center" });
+  y += 20;
+
+  // Signature lines
+  const sigCols = [M + 20, W / 2, W - M - 20];
+  const sigLabels = ["Formulator", "QA Director", "Date"];
+  const sigVals = [data.ownerName, "AyurNexis QA Board", data.date];
   doc.setDrawColor(150, 150, 150);
   doc.setLineWidth(0.3);
   for (let s = 0; s < 3; s++) {
-    doc.line(sigCols[s] - 22, sigY, sigCols[s] + 22, sigY);
-    doc.setFontSize(7.5);
+    doc.line(sigCols[s] - 22, y, sigCols[s] + 22, y);
+    doc.setFontSize(7);
     doc.setFont("helvetica", "normal");
-    doc.setTextColor(100, 100, 100);
-    doc.text(sigLabels[s], sigCols[s], sigY + 6, { align: "center" });
-    if (s === 0)
-      doc.text(data.ownerName, sigCols[s], sigY + 11, { align: "center" });
+    doc.setTextColor(120, 120, 120);
+    doc.text(sigLabels[s], sigCols[s], y + 5, { align: "center" });
+    doc.setFontSize(7.5);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(40, 40, 40);
+    doc.text(sigVals[s], sigCols[s], y + 11, { align: "center" });
   }
 
   // Footer
-  doc.setFillColor(20, 83, 45);
-  doc.rect(12, 276, pageW - 24, 9, "F");
-  doc.setFontSize(6.5);
+  doc.setFontSize(7);
   doc.setFont("helvetica", "normal");
-  doc.setTextColor(167, 243, 208);
-  doc.text(`Certificate No.: ${data.certNum}`, 20, 281.5);
-  doc.text(`Issue Date: ${data.date}`, pageW / 2, 281.5, { align: "center" });
-  doc.text("AyurNexis 3.1 | ayurnexis.platform", pageW - 20, 281.5, {
-    align: "right",
-  });
+  doc.setTextColor(120, 120, 120);
+  doc.text(
+    "AyurNexis 3.1 | Pharmacopeia Compliant | IP 2022 | BP 2023",
+    W / 2,
+    H - M + 5,
+    { align: "center" },
+  );
 
   doc.save(
     `${data.formulationName || data.dosageForm || "formulation"}_certificate.pdf`,
   );
 }
 
-// ─── Standalone Drug Label PDF Generator ─────────────────────────────────────
+// ─── Standalone Drug Label PDF Generator (FDA-Style) ─────────────────────────
 async function generateLabelPDF(data: {
   formulationName: string;
   dosageForm: string;
   ownerName: string;
   institution: string;
-  ingredients: { name: string; qty: number; unit: string }[];
+  ingredients: { name: string; qty: number; unit: string; category?: string }[];
   overallScore: number;
   approved: boolean;
   date: string;
@@ -2448,376 +2428,278 @@ async function generateLabelPDF(data: {
   indications?: string;
   contraindications?: string;
 }): Promise<void> {
-  // Full A4 professional drug label
   await loadJsPDF();
   const JsPDF = getJsPDF();
+  // A4 Portrait FDA-style label
   const doc = new JsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
-  const W = doc.internal.pageSize.getWidth();
-  const margin = 14;
-  let y = 0;
+  const W = 210;
+  const H = 297;
+  const M = 10;
+  const innerW = W - M * 2;
+  let y = M;
 
-  const batchNum = `AN-${Date.now().toString(36).toUpperCase().slice(-8)}`;
+  const ndcNum = `6529-${Math.floor(Math.random() * 9000 + 1000)}-${Math.floor(Math.random() * 90 + 10)}`;
+  const lotNum = `LOT${new Date().toISOString().slice(0, 10).replace(/-/g, "")}`;
+  const expDate = new Date();
+  expDate.setMonth(expDate.getMonth() + 24);
+  const expStr = `${String(expDate.getMonth() + 1).padStart(2, "0")}/${expDate.getFullYear()}`;
   const prodName = (
     data.formulationName || `${data.dosageForm} Formulation`
   ).toUpperCase();
 
-  // === PAGE BACKGROUND ===
+  const activeIngs = data.ingredients.filter(
+    (i) =>
+      i.category === "api" || i.category === "herb" || i.category === "extract",
+  );
+  const inactiveIngs = data.ingredients.filter(
+    (i) =>
+      i.category !== "api" && i.category !== "herb" && i.category !== "extract",
+  );
+  if (activeIngs.length === 0) {
+    for (const i of data.ingredients.slice(
+      0,
+      Math.ceil(data.ingredients.length / 2),
+    ))
+      activeIngs.push(i);
+    for (const i of data.ingredients.slice(
+      Math.ceil(data.ingredients.length / 2),
+    ))
+      inactiveIngs.push(i);
+  }
+
+  // Outer border
+  doc.setDrawColor(0, 0, 0);
+  doc.setLineWidth(1);
+  doc.rect(M, M, innerW, H - M * 2, "S");
+
+  // Top strip: white bg, drug name
   doc.setFillColor(255, 255, 255);
-  doc.rect(0, 0, W, 297, "F");
-  // Subtle diagonal pattern
-  doc.setDrawColor(240, 248, 240);
-  doc.setLineWidth(0.2);
-  for (let i = -297; i < W + 297; i += 6) {
-    doc.line(i, 0, i + 297, 297);
-  }
+  doc.rect(M + 0.5, M + 0.5, innerW - 1, 52, "F");
 
-  // === OUTER BORDERS ===
-  doc.setDrawColor(20, 83, 45);
-  doc.setLineWidth(2);
-  doc.rect(5, 5, W - 10, 287, "S");
-  doc.setDrawColor(180, 130, 30);
-  doc.setLineWidth(0.7);
-  doc.rect(8, 8, W - 16, 281, "S");
-
-  // === HEADER BAND ===
-  doc.setFillColor(20, 83, 45);
-  doc.rect(8, 8, W - 16, 28, "F");
-
-  // Brand left
+  // NDC top right
   doc.setFontSize(8);
   doc.setFont("helvetica", "bold");
-  doc.setTextColor(255, 220, 100);
-  doc.text("AyurNexis 3.1", margin, 18);
-  doc.setFontSize(6);
+  doc.setTextColor(0, 0, 0);
+  doc.text(`NDC  ${ndcNum}`, W - M - 3, M + 8, { align: "right" });
+
+  // Drug name
+  doc.setFontSize(18);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(0, 0, 0);
+  const nameLines = doc.splitTextToSize(prodName, innerW - 10);
+  doc.text(nameLines, M + 5, M + 18);
+
+  // Dosage form
+  doc.setFontSize(8.5);
   doc.setFont("helvetica", "normal");
-  doc.setTextColor(167, 243, 208);
-  doc.text("AI-Enabled QA Platform", margin, 24);
-
-  // Product name center
-  doc.setFontSize(13);
-  doc.setFont("helvetica", "bold");
-  doc.setTextColor(255, 255, 255);
-  const nameShort =
-    prodName.length > 40 ? `${prodName.slice(0, 40)}…` : prodName;
-  doc.text(nameShort, W / 2, 20, { align: "center" });
-  doc.setFontSize(7);
-  doc.setFont("helvetica", "normal");
-  doc.setTextColor(167, 243, 208);
-  doc.text("Manufactured by AyurNexis Formulation Lab", W / 2, 28, {
-    align: "center",
-  });
-
-  // Rx symbol right
-  doc.setFontSize(16);
-  doc.setFont("helvetica", "bold");
-  doc.setTextColor(255, 220, 100);
-  doc.text("Rx", W - margin, 22, { align: "right" });
-
-  y = 42;
-
-  // === DOSAGE FORM + BATCH ROW ===
-  doc.setFillColor(240, 253, 244);
-  doc.setDrawColor(20, 83, 45);
-  doc.setLineWidth(0.3);
-  doc.rect(margin, y, W - margin * 2, 10, "FD");
-  doc.setFontSize(8);
-  doc.setFont("helvetica", "bold");
-  doc.setTextColor(20, 83, 45);
-  doc.text(`Dosage Form: ${data.dosageForm}`, margin + 3, y + 7);
-  doc.text(`Batch/Lot No: ${batchNum}`, W / 2, y + 7, { align: "center" });
-  doc.text(`Date: ${data.date}`, W - margin - 3, y + 7, { align: "right" });
-  y += 15;
-
-  // === COMPOSITION TABLE ===
-  doc.setFontSize(9);
-  doc.setFont("helvetica", "bold");
-  doc.setTextColor(20, 83, 45);
-  doc.text("COMPOSITION", margin, y);
-  doc.setDrawColor(20, 83, 45);
-  doc.setLineWidth(0.4);
-  doc.line(margin, y + 1, W - margin, y + 1);
-  y += 5;
-
-  // Table header
-  doc.setFillColor(20, 83, 45);
-  doc.rect(margin, y, W - margin * 2, 6, "F");
-  doc.setFontSize(7);
-  doc.setFont("helvetica", "bold");
-  doc.setTextColor(255, 255, 255);
-  doc.text("Ingredient / Active Substance", margin + 2, y + 4.2);
-  doc.text("Qty", W - margin - 35, y + 4.2, { align: "right" });
-  doc.text("Unit", W - margin - 18, y + 4.2, { align: "right" });
-  doc.text("Role", W - margin - 2, y + 4.2, { align: "right" });
-  y += 6;
-
-  const maxIngRows = Math.min(data.ingredients.length, 12);
-  for (let i = 0; i < maxIngRows; i++) {
-    const row = data.ingredients[i];
-    if (i % 2 === 0) {
-      doc.setFillColor(245, 252, 245);
-      doc.rect(margin, y, W - margin * 2, 5.5, "F");
-    }
-    doc.setFontSize(6.5);
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(30, 30, 30);
-    const nm = row.name.length > 50 ? `${row.name.slice(0, 50)}…` : row.name;
-    doc.text(nm, margin + 2, y + 3.8);
-    doc.text(String(row.qty), W - margin - 35, y + 3.8, { align: "right" });
-    doc.text(row.unit, W - margin - 18, y + 3.8, { align: "right" });
-    y += 5.5;
-  }
-  if (data.ingredients.length > 12) {
-    doc.setFontSize(6);
-    doc.setTextColor(100, 100, 100);
-    doc.text(
-      `(+${data.ingredients.length - 12} additional excipients)`,
-      margin + 2,
-      y + 3,
-    );
-    y += 6;
-  }
-  y += 4;
-
-  // === PHARMACOLOGICAL EFFECTS ===
-  if (data.aiSummary && data.aiSummary.length > 10) {
-    doc.setFontSize(9);
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(20, 83, 45);
-    doc.text("PHARMACOLOGICAL EFFECTS", margin, y);
-    doc.setLineWidth(0.4);
-    doc.line(margin, y + 1, W - margin, y + 1);
-    y += 5;
-    doc.setFontSize(7);
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(40, 40, 40);
-    const pharmLines = doc.splitTextToSize(data.aiSummary, W - margin * 2 - 2);
-    const maxLines = Math.min(pharmLines.length, 8);
-    doc.text(pharmLines.slice(0, maxLines), margin + 2, y);
-    y += maxLines * 4 + 3;
-  }
-
-  // === INDICATIONS ===
-  if (data.indications && data.indications.length > 5) {
-    doc.setFontSize(9);
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(20, 83, 45);
-    doc.text("INDICATIONS", margin, y);
-    doc.setLineWidth(0.4);
-    doc.line(margin, y + 1, W - margin, y + 1);
-    y += 5;
-    doc.setFontSize(7);
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(40, 40, 40);
-    const indLines = doc.splitTextToSize(data.indications, W - margin * 2 - 2);
-    doc.text(indLines.slice(0, 4), margin + 2, y);
-    y += Math.min(indLines.length, 4) * 4 + 3;
-  }
-
-  // === CONTRAINDICATIONS ===
-  const contrText =
-    data.contraindications && data.contraindications.length > 5
-      ? data.contraindications
-      : "Not recommended in known hypersensitivity to any ingredient. Caution in pregnancy, lactation, pediatric, and hepatic/renal impairment. Consult physician before use.";
-  doc.setFontSize(9);
-  doc.setFont("helvetica", "bold");
-  doc.setTextColor(180, 30, 30);
-  doc.text("CONTRAINDICATIONS & WARNINGS", margin, y);
-  doc.setLineWidth(0.4);
-  doc.line(margin, y + 1, W - margin, y + 1);
-  y += 5;
-  doc.setFontSize(7);
-  doc.setFont("helvetica", "normal");
-  doc.setTextColor(40, 40, 40);
-  const cLines = doc.splitTextToSize(contrText, W - margin * 2 - 2);
-  doc.text(cLines.slice(0, 4), margin + 2, y);
-  y += Math.min(cLines.length, 4) * 4 + 3;
-
-  // === DOSAGE & ADMINISTRATION ===
-  const dosageMap: Record<string, string> = {
-    Tablet:
-      "Adults: 1-2 tablets orally twice or thrice daily after meals, or as directed by physician. Swallow whole with water. Do not crush or chew.",
-    Capsule:
-      "Adults: 1-2 capsules orally twice daily with water after meals, or as directed by physician.",
-    Syrup:
-      "Adults: 5-10 mL (1-2 teaspoonfuls) thrice daily after meals. Children (6-12 yrs): 2.5-5 mL twice daily. Shake well before use.",
-    Injection:
-      "Administer by qualified healthcare professional only. IV/IM as directed by physician. Refer to prescribing information for reconstitution and administration details.",
-    Cream:
-      "Apply a thin layer to affected area 2-3 times daily. Cleanse area before application. Avoid contact with eyes and mucous membranes.",
-    Ointment:
-      "Apply topically to affected area twice daily or as directed. For external use only.",
-    Gel: "Apply to affected area 2-3 times daily. Wash hands after application. External use only.",
-    Drops:
-      "Instill 2-3 drops in affected area as directed. Follow physician's instructions regarding frequency and duration.",
-    Patch:
-      "Apply one patch to clean dry skin. Replace as directed. Rotate application site.",
-    Inhaler:
-      "2 inhalations as required (max 8 puffs/day). Shake well before each use. Rinse mouth after use.",
+  const routeMap: Record<string, string> = {
+    Tablet: "Tablet for Oral Administration",
+    Capsule: "Capsule for Oral Administration",
+    Syrup: "Oral Liquid",
+    Injection: "Solution for Injection",
+    Cream: "Cream for Topical Use",
+    Ointment: "Ointment for Topical Use",
+    Gel: "Gel for Topical Use",
+    Drops: "Drops",
+    Patch: "Transdermal Patch",
+    Inhaler: "Inhalation Aerosol",
   };
-  const dosageInstr =
-    dosageMap[data.dosageForm] ??
-    `Adults: Use as directed by physician. Follow prescribed dosage for ${data.dosageForm}.`;
-  doc.setFontSize(9);
-  doc.setFont("helvetica", "bold");
-  doc.setTextColor(20, 83, 45);
-  doc.text("DOSAGE & ADMINISTRATION", margin, y);
-  doc.setLineWidth(0.4);
-  doc.line(margin, y + 1, W - margin, y + 1);
-  y += 5;
-  doc.setFontSize(7);
-  doc.setFont("helvetica", "normal");
-  doc.setTextColor(40, 40, 40);
-  const dLines = doc.splitTextToSize(dosageInstr, W - margin * 2 - 2);
-  doc.text(dLines, margin + 2, y);
-  y += dLines.length * 4 + 3;
+  doc.text(
+    routeMap[data.dosageForm] || `${data.dosageForm} — For appropriate route`,
+    M + 5,
+    M + 28,
+  );
 
-  // === STORAGE CONDITIONS ===
-  doc.setFontSize(9);
-  doc.setFont("helvetica", "bold");
-  doc.setTextColor(20, 83, 45);
-  doc.text("STORAGE CONDITIONS", margin, y);
-  doc.setLineWidth(0.4);
-  doc.line(margin, y + 1, W - margin, y + 1);
-  y += 5;
-  doc.setFontSize(7);
-  doc.setFont("helvetica", "normal");
-  doc.setTextColor(40, 40, 40);
-  const storageText =
-    "Store at 25°C ± 2°C (77°F ± 4°F). Excursions permitted to 15–30°C. Relative Humidity: ≤60%. Protect from light and moisture. Keep in original tightly closed container. Store in a cool, dry place away from direct sunlight and heat sources. Keep out of reach of children. Do not freeze.";
-  const sLines = doc.splitTextToSize(storageText, W - margin * 2 - 2);
-  doc.text(sLines, margin + 2, y);
-  y += sLines.length * 4 + 3;
+  // Strength line
+  if (activeIngs.length > 0) {
+    doc.setFontSize(7.5);
+    const stLine = `Each ${data.dosageForm.toLowerCase()} contains: ${activeIngs
+      .slice(0, 3)
+      .map((i) => `${i.name} ${i.qty}${i.unit}`)
+      .join(
+        ", ",
+      )}${activeIngs.length > 3 ? ` and ${activeIngs.length - 3} more` : ""}`;
+    const stLines = doc.splitTextToSize(stLine, innerW - 10);
+    doc.text(stLines.slice(0, 2), M + 5, M + 36);
+  }
 
-  // === MANUFACTURER INFO ===
-  doc.setFontSize(9);
+  // Rx badge
+  doc.setFillColor(0, 0, 0);
+  doc.rect(W - M - 22, M + 28, 18, 9, "F");
+  doc.setFontSize(8.5);
   doc.setFont("helvetica", "bold");
-  doc.setTextColor(20, 83, 45);
-  doc.text("MANUFACTURER / FORMULATOR", margin, y);
-  doc.setLineWidth(0.4);
-  doc.line(margin, y + 1, W - margin, y + 1);
-  y += 5;
-  doc.setFillColor(248, 252, 248);
-  doc.setDrawColor(20, 83, 45);
-  doc.setLineWidth(0.3);
-  doc.rect(margin, y, W - margin * 2, 16, "FD");
+  doc.setTextColor(255, 255, 255);
+  doc.text("Rx Only", W - M - 13, M + 34.5, { align: "center" });
+
+  // Divider
+  doc.setDrawColor(0);
+  doc.setLineWidth(0.5);
+  doc.line(M, M + 52, W - M, M + 52);
+  y = M + 56;
+
+  // Active Ingredients section
+  doc.setFillColor(220, 220, 220);
+  doc.rect(M + 0.5, y, innerW - 1, 6.5, "F");
+  doc.setFontSize(8.5);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(0, 0, 0);
+  doc.text("ACTIVE INGREDIENT(S)", M + 4, y + 4.8);
+  y += 7.5;
+
+  doc.setFillColor(235, 235, 235);
+  doc.rect(M + 0.5, y, innerW - 1, 5.5, "F");
   doc.setFontSize(7.5);
   doc.setFont("helvetica", "bold");
-  doc.setTextColor(20, 83, 45);
-  doc.text("AyurNexis Formulation Lab", margin + 3, y + 5);
+  doc.text("Ingredient Name", M + 4, y + 4);
+  doc.text("Amount Per Unit", W - M - 4, y + 4, { align: "right" });
+  doc.setLineWidth(0.3);
+  doc.line(M + 0.5, y + 5.5, W - M - 0.5, y + 5.5);
+  y += 6;
+  for (const ing of activeIngs.slice(0, 8)) {
+    doc.setFontSize(7.5);
+    doc.setFont("helvetica", "normal");
+    doc.text(ing.name, M + 4, y + 4);
+    doc.text(`${ing.qty} ${ing.unit}`, W - M - 4, y + 4, { align: "right" });
+    doc.setDrawColor(180, 180, 180);
+    doc.setLineWidth(0.2);
+    doc.line(M + 0.5, y + 5.5, W - M - 0.5, y + 5.5);
+    y += 6;
+  }
+  y += 2;
+
+  // Inactive ingredients
+  doc.setFillColor(220, 220, 220);
+  doc.rect(M + 0.5, y, innerW - 1, 6.5, "F");
+  doc.setFontSize(8.5);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(0, 0, 0);
+  doc.text("INACTIVE INGREDIENTS (EXCIPIENTS)", M + 4, y + 4.8);
+  y += 7.5;
+  const excipText =
+    inactiveIngs.length > 0
+      ? inactiveIngs.map((i) => i.name).join(", ")
+      : "Not applicable";
+  doc.setFontSize(7.5);
   doc.setFont("helvetica", "normal");
-  doc.setTextColor(60, 60, 60);
-  doc.text(
-    `Formulator: ${data.ownerName}${data.institution ? `  |  ${data.institution}` : ""}`,
-    margin + 3,
-    y + 10,
+  const exLines = doc.splitTextToSize(excipText, innerW - 8);
+  doc.text(exLines.slice(0, 3), M + 4, y + 4);
+  y += Math.min(exLines.length, 3) * 5 + 6;
+
+  // Indications
+  doc.setDrawColor(0);
+  doc.setLineWidth(0.3);
+  doc.line(M + 0.5, y, W - M - 0.5, y);
+  y += 3;
+  doc.setFontSize(8.5);
+  doc.setFont("helvetica", "bold");
+  doc.text("INDICATIONS & USAGE", M + 4, y + 4.5);
+  y += 8;
+  const indText =
+    data.indications && data.indications.length > 5
+      ? data.indications
+      : `${prodName} is indicated for management of conditions responsive to its active pharmaceutical ingredients. Use as directed by a licensed healthcare provider.`;
+  doc.setFontSize(7.5);
+  doc.setFont("helvetica", "normal");
+  const indLines = doc.splitTextToSize(indText, innerW - 8);
+  doc.text(indLines.slice(0, 4), M + 4, y);
+  y += Math.min(indLines.length, 4) * 4.5 + 4;
+
+  // Warnings box
+  doc.setFillColor(255, 250, 230);
+  doc.setDrawColor(200, 160, 0);
+  doc.setLineWidth(0.5);
+  doc.rect(M + 0.5, y, innerW - 1, 24, "FD");
+  doc.setFontSize(8.5);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(150, 80, 0);
+  doc.text("WARNING", M + 4, y + 6);
+  doc.setFontSize(7);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(0, 0, 0);
+  const warnText =
+    data.contraindications && data.contraindications.length > 5
+      ? data.contraindications
+      : "Not for use in persons with known hypersensitivity to any ingredient. Keep out of reach of children. Consult physician before use during pregnancy or lactation.";
+  const warnLines = doc.splitTextToSize(warnText, innerW - 8);
+  doc.text(warnLines.slice(0, 4), M + 4, y + 12);
+  y += 28;
+
+  // Dosage
+  doc.setFontSize(8.5);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(0, 0, 0);
+  doc.text("DOSAGE & ADMINISTRATION", M + 4, y + 5);
+  y += 9;
+  const dosageMap: Record<string, string> = {
+    Tablet:
+      "Adults: 1-2 tablets orally 2-3 times daily after meals or as directed by physician.",
+    Capsule: "Adults: 1-2 capsules orally twice daily with water after meals.",
+    Syrup:
+      "Adults: 5-10 mL 3 times daily. Children (6-12 yr): 2.5-5 mL twice daily. Shake well.",
+    Injection: "Administer by qualified healthcare professional only.",
+    Cream:
+      "Apply a thin layer to affected area 2-3 times daily or as directed.",
+    Ointment: "Apply to affected area as directed by physician.",
+    Gel: "Apply topically to affected area as directed.",
+    Drops: "Instill as directed by physician.",
+    Patch: "Apply to clean, dry skin. Replace as directed.",
+    Inhaler: "Inhale as directed by physician.",
+  };
+  doc.setFontSize(7.5);
+  doc.setFont("helvetica", "normal");
+  const dosLines = doc.splitTextToSize(
+    dosageMap[data.dosageForm] || "Use as directed by physician.",
+    innerW - 8,
   );
+  doc.text(dosLines.slice(0, 3), M + 4, y);
+  y += Math.min(dosLines.length, 3) * 4.5 + 6;
+
+  // Lot, Expiry, Storage row
+  doc.setFillColor(245, 245, 245);
+  doc.setDrawColor(180, 180, 180);
+  doc.setLineWidth(0.3);
+  doc.rect(M + 0.5, y, innerW - 1, 16, "FD");
+  doc.setFontSize(7.5);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(0, 0, 0);
+  doc.text(`LOT: ${lotNum}`, M + 4, y + 6);
+  doc.text(`EXP: ${expStr}`, M + 4, y + 12);
   doc.text(
-    "Platform: AyurNexis 3.1 AI-Enabled Ayurvedic QA Platform",
-    margin + 3,
-    y + 14,
+    "Storage: Store at 25°C ± 2°C / 60% RH. Protect from light and moisture.",
+    M + 45,
+    y + 6,
+  );
+  doc.setFontSize(7);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(80, 80, 80);
+  doc.text(
+    `Manufactured by: AyurNexis Formulation Lab | ${data.institution || "Formulation Research Centre"}`,
+    M + 45,
+    y + 12,
   );
   y += 20;
 
-  // === APPROVAL STATUS BANNER ===
-  const approved = data.approved;
-  doc.setFillColor(approved ? 20 : 185, approved ? 83 : 28, approved ? 45 : 28);
-  doc.rect(margin, y, W - margin * 2, 14, "F");
-  doc.setFontSize(10);
-  doc.setFont("helvetica", "bold");
-  doc.setTextColor(255, 255, 255);
-  doc.text(
-    approved
-      ? "✓  APPROVED FOR PLATFORM RELEASE"
-      : `✗  NOT APPROVED FOR MARKET RELEASE  —  Quality Score: ${data.overallScore}/100`,
-    W / 2,
-    y + 9,
-    { align: "center" },
-  );
-  y += 18;
-
-  // === REGULATORY STATEMENT ===
-  doc.setFontSize(6.5);
-  doc.setFont("helvetica", "italic");
-  doc.setTextColor(80, 80, 80);
-  const regText =
-    "This formulation has been evaluated by AyurNexis 3.1 AI-enabled QA platform in accordance with pharmacopoeia guidelines (IP 2022, BP 2023, WHO). This is an academically developed formulation; clinical use requires regulatory approval by competent authority (CDSCO/FDA/EMA).";
-  const regLines = doc.splitTextToSize(regText, W - margin * 2 - 2);
-  doc.text(regLines, margin + 2, y);
-  y += regLines.length * 3.5 + 3;
-
-  // === BARCODE-STYLE AREA ===
-  const barcodeY = y + 2;
-  if (barcodeY < 275) {
-    doc.setFillColor(248, 252, 248);
-    doc.setDrawColor(180, 130, 30);
-    doc.setLineWidth(0.4);
-    doc.rect(margin, barcodeY, 50, 12, "FD");
-    // Draw barcode lines pattern
-    doc.setLineWidth(0.8);
-    doc.setDrawColor(30, 30, 30);
-    const barsX = margin + 3;
-    const barWidths = [
-      1, 0.5, 1.5, 0.5, 1, 1.5, 0.5, 1, 0.5, 1.5, 1, 0.5, 1, 0.5, 1.5,
-    ];
-    let bx = barsX;
-    for (const w of barWidths) {
-      doc.setLineWidth(w);
-      doc.line(bx, barcodeY + 2, bx, barcodeY + 9);
-      bx += w + 0.7;
-    }
-    doc.setFontSize(6);
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(30, 30, 30);
-    doc.text(batchNum, margin + 25, barcodeY + 11, { align: "center" });
-    // Score badge
-    doc.setFillColor(
-      approved ? 240 : 255,
-      approved ? 253 : 240,
-      approved ? 244 : 240,
-    );
-    doc.setDrawColor(
-      approved ? 20 : 180,
-      approved ? 83 : 30,
-      approved ? 45 : 30,
-    );
-    doc.setLineWidth(0.4);
-    doc.rect(W - margin - 45, barcodeY, 45, 12, "FD");
-    doc.setFontSize(7);
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(
-      approved ? 20 : 180,
-      approved ? 83 : 30,
-      approved ? 45 : 30,
-    );
-    doc.text(
-      `QA Score: ${data.overallScore}/100`,
-      W - margin - 22.5,
-      barcodeY + 5,
-      { align: "center" },
-    );
-    doc.setFontSize(6);
-    doc.setFont("helvetica", "normal");
-    doc.text(
-      approved ? "APPROVED" : "BELOW THRESHOLD",
-      W - margin - 22.5,
-      barcodeY + 10,
-      { align: "center" },
-    );
+  // Approval bottom strip
+  if (data.approved) {
+    doc.setFillColor(200, 230, 201);
+    doc.setDrawColor(76, 175, 80);
+  } else {
+    doc.setFillColor(255, 205, 210);
+    doc.setDrawColor(229, 115, 115);
   }
-
-  // Footer line
-  doc.setDrawColor(20, 83, 45);
   doc.setLineWidth(0.5);
-  doc.line(8, 287, W - 8, 287);
-  doc.setFontSize(5.5);
-  doc.setFont("helvetica", "normal");
-  doc.setTextColor(80, 80, 80);
-  doc.text(
-    `AyurNexis 3.1 — AI-Enabled Ayurvedic QA Platform  |  Generated: ${data.date}  |  Batch: ${batchNum}`,
-    W / 2,
-    291,
-    { align: "center" },
+  doc.rect(M + 0.5, y, innerW - 1, 12, "FD");
+  doc.setFontSize(9);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(
+    data.approved ? 27 : 183,
+    data.approved ? 94 : 28,
+    data.approved ? 32 : 28,
   );
+  const approvalText = data.approved
+    ? "APPROVED FOR MARKET RELEASE — AyurNexis QA Board"
+    : `NOT APPROVED — Quality Score Below Acceptance Criteria (Score: ${data.overallScore}/100)`;
+  doc.text(approvalText, W / 2, y + 8.5, { align: "center" });
 
   doc.save(
     `${data.formulationName || data.dosageForm || "formulation"}_drug_label.pdf`,
@@ -3360,54 +3242,163 @@ export function FormulationLab({
       const margin = 15;
       let y = 20;
 
+      // ─── Report design helpers ─────────────────────────────────────────────
       const addSectionHeader = (text: string) => {
         y += 4;
-        doc.setFillColor(30, 30, 80);
-        doc.rect(margin, y - 4, pageW - margin * 2, 8, "F");
+        doc.setFillColor(232, 245, 240); // light teal
+        doc.setDrawColor(0, 137, 123);
+        doc.setLineWidth(0.3);
+        doc.rect(margin, y - 4, pageW - margin * 2, 9, "FD");
         doc.setFontSize(10);
         doc.setFont("helvetica", "bold");
-        doc.setTextColor(255, 255, 255);
-        doc.text(text, margin + 2, y + 0.5);
-        y += 8;
-        doc.setTextColor(0, 0, 0);
+        doc.setTextColor(27, 94, 32);
+        doc.text(text, margin + 3, y + 1);
+        y += 10;
+        doc.setTextColor(51, 51, 51);
+        doc.setFontSize(9);
+        doc.setFont("helvetica", "normal");
       };
       const checkPage = (needed = 20) => {
-        if (y + needed > 270) {
+        if (y + needed > 272) {
           doc.addPage();
           y = 20;
+          // page footer
+          doc.setFontSize(7);
+          doc.setFont("helvetica", "normal");
+          doc.setTextColor(150, 150, 150);
+          doc.text(
+            "Confidential | AyurNexis QA Platform | IP 2022 / BP 2023 Compliant",
+            pageW / 2,
+            288,
+            { align: "center" },
+          );
+          doc.setTextColor(51, 51, 51);
         }
       };
 
-      // Cover
-      doc.setFillColor(245, 245, 255);
-      doc.rect(0, 0, pageW, 60, "F");
-      doc.setFontSize(20);
+      // ─── COVER PAGE ─────────────────────────────────────────────────────────
+      // Light teal top header band
+      doc.setFillColor(232, 245, 240);
+      doc.rect(0, 0, pageW, 22, "F");
+      doc.setDrawColor(0, 137, 123);
+      doc.setLineWidth(0.5);
+      doc.line(0, 22, pageW, 22);
+      doc.setFontSize(10);
       doc.setFont("helvetica", "bold");
-      doc.setTextColor(30, 30, 80);
-      doc.text("FORMULATION DEVELOPMENT REPORT", pageW / 2, 25, {
-        align: "center",
-      });
-      doc.setFontSize(13);
-      doc.setTextColor(60, 60, 120);
-      doc.text(formulationName || `${dosageForm} Formulation`, pageW / 2, 37, {
-        align: "center",
-      });
+      doc.setTextColor(27, 94, 32);
+      doc.text("AyurNexis 3.1", margin, 14);
+      doc.setFontSize(10);
+      doc.text("FORMULATION REPORT", pageW - margin, 12, { align: "right" });
+
+      // Gold accent line
+      doc.setFillColor(180, 130, 42);
+      doc.rect(0, 18, pageW, 2, "F");
+
+      // Subtitle
       doc.setFontSize(9);
       doc.setFont("helvetica", "normal");
+      doc.setTextColor(100, 100, 100);
+      doc.text(
+        "Pharmaceutical Formulation Quality Assessment Report",
+        pageW / 2,
+        30,
+        { align: "center" },
+      );
+
+      // Formulation name large centered
+      const coverName = (
+        formulationName || `${dosageForm} Formulation`
+      ).toUpperCase();
+      doc.setFontSize(18);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(20, 83, 45);
+      const coverLines = doc.splitTextToSize(coverName, pageW - margin * 2);
+      doc.text(coverLines, pageW / 2, 50, { align: "center" });
+
+      // Horizontal divider
+      doc.setDrawColor(180, 130, 42);
+      doc.setLineWidth(0.7);
+      doc.line(margin, 62, pageW - margin, 62);
+
+      // Report metadata
+      const reportNum = `AN-REPORT-${Date.now().toString(36).toUpperCase().slice(-7)}`;
+      const reportDate = new Date().toLocaleDateString("en-IN", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      });
+      doc.setFontSize(8.5);
+      doc.setFont("helvetica", "normal");
       doc.setTextColor(80, 80, 80);
+      doc.text(`Report No: ${reportNum}`, margin, 72);
+      doc.text(`Date: ${reportDate}`, pageW / 2, 72, { align: "center" });
       doc.text(
-        `Prepared by: ${ownerName || "N/A"}  |  Institution: ${institution || "N/A"}`,
+        `QA Ref: AY-QA-${new Date().getFullYear()}`,
+        pageW - margin,
+        72,
+        { align: "right" },
+      );
+
+      // Summary box
+      const reportQScore = Math.round(
+        (compatibilityScore + advancedStability.stabilityScore) / 2,
+      );
+      const approved = reportQScore >= 65;
+      doc.setFillColor(248, 252, 248);
+      doc.setDrawColor(20, 83, 45);
+      doc.setLineWidth(0.4);
+      doc.rect(margin, 80, pageW - margin * 2, 26, "FD");
+      // 4-column summary
+      const sumColW = (pageW - margin * 2) / 4;
+      const sumLabels = ["Dosage Form", "Method", "Quality Score", "Status"];
+      const sumVals = [
+        dosageForm || "N/A",
+        method || "N/A",
+        `${reportQScore}/100`,
+        approved ? "APPROVED" : "NOT APPROVED",
+      ];
+      const sumColors: [number, number, number][] = [
+        [20, 83, 45],
+        [20, 83, 45],
+        [20, 83, 45],
+        approved ? [20, 83, 45] : [185, 28, 28],
+      ];
+      for (let sc = 0; sc < 4; sc++) {
+        const sx = margin + sc * sumColW + sumColW / 2;
+        doc.setFontSize(7);
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(100, 100, 100);
+        doc.text(sumLabels[sc], sx, 89, { align: "center" });
+        doc.setFontSize(9);
+        doc.setFont("helvetica", "bold");
+        doc.setTextColor(...sumColors[sc]);
+        doc.text(sumVals[sc], sx, 99, { align: "center" });
+        if (sc < 3) {
+          doc.setDrawColor(200, 200, 200);
+          doc.setLineWidth(0.3);
+          doc.line(
+            margin + (sc + 1) * sumColW,
+            83,
+            margin + (sc + 1) * sumColW,
+            103,
+          );
+        }
+      }
+
+      // Footer bar
+      doc.setFillColor(20, 83, 45);
+      doc.rect(0, 284, pageW, 13, "F");
+      doc.setFontSize(7);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(200, 230, 210);
+      doc.text(
+        "Confidential | AyurNexis QA Platform | IP 2022 / BP 2023 Compliant",
         pageW / 2,
-        47,
+        292,
         { align: "center" },
       );
-      doc.text(
-        `Date: ${new Date().toLocaleDateString("en-IN", { year: "numeric", month: "long", day: "numeric" })}`,
-        pageW / 2,
-        54,
-        { align: "center" },
-      );
-      y = 70;
+
+      y = 116;
 
       // Section 1: Formulation Overview
       addSectionHeader("1. FORMULATION OVERVIEW");
@@ -3670,155 +3661,6 @@ export function FormulationLab({
         doc.text(lines, margin + 4, y);
         y += lines.length * 5 + 2;
       });
-
-      // Certificate page
-      if (ownerName) {
-        doc.addPage();
-        y = 20;
-        // Gold outer border
-        doc.setDrawColor(180, 130, 30);
-        doc.setLineWidth(3);
-        doc.rect(8, 8, pageW - 16, 279, "S");
-        // Green inner border
-        doc.setDrawColor(20, 83, 45);
-        doc.setLineWidth(1);
-        doc.rect(14, 14, pageW - 28, 267, "S");
-        // Corner ornaments
-        for (const [cx, cy2] of [
-          [12, 12],
-          [pageW - 12, 12],
-          [12, 283],
-          [pageW - 12, 283],
-        ] as [number, number][]) {
-          doc.setFontSize(10);
-          doc.setFont("helvetica", "bold");
-          doc.setTextColor(180, 130, 30);
-          doc.text("◆", cx, cy2, { align: "center" });
-        }
-        // Green header band
-        doc.setFillColor(20, 83, 45);
-        doc.rect(14, 14, pageW - 28, 30, "F");
-        doc.setFontSize(14);
-        doc.setFont("helvetica", "bold");
-        doc.setTextColor(255, 255, 255);
-        doc.text("AyurNexis 3.1", pageW / 2, 27, { align: "center" });
-        doc.setFontSize(8);
-        doc.setFont("helvetica", "normal");
-        doc.setTextColor(167, 243, 208);
-        doc.text("FORMULATION EXCELLENCE CERTIFICATE", pageW / 2, 36, {
-          align: "center",
-        });
-        // Divider gold line
-        doc.setDrawColor(180, 130, 30);
-        doc.setLineWidth(0.5);
-        doc.line(30, 48, pageW - 30, 48);
-        // Body
-        doc.setFontSize(9);
-        doc.setFont("helvetica", "normal");
-        doc.setTextColor(100, 100, 100);
-        doc.text("THIS IS TO CERTIFY THAT", pageW / 2, 60, { align: "center" });
-        doc.setFontSize(16);
-        doc.setFont("helvetica", "bold");
-        doc.setTextColor(20, 83, 45);
-        doc.text(ownerName.toUpperCase(), pageW / 2, 75, { align: "center" });
-        if (designation) {
-          doc.setFontSize(10);
-          doc.setFont("helvetica", "italic");
-          doc.setTextColor(80, 80, 80);
-          doc.text(designation, pageW / 2, 84, { align: "center" });
-        }
-        if (institution) {
-          doc.setFontSize(9);
-          doc.setFont("helvetica", "normal");
-          doc.setTextColor(100, 100, 100);
-          doc.text(institution, pageW / 2, 93, { align: "center" });
-        }
-        doc.setFontSize(9);
-        doc.setFont("helvetica", "normal");
-        doc.setTextColor(80, 80, 80);
-        doc.text(
-          "has successfully developed, validated, and documented the following pharmaceutical",
-          pageW / 2,
-          106,
-          { align: "center" },
-        );
-        doc.text(
-          "formulation using AyurNexis 3.1 AI-Enabled Ayurvedic Quality Assurance Platform.",
-          pageW / 2,
-          114,
-          { align: "center" },
-        );
-        // Formulation box
-        doc.setFillColor(240, 253, 244);
-        doc.setDrawColor(20, 83, 45);
-        doc.setLineWidth(0.5);
-        doc.rect(25, 122, pageW - 50, 40, "FD");
-        doc.setFontSize(13);
-        doc.setFont("helvetica", "bold");
-        doc.setTextColor(20, 83, 45);
-        doc.text(
-          (formulationName || `${dosageForm} Formulation`).toUpperCase(),
-          pageW / 2,
-          137,
-          { align: "center" },
-        );
-        doc.setFontSize(9);
-        doc.setFont("helvetica", "normal");
-        doc.setTextColor(80, 80, 80);
-        doc.text(
-          `${dosageForm}  ·  ${method}  ·  ${ingredients.length} Ingredients`,
-          pageW / 2,
-          147,
-          { align: "center" },
-        );
-        doc.text(
-          `Stability Score: ${advancedStability.stabilityScore}/100  ·  Shelf Life: ${advancedStability.shelfLifeMonths} months`,
-          pageW / 2,
-          156,
-          { align: "center" },
-        );
-        // Signature lines
-        doc.setDrawColor(150, 150, 150);
-        doc.setLineWidth(0.3);
-        doc.line(30, 205, 95, 205);
-        doc.line(pageW - 95, 205, pageW - 30, 205);
-        doc.setFontSize(8);
-        doc.setFont("helvetica", "normal");
-        doc.setTextColor(120, 120, 120);
-        doc.text("Formulator Signature", 62, 211, { align: "center" });
-        doc.text("QA Authority", pageW - 62, 211, { align: "center" });
-        doc.setFontSize(9);
-        doc.setFont("helvetica", "bold");
-        doc.setTextColor(50, 50, 50);
-        doc.text(ownerName, 62, 218, { align: "center" });
-        doc.text("AyurNexis QA Board", pageW - 62, 218, { align: "center" });
-        // Date and cert number
-        const certDate = new Date().toLocaleDateString("en-IN", {
-          year: "numeric",
-          month: "long",
-          day: "numeric",
-        });
-        const certNum = `AN-${Date.now().toString(36).toUpperCase().slice(-8)}`;
-        doc.setFontSize(8);
-        doc.setFont("helvetica", "normal");
-        doc.setTextColor(120, 120, 120);
-        doc.text(`Date of Certification: ${certDate}`, 30, 230);
-        doc.text(`Certificate No.: ${certNum}`, pageW - 30, 230, {
-          align: "right",
-        });
-        // Footer tagline
-        doc.setFillColor(20, 83, 45);
-        doc.rect(14, 270, pageW - 28, 11, "F");
-        doc.setFontSize(7);
-        doc.setFont("helvetica", "normal");
-        doc.setTextColor(167, 243, 208);
-        doc.text(
-          "Powered by AyurNexis 3.1 — AI-Enabled Ayurvedic Quality Assurance Platform",
-          pageW / 2,
-          277,
-          { align: "center" },
-        );
-      }
 
       doc.save(`${formulationName || dosageForm || "formulation"}_report.pdf`);
     } catch (e) {

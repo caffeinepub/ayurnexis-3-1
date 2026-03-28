@@ -1,46 +1,35 @@
 # AyurNexis 3.1
 
 ## Current State
-- FormulationLab uses dynamic CDN jsPDF import (Function('return import(...)')) which may fail in ICP environment
-- Label PDF is basic, no pharmacological effects section, no disease indication, limited info
-- Formulation Lab Real-Time Analysis tabs do not show per-ingredient pharmacological effects
-- GetFormulationIdea: Gemini prompt requests 10 formulations but display is one-at-a-time with navigation; user sees only 4 results with increasing API mg (likely static fallback `generateDynamicCompositions` is running instead of Gemini)
-- Novel compositions from Gemini do not include per-ingredient `pharmacologicalEffect` shown prominently
-- Marketed drugs API call may be returning limited results; no fallback to show all available forms
-- All diseases not covered because search suggests only 20 results
+- DeepSeek AI is integrated via backend canister HTTP outcalls but responses are empty/fail because Motoko's `extractDeepSeekContent` does O(n²) character-by-character string parsing on large JSON responses, hitting ICP instruction limits
+- PDFs (Report, Certificate, Label) use CDN dynamic import for jsPDF which is blocked in production
+- History page has no delete button for formulations
+- History page certificate/label/report download buttons exist but use same broken CDN approach
+- Admin Panel has no user activity/history view
 
 ## Requested Changes (Diff)
 
 ### Add
-- Pharmacological Effects tab/section in FormulationLab Composition Summary showing each ingredient's pharmacological role, mechanism, therapeutic use (from Gemini)
-- Per-ingredient pharmacological effects prominently shown in GetFormulationIdea novel composition cards
-- Full detailed Drug Label PDF: include brand/generic name, dosage form, all ingredients with quantities, pharmacological effects of composition, indications (diseases), contraindications, storage, manufacturer details, batch/lot number, approval status, score, regulatory note
-- Fallback: if jsPDF CDN import fails, use Blob + data URI approach to attempt PDF
+- Admin Panel: expandable user activity card (click user to see full history with date/time of all formulations, analyses, batches)
+- History: delete button for own formulation records (permanent deletion)
+- History: working download buttons for Report, Certificate, and Label per formulation row
+- PDF redesign: all 3 PDFs (Report, Certificate, Label) with light-color professional layouts and proper 20mm margins
 
 ### Modify
-- **geminiService.ts `getFormulationIdeas`**: Change prompt to request 20 novel formulations, not 10. Add explicit field `pharmacologicalEffects` (full paragraph on mechanism and therapeutic effects of entire composition). Add `indicationsForDisease` field. Remove any implicit restrictions - ask for all clinically relevant formulations.
-- **geminiService.ts `getMarketedDrugs`**: Change prompt to ask for ALL available marketed drugs (up to 20), all dosage forms, all manufacturers. No restriction to specific drug type.
-- **geminiService.ts `searchDiseases`**: Return 30 results including common conditions, rare diseases, and exact match for typed query.
-- **GetFormulationIdea NovelCompositionsStep**: Show all AI-generated formulations (up to 20), paginate with prev/next, show `pharmacologicalEffects` prominently in each card.
-- **FormulationLab generateLabelPDF**: Completely rewrite to be a full, detailed, professional drug label PDF (A4 or A5) with all fields: product name, composition table, pharmacological effects paragraph, indications, contraindications, storage conditions, manufacturer, batch, score, approval status, platform certification statement.
-- **FormulationLab PDF download buttons**: Wrap all 3 PDF download handlers in try/catch with user-visible error toast if CDN import fails; add alternative download path.
-- **FormulationLab Real-Time Analysis**: In the Composition Summary / API Insights tab, add a "Pharmacological Effects" section showing Gemini-generated pharmacological effects for the full composition.
+- Backend `callDeepSeek`: return raw HTTP response JSON instead of extracting content in Motoko (avoid O(n²) string parsing that traps on large AI responses)
+- Frontend `aiService.ts`: parse the raw DeepSeek JSON response (extract `choices[0].message.content`) in JavaScript
+- `pdfLib.ts`: replace CDN dynamic loading with proper npm package import (`import jsPDF from 'jspdf'; import autoTable from 'jspdf-autotable'`)
+- HistoryPage: use pdfLib npm approach for all PDF generation
+- FormulationLab: use pdfLib npm approach for all PDF generation
 
 ### Remove
-- Any static `generateDynamicCompositions` fallback that produces repetitive 4-result lists with increasing API mg — replace with proper Gemini call always
-- Any limit/restriction in Gemini prompts that reduces output variety
+- Motoko `extractDeepSeekContent`, `textFind`, `textSubstring`, `findUnescapedEnd` helper functions (no longer needed after returning raw JSON)
 
 ## Implementation Plan
-1. Update `geminiService.ts`:
-   - `searchDiseases`: ask for 30 results, explicitly include common conditions
-   - `getFormulationIdeas`: request 20 formulations, add `pharmacologicalEffects` and `indicationsForDisease` fields, no restrictions
-   - `getMarketedDrugs`: ask for 20 drugs, all dosage forms, remove drug type restriction
-   - Add new `getCompositionPharmacology(ingredients, dosageForm)` function that returns a pharmacological effects paragraph for the full composition
-2. Update `GetFormulationIdea.tsx`:
-   - Always use Gemini results (remove static fallback `generateDynamicCompositions`)
-   - Show `pharmacologicalEffects` and `indicationsForDisease` prominently on novel composition cards
-   - Show all up to 20 results with navigation
-3. Update `FormulationLab.tsx`:
-   - Rewrite `generateLabelPDF` for full professional label
-   - Add pharmacological effects section to composition summary (call `getCompositionPharmacology`)
-   - Fix PDF download reliability (robust error handling)
+1. Update `main.mo` — remove all string parsing helpers, return raw response from `callDeepSeek`
+2. Update `aiService.ts` — parse `choices[0].message.content` from raw JSON in JavaScript
+3. Update `pdfLib.ts` — use npm package imports instead of CDN loading
+4. Redesign all 3 PDF generators with light professional layout
+5. Add delete functionality to HistoryPage for own formulations (localStorage-based)
+6. Fix History PDF download buttons to use npm-based approach
+7. Add expandable user activity panel to AdminDashboard (reads formulation history from localStorage keyed by userId)

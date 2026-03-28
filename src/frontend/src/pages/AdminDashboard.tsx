@@ -11,8 +11,11 @@ import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import {
+  Activity,
   AlertCircle,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
   Copy,
   Key,
   Leaf,
@@ -239,6 +242,57 @@ function UserCard({
   const [showCodeModal, setShowCodeModal] = useState(false);
   const [showDaysInput, setShowDaysInput] = useState(false);
   const [expiryDays, setExpiryDays] = useState(30);
+  const [showActivity, setShowActivity] = useState(false);
+
+  const getUserActivity = () => {
+    const activities: { time: string; label: string }[] = [];
+    try {
+      const fRaw = localStorage.getItem("ayurnexis_formulations");
+      const formulations: any[] = fRaw ? JSON.parse(fRaw) : [];
+      for (const f of formulations) {
+        if (f.ownerName && f.ownerName === user.name) {
+          const dt = f.createdAt
+            ? new Date(Number(f.createdAt) || f.createdAt)
+            : null;
+          activities.push({
+            time: dt
+              ? dt.toLocaleString("en-IN", {
+                  day: "2-digit",
+                  month: "short",
+                  year: "numeric",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })
+              : "—",
+            label: `Formulation: ${f.name || "Unnamed"} | ${f.dosageForm || "—"} | ${(f.stabilityScore ?? 75) >= 70 ? "Approved" : "Not Approved"}`,
+          });
+        }
+      }
+      const bRaw = localStorage.getItem("ayurnexis_batches");
+      const batches: any[] = bRaw ? JSON.parse(bRaw) : [];
+      for (const b of batches) {
+        if (b.submittedBy && b.submittedBy === user.name) {
+          const dt = b.dateReceived
+            ? new Date(Number(b.dateReceived) || b.dateReceived)
+            : null;
+          activities.push({
+            time: dt
+              ? dt.toLocaleString("en-IN", {
+                  day: "2-digit",
+                  month: "short",
+                  year: "numeric",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })
+              : "—",
+            label: `Batch: ${b.batchId || "—"} | ${b.herbName || "—"} | ${b.status || "—"}`,
+          });
+        }
+      }
+    } catch {}
+    activities.sort((a, b) => b.time.localeCompare(a.time));
+    return activities;
+  };
 
   const days = user.codeExpiryDays ?? 30;
   const codeExpiry = user.codeGeneratedAt
@@ -641,7 +695,54 @@ function UserCard({
           )}
           Delete Request
         </Button>
+        <Button
+          data-ocid="admin.users.activity_button"
+          size="sm"
+          variant="outline"
+          className="h-7 text-xs px-3 text-blue-600 border-blue-200 hover:bg-blue-50"
+          onClick={() => setShowActivity((v) => !v)}
+        >
+          <Activity size={12} className="mr-1" />
+          Activity
+          {showActivity ? (
+            <ChevronUp size={11} className="ml-1" />
+          ) : (
+            <ChevronDown size={11} className="ml-1" />
+          )}
+        </Button>
       </div>
+
+      {showActivity && (
+        <div
+          className="mt-3 rounded-xl p-3 space-y-2"
+          style={{
+            background: "oklch(0.97 0.004 240)",
+            border: "1px solid oklch(0.88 0.012 240)",
+          }}
+        >
+          <p className="text-xs font-semibold text-foreground mb-2">
+            User Activity Log
+          </p>
+          {(() => {
+            const acts = getUserActivity();
+            if (acts.length === 0) {
+              return (
+                <p className="text-xs text-muted-foreground">
+                  No activity recorded yet.
+                </p>
+              );
+            }
+            return acts.map((act, i) => (
+              <div key={`${act.time}-${i}`} className="flex gap-3 text-xs">
+                <span className="text-muted-foreground shrink-0 font-mono text-[10px]">
+                  {act.time}
+                </span>
+                <span className="text-foreground">{act.label}</span>
+              </div>
+            ));
+          })()}
+        </div>
+      )}
 
       {showCodeModal && generatedCode && (
         <CodeModal

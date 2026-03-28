@@ -264,7 +264,7 @@ export class Backend implements backendInterface {
     async adminGenerateCode(userId: string, adminToken: string, expiryDays: bigint): Promise<Option<string>> { const r = await (this.actor as any).adminGenerateCode(userId, adminToken, expiryDays); return r.length > 0 ? some(r[0] as string) : none(); }
     async getUserCodeExpiry(email: string): Promise<Option<[bigint, bigint]>> { return (this.actor as any).getUserCodeExpiry(email); }
     async verifyUserCode(email: string, code: string): Promise<Option<string>> { const r = await this.actor.verifyUserCode(email, code); return r.length > 0 ? some(r[0] as string) : none(); }
-    async callDeepSeek(prompt: string): Promise<string> { return (this.actor as any).callDeepSeek(prompt); }
+    async callDeepSeek(prompt: string): Promise<string> { const result = await (this.actor as any).callDeepSeek(prompt); return Array.isArray(result) ? result[0] as string : result as string; }
     async checkUserAccess(userId: string): Promise<string> { return (this.actor as any).checkUserAccess(userId); }
     async getUserRecord(userId: string, adminToken: string): Promise<Option<any>> { const r = await (this.actor as any).getUserRecord(userId, adminToken); return r && r.length > 0 ? some(r[0]) : none(); }
 }

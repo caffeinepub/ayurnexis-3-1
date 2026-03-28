@@ -20,12 +20,41 @@ async function getActor() {
  * Throws if the backend is unreachable or AI returns an error.
  */
 export async function callAI(prompt: string): Promise<string> {
-  const actor = await getActor();
-  const response = await actor.callDeepSeek(prompt);
-  if (response.startsWith("ERROR:")) {
-    throw new Error(response);
+  let lastError: Error | null = null;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      actorCache = null; // reset cache on retry to get fresh actor
+      const actor = await getActor();
+      const rawResponse = await actor.callDeepSeek(prompt);
+      const response = rawResponse as string;
+      if (response.startsWith("ERROR:")) {
+        throw new Error(response);
+      }
+      // Parse raw DeepSeek JSON response
+      let content = response;
+      try {
+        const parsed = JSON.parse(content);
+        if (parsed?.choices?.[0]?.message?.content) {
+          content = parsed.choices[0].message.content;
+        } else if (parsed?.error) {
+          throw new Error(
+            typeof parsed.error === "string"
+              ? parsed.error
+              : JSON.stringify(parsed.error),
+          );
+        }
+      } catch (parseErr) {
+        // If it's already plain text (not JSON), use as-is
+        if (content.includes('"choices"')) throw parseErr;
+      }
+      return content;
+    } catch (e) {
+      lastError = e as Error;
+      console.warn(`AI call attempt ${attempt} failed:`, e);
+      if (attempt < 3) await new Promise((r) => setTimeout(r, 2000));
+    }
   }
-  return response;
+  throw lastError || new Error("AI call failed after 3 attempts");
 }
 
 /**
