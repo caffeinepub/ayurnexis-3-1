@@ -1,5 +1,6 @@
 import AccessControl "./authorization/access-control";
 import MixinAuthorization "./authorization/MixinAuthorization";
+import Outcall "./http-outcalls/outcall";
 import Map "mo:core/Map";
 import Float "mo:core/Float";
 import Nat "mo:core/Nat";
@@ -9,6 +10,44 @@ persistent actor class AyurNexis() = self {
 
   let authState = AccessControl.initState();
   include MixinAuthorization(authState);
+
+  // ─── Transform (required for HTTP outcalls) ────────────────────────────────
+  public query func transform(input : Outcall.TransformationInput) : async Outcall.TransformationOutput {
+    Outcall.transform(input);
+  };
+
+  // ─── DeepSeek AI Proxy ─────────────────────────────────────────────────────
+  let DEEPSEEK_API_KEY = "sk-2d7fcf900b344a198815df1f571fce11";
+  let DEEPSEEK_URL = "https://api.deepseek.com/v1/chat/completions";
+
+  public shared func callDeepSeek(prompt : Text) : async Text {
+    let body = "{\"model\":\"deepseek-chat\",\"messages\":[{\"role\":\"user\",\"content\":\"" # escapeJson(prompt) # "\"}],\"temperature\":0.7,\"max_tokens\":4096}";
+    let headers : [Outcall.Header] = [
+      { name = "Content-Type"; value = "application/json" },
+      { name = "Authorization"; value = "Bearer " # DEEPSEEK_API_KEY },
+    ];
+    try {
+      let response = await Outcall.httpPostRequest(DEEPSEEK_URL, headers, body, transform);
+      response;
+    } catch (e) {
+      "{\"error\":\"" # Prim.errorMessage(e) # "\"}";
+    };
+  };
+
+  // Simple JSON string escaper for prompt text
+  func escapeJson(s : Text) : Text {
+    var result = "";
+    for (c in s.chars()) {
+      let n = Prim.charToNat32(c);
+      if (n == 34) { result #= "\\\"" }
+      else if (n == 92) { result #= "\\\\" }
+      else if (n == 10) { result #= "\\n" }
+      else if (n == 13) { result #= "\\r" }
+      else if (n == 9)  { result #= "\\t" }
+      else { result #= Prim.charToText(c) };
+    };
+    result;
+  };
 
   public type AppRole = { #admin; #qaManager; #labTechnician };
   var appRoles : Map.Map<Principal, AppRole> = Map.empty<Principal, AppRole>();
@@ -272,8 +311,6 @@ persistent actor class AyurNexis() = self {
 
   let ADMIN_TOKEN = "AYURNEXIS-ADMIN-TOKEN-2026";
 
-  // Keep the original UserRecord shape to preserve stable variable compatibility.
-  // codeExpiryDays is stored in the separate codeExpiryMap below.
   public type UserRecord = {
     id : Text;
     name : Text;
@@ -288,12 +325,8 @@ persistent actor class AyurNexis() = self {
   };
 
   var userRecords : Map.Map<Text, UserRecord> = Map.empty<Text, UserRecord>();
-  // Kept from previous version — must not be dropped without explicit migration.
   var codeExpiryMap : Map.Map<Text, Nat> = Map.empty<Text, Nat>();
 
-  // Submit or re-submit a request.
-  // If the user already exists and is STILL PENDING, update the record (enables Resend).
-  // If already approved or revoked, do not overwrite.
   public shared func submitAccessRequest(
     id : Text,
     name : Text,
@@ -322,13 +355,11 @@ persistent actor class AyurNexis() = self {
     true;
   };
 
-  // Admin: get all requests
   public query func getAccessRequests(adminToken : Text) : async [UserRecord] {
     if (adminToken != ADMIN_TOKEN) { return [] };
     userRecords.values().toArray();
   };
 
-  // Admin: approve user
   public shared func adminApproveUser(userId : Text, adminToken : Text) : async Bool {
     if (adminToken != ADMIN_TOKEN) { return false };
     switch (userRecords.get(userId)) {
@@ -346,7 +377,6 @@ persistent actor class AyurNexis() = self {
     };
   };
 
-  // Admin: revoke user
   public shared func adminRevokeUser(userId : Text, adminToken : Text) : async Bool {
     if (adminToken != ADMIN_TOKEN) { return false };
     switch (userRecords.get(userId)) {
@@ -363,7 +393,6 @@ persistent actor class AyurNexis() = self {
     };
   };
 
-  // Admin: delete a user request entirely
   public shared func adminDeleteUser(userId : Text, adminToken : Text) : async Bool {
     if (adminToken != ADMIN_TOKEN) { return false };
     switch (userRecords.get(userId)) {
@@ -372,7 +401,6 @@ persistent actor class AyurNexis() = self {
     };
   };
 
-  // Admin: generate access code for user with custom expiry days
   public shared func adminGenerateCode(userId : Text, adminToken : Text, expiryDays : Nat) : async ?Text {
     if (adminToken != ADMIN_TOKEN) { return null };
     switch (userRecords.get(userId)) {
@@ -393,7 +421,6 @@ persistent actor class AyurNexis() = self {
     };
   };
 
-  // Verify a code by email — returns userId if valid and not expired
   public query func verifyUserCode(email : Text, code : Text) : async ?Text {
     for (u in userRecords.values()) {
       if (u.email == email) {
@@ -420,7 +447,6 @@ persistent actor class AyurNexis() = self {
     null;
   };
 
-  // Get code expiry info for a user by email
   public query func getUserCodeExpiry(email : Text) : async ?(Int, Nat) {
     for (u in userRecords.values()) {
       if (u.email == email and u.status == "approved") {
@@ -436,8 +462,6 @@ persistent actor class AyurNexis() = self {
     null;
   };
 
-  // Check whether a user's access is currently active, expired, or revoked.
-  // Used by the frontend to enforce revocation on load.
   public query func checkUserAccess(userId : Text) : async Text {
     switch (userRecords.get(userId)) {
       case (null) { "not_found" };
@@ -456,7 +480,6 @@ persistent actor class AyurNexis() = self {
     };
   };
 
-  // Get a single user record by ID (admin use)
   public query func getUserRecord(userId : Text, adminToken : Text) : async ?UserRecord {
     if (adminToken != ADMIN_TOKEN) { return null };
     userRecords.get(userId);

@@ -31,7 +31,7 @@ import {
   getFormulationIdeas,
   getMarketedDrugs,
   searchDiseases,
-} from "../services/geminiService";
+} from "../services/aiService";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 

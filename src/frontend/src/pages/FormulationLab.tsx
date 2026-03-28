@@ -86,7 +86,7 @@ import {
   type FormulationSummaryData,
   analyzeFormulation,
   getFormulationSummary,
-} from "../services/geminiService";
+} from "../services/aiService";
 
 // ─── Pharmacopeia Incompatibility Database ────────────────────────────────────
 const INCOMPATIBILITY_DB: Array<{
