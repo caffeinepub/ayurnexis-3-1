@@ -8,27 +8,37 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { CheckCircle, Leaf, Lock, RefreshCw, Shield, X } from "lucide-react";
+import {
+  AlertCircle,
+  CheckCircle,
+  Leaf,
+  Loader2,
+  Lock,
+  RefreshCw,
+  Shield,
+  X,
+} from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { createActorWithConfig } from "../config";
-import { useActor } from "../hooks/useActor";
 import {
   type UserRegistration,
-  getAllUsers,
   getCodeRemainingDays,
   getCurrentAccessLevel,
   getCurrentUser,
-  saveAllUsers,
+  getCurrentUserId,
+  saveCodeExpiry,
+  saveCurrentUser,
   setAccessLevel,
   setAdminAuthed,
-  verifyAccessCodeByEmail,
 } from "../utils/accessControl";
 
 interface AccessGateProps {
   children: React.ReactNode;
 }
+
+const ADMIN_TOKEN = "AYURNEXIS-ADMIN-TOKEN-2026";
 
 export function AccessGate({ children }: AccessGateProps) {
   const [accessLevel, setAccessLevelState] = useState<
@@ -46,62 +56,63 @@ export function AccessGate({ children }: AccessGateProps) {
   const [regEmail, setRegEmail] = useState("");
   const [regPurpose, setRegPurpose] = useState("");
   const [regLoading, setRegLoading] = useState(false);
+  const [regError, setRegError] = useState("");
 
   // Code entry
   const [codeEmail, setCodeEmail] = useState("");
   const [codeValue, setCodeValue] = useState("");
   const [codeError, setCodeError] = useState("");
+  const [codeLoading, setCodeLoading] = useState(false);
+
   // Activation popup
   const [showActivationPopup, setShowActivationPopup] = useState(false);
   const [activationDays, setActivationDays] = useState(0);
+
   // Expiry warning popup
   const [showExpiryWarning, setShowExpiryWarning] = useState(false);
   const [expiryRemainingDays, setExpiryRemainingDays] = useState(0);
+
+  // Resend
+  const [resendLoading, setResendLoading] = useState(false);
+
   const codeInputs = useRef<(HTMLInputElement | null)[]>([]);
-  const { actor, isFetching: actorLoading } = useActor();
 
   useEffect(() => {
-    // Sync access level on mount
     const level = getCurrentAccessLevel();
     setAccessLevelState(level);
+
     if (level === "full") {
-      const user = getCurrentUser();
-      if (user?.id) {
-        // Check expiry warning
-        const remaining = getCodeRemainingDays(user.id);
+      const userId = getCurrentUserId();
+      if (userId) {
+        // Check expiry warning from locally stored code info
+        const remaining = getCodeRemainingDays(userId);
         if (remaining > 0 && remaining <= 2) {
           setExpiryRemainingDays(remaining);
           setShowExpiryWarning(true);
         }
-        // Check revocation: query backend to see if user still has a valid code
-        // If admin revoked the user, the backend will have no code for them
-        if (user.email) {
-          (async () => {
-            try {
-              const freshActor = await createActorWithConfig();
-              const result = await (freshActor as any).getUserCodeExpiry(
-                user.email,
+        // Check revocation from backend
+        (async () => {
+          try {
+            const actor = await createActorWithConfig();
+            const status = await (actor as any).checkUserAccess(userId);
+            if (status === "revoked" || status === "expired") {
+              setAccessLevel("readonly");
+              setAccessLevelState("readonly");
+              toast.error(
+                status === "expired"
+                  ? "Your access code has expired. Contact your administrator to renew."
+                  : "Your access has been revoked. Contact your administrator.",
               );
-              // Determine if backend returned a valid expiry
-              let hasCode = false;
-              if (Array.isArray(result) && result.length > 0) hasCode = true;
-              else if (result && result.__kind__ === "Some") hasCode = true;
-              if (!hasCode) {
-                // Backend says no active code — user was revoked or code expired
-                setAccessLevel("readonly");
-                setAccessLevelState("readonly");
-                toast.error(
-                  "Your access has been revoked or expired. Contact your administrator.",
-                );
-              }
-            } catch {
-              // Backend unreachable — maintain current access (fail open for UX)
             }
-          })();
-        }
+          } catch {
+            // Backend unreachable — keep current access
+          }
+        })();
       }
     }
   }, []);
+
+  // ─── Registration ────────────────────────────────────────────────────────────
 
   const handleRegister = async () => {
     if (
@@ -110,73 +121,108 @@ export function AccessGate({ children }: AccessGateProps) {
       !regEmail.trim() ||
       !regPurpose.trim()
     ) {
-      toast.error("Please fill in all fields");
+      setRegError("Please fill in all fields.");
       return;
     }
     setRegLoading(true);
-    try {
-      // Generate a stable user ID
-      const userId = `user_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    setRegError("");
 
-      // Try backend FIRST — this is the source of truth
-      let backendSaved = false;
-      for (let attempt = 0; attempt < 3 && !backendSaved; attempt++) {
-        try {
-          if (attempt > 0) await new Promise((r) => setTimeout(r, 2000));
-          const freshActor = await createActorWithConfig();
-          await (freshActor as any).submitAccessRequest(
-            userId,
-            regName.trim(),
-            regInstitution.trim(),
-            regEmail.trim(),
-            regPurpose.trim(),
-            BigInt(Date.now()),
-          );
-          backendSaved = true;
-        } catch (err) {
-          console.warn(
-            `Backend registration attempt ${attempt + 1} failed:`,
-            err,
-          );
-        }
-      }
+    const userId = `user_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    const newUser: UserRegistration = {
+      id: userId,
+      name: regName.trim(),
+      institution: regInstitution.trim(),
+      email: regEmail.trim(),
+      purpose: regPurpose.trim(),
+      registeredAt: Date.now(),
+      status: "pending",
+      activityLog: [],
+      claimedFormulations: [],
+    };
 
-      if (!backendSaved) {
-        toast.error(
-          "Could not reach server. Please check your connection and try again.",
+    // Try backend up to 3 times
+    let saved = false;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        if (attempt > 0) await new Promise((r) => setTimeout(r, 3000));
+        const actor = await createActorWithConfig();
+        const ok = await (actor as any).submitAccessRequest(
+          userId,
+          newUser.name,
+          newUser.institution,
+          newUser.email,
+          newUser.purpose,
+          BigInt(newUser.registeredAt),
         );
-        return;
+        if (ok === true || ok === false) {
+          // false means user ID already exists (should not happen with fresh ID)
+          saved = true;
+          break;
+        }
+      } catch (err) {
+        console.warn(`Registration attempt ${attempt + 1}/3 failed:`, err);
       }
+    }
 
-      // Backend confirmed — now save locally so user can browse in read-only mode
-      const users = getAllUsers();
-      const newUser: UserRegistration = {
-        id: userId,
-        name: regName.trim(),
-        institution: regInstitution.trim(),
-        email: regEmail.trim(),
-        purpose: regPurpose.trim(),
-        registeredAt: Date.now(),
-        status: "pending",
-        activityLog: [],
-        claimedFormulations: [],
-      };
-      users.push(newUser);
-      saveAllUsers(users);
-      localStorage.setItem("ayurnexis_current_user_id", userId);
-      localStorage.setItem("ayurnexis_access_level", "readonly");
-      setAccessLevelState("readonly");
-
-      toast.success(
-        "Registration submitted! You can now browse in read-only mode. Contact admin for your access code.",
+    if (!saved) {
+      setRegError(
+        "Could not reach server after 3 attempts. Please check your connection and try again.",
       );
-    } catch (err) {
-      console.error("Registration failed:", err);
-      toast.error("Failed to register. Please try again.");
-    } finally {
       setRegLoading(false);
+      return;
+    }
+
+    // Backend confirmed — save session and proceed
+    saveCurrentUser(newUser);
+    setAccessLevel("readonly");
+    setAccessLevelState("readonly");
+    toast.success(
+      "Request submitted! You can browse in read-only mode. Admin will send you an access code.",
+    );
+    setRegLoading(false);
+  };
+
+  // ─── Resend Request ──────────────────────────────────────────────────────────
+
+  const handleResendRequest = async () => {
+    const existingUser = getCurrentUser();
+    if (!existingUser) {
+      toast.error("No registration data found. Please register first.");
+      return;
+    }
+
+    setResendLoading(true);
+    let sent = false;
+
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        if (attempt > 0) await new Promise((r) => setTimeout(r, 3000));
+        const actor = await createActorWithConfig();
+        // submitAccessRequest allows upsert for pending users
+        await (actor as any).submitAccessRequest(
+          existingUser.id,
+          existingUser.name,
+          existingUser.institution,
+          existingUser.email,
+          existingUser.purpose,
+          BigInt(existingUser.registeredAt),
+        );
+        sent = true;
+        break;
+      } catch (err) {
+        console.warn(`Resend attempt ${attempt + 1}/3 failed:`, err);
+      }
+    }
+
+    setResendLoading(false);
+    if (sent) {
+      toast.success("Request resent to admin successfully!");
+    } else {
+      toast.error("Could not reach server. Please check your connection.");
     }
   };
+
+  // ─── Code Entry ──────────────────────────────────────────────────────────────
 
   const handleCodeEntry = async () => {
     if (codeValue.length !== 6) {
@@ -187,88 +233,84 @@ export function AccessGate({ children }: AccessGateProps) {
       setCodeError("Please enter your registered email");
       return;
     }
+
+    setCodeLoading(true);
+    setCodeError("");
+
     try {
-      let granted = false;
-      // Try backend first — use hook actor or create fresh one
-      try {
-        const verifyActor = actor || (await createActorWithConfig());
-        try {
-          const result = await (verifyActor as any).verifyUserCode(
-            codeEmail.trim(),
-            codeValue,
-          );
-          let userId: string | undefined;
-          if (Array.isArray(result) && result.length > 0) {
-            userId = String(result[0]);
-          } else if (result && result.__kind__ === "Some") {
-            userId = result.value;
-          }
-          if (userId) {
-            localStorage.setItem("ayurnexis_current_user_id", userId);
-            localStorage.setItem("ayurnexis_access_level", "full");
-            setAccessLevel("full");
-            setAccessLevelState("full");
-            setShowCodeDialog(false);
-            // Get expiry info from backend (authoritative, works cross-device)
-            let remDays = 30;
-            try {
-              const expiryResult = await (verifyActor as any).getUserCodeExpiry(
-                codeEmail.trim(),
-              );
-              if (Array.isArray(expiryResult) && expiryResult.length > 0) {
-                const [genAt, expDays] = expiryResult[0];
-                const genMs = Number(genAt) / 1_000_000; // nanoseconds to ms
-                const expMs = Number(expDays) * 24 * 60 * 60 * 1000;
-                remDays = Math.max(
-                  1,
-                  Math.ceil(
-                    (genMs + expMs - Date.now()) / (24 * 60 * 60 * 1000),
-                  ),
-                );
-              }
-            } catch {
-              remDays = getCodeRemainingDays(userId) || 30;
-            }
-            setActivationDays(remDays);
-            setShowActivationPopup(true);
-            granted = true;
-          }
-        } catch (backendErr) {
-          console.warn(
-            "Backend code verify failed, falling back to local:",
-            backendErr,
-          );
-        }
-      } catch (_actorErr) {
-        console.warn(
-          "Could not create actor for code verification, using local fallback",
-        );
+      const actor = await createActorWithConfig();
+      const result = await (actor as any).verifyUserCode(
+        codeEmail.trim(),
+        codeValue,
+      );
+
+      let userId: string | undefined;
+      if (Array.isArray(result) && result.length > 0) {
+        userId = String(result[0]);
+      } else if (
+        result &&
+        typeof result === "object" &&
+        "__kind__" in result &&
+        (result as { __kind__: string }).__kind__ === "Some"
+      ) {
+        userId = String((result as { value: unknown }).value);
       }
-      // Fallback: check localStorage
-      if (!granted) {
-        const localResult = verifyAccessCodeByEmail(
-          codeEmail.trim(),
-          codeValue,
-        );
-        if (localResult.success) {
-          setAccessLevel("full");
-          setAccessLevelState("full");
-          setShowCodeDialog(false);
-          const remDays = localResult.userId
-            ? getCodeRemainingDays(localResult.userId)
-            : (localResult.expiryDays ?? 30);
-          setActivationDays(remDays);
-          setShowActivationPopup(true);
-          granted = true;
-        }
-      }
-      if (!granted) {
+
+      if (!userId) {
         setCodeError(
           "Invalid or expired code. Please check with your administrator.",
         );
+        setCodeLoading(false);
+        return;
       }
-    } catch {
-      setCodeError("Failed to verify code. Please try again.");
+
+      // Code is valid — save session
+      const user = getCurrentUser();
+      if (user) {
+        saveCurrentUser({ ...user, id: userId, status: "approved" });
+      } else {
+        // User registered from a different device — save minimal info
+        saveCurrentUser({
+          id: userId,
+          name: codeEmail.trim().split("@")[0],
+          institution: "",
+          email: codeEmail.trim(),
+          purpose: "",
+          registeredAt: Date.now(),
+          status: "approved",
+        });
+      }
+
+      // Get expiry info and save locally for expiry warnings
+      let remDays = 30;
+      try {
+        const expiryResult = await (actor as any).getUserCodeExpiry(
+          codeEmail.trim(),
+        );
+        if (Array.isArray(expiryResult) && expiryResult.length > 0) {
+          const [genAtNs, expDays] = expiryResult[0];
+          const genAtMs = Math.round(Number(genAtNs) / 1_000_000);
+          const days = Number(expDays);
+          saveCodeExpiry(userId, genAtMs, days);
+          remDays = Math.max(
+            1,
+            Math.ceil((genAtMs + days * 86400000 - Date.now()) / 86400000),
+          );
+        }
+      } catch {
+        // ignore — use default
+      }
+
+      setAccessLevel("full");
+      setAccessLevelState("full");
+      setShowCodeDialog(false);
+      setActivationDays(remDays);
+      setShowActivationPopup(true);
+    } catch (err) {
+      console.error("Code verification failed:", err);
+      setCodeError("Could not reach server. Please try again.");
+    } finally {
+      setCodeLoading(false);
     }
   };
 
@@ -294,7 +336,7 @@ export function AccessGate({ children }: AccessGateProps) {
   };
 
   const handleAdminLogin = () => {
-    if (adminPassword === "AYURNEXIS-ADMIN-TOKEN-2026") {
+    if (adminPassword === ADMIN_TOKEN) {
       setAdminAuthed(true);
       setAccessLevel("full");
       setAccessLevelState("full");
@@ -303,6 +345,109 @@ export function AccessGate({ children }: AccessGateProps) {
       setAdminPasswordError("Incorrect password. Please try again.");
     }
   };
+
+  // ─── Code dialog content (shared between locked and readonly views) ─────────
+
+  const CodeDialogContent = () => (
+    <div className="space-y-4 mt-2">
+      <div>
+        <Label className="text-xs font-semibold text-muted-foreground">
+          Registered Email
+        </Label>
+        <Input
+          data-ocid="code_entry.email.input"
+          type="email"
+          className="mt-1"
+          placeholder="your@email.com"
+          value={codeEmail}
+          onChange={(e) => {
+            setCodeEmail(e.target.value);
+            setCodeError("");
+          }}
+        />
+      </div>
+      <div>
+        <Label className="text-xs font-semibold text-muted-foreground">
+          6-Digit Access Code
+        </Label>
+        <div className="flex gap-2 mt-2">
+          {([0, 1, 2, 3, 4, 5] as const).map((i) => (
+            <input
+              key={i}
+              ref={(el) => {
+                codeInputs.current[i] = el;
+              }}
+              data-ocid={`code_entry.digit.input.${i + 1}`}
+              type="text"
+              inputMode="numeric"
+              maxLength={1}
+              className="w-10 h-12 text-center text-lg font-bold rounded-lg border focus:outline-none focus:ring-2"
+              style={{
+                background: "oklch(0.97 0.004 240)",
+                borderColor: codeValue[i]
+                  ? "oklch(0.42 0.14 145)"
+                  : "oklch(0.88 0.012 240)",
+                color: "oklch(0.14 0.02 250)",
+              }}
+              value={codeValue[i] || ""}
+              onChange={(e) => handleCodeDigitChange(i, e.target.value)}
+              onKeyDown={(e) => handleCodeKeyDown(i, e)}
+            />
+          ))}
+        </div>
+        {codeError && (
+          <p
+            data-ocid="code_entry.error_state"
+            className="text-xs text-red-500 mt-1"
+          >
+            {codeError}
+          </p>
+        )}
+      </div>
+      <Button
+        data-ocid="code_entry.submit_button"
+        className="w-full bg-primary text-primary-foreground font-semibold"
+        disabled={codeLoading}
+        onClick={handleCodeEntry}
+      >
+        {codeLoading ? (
+          <>
+            <Loader2 size={14} className="mr-2 animate-spin" /> Verifying…
+          </>
+        ) : (
+          "Unlock Access"
+        )}
+      </Button>
+      <div
+        className="pt-2 border-t"
+        style={{ borderColor: "oklch(0.88 0.012 240)" }}
+      >
+        <p className="text-xs text-muted-foreground text-center mb-2">
+          Haven&apos;t received a code yet?
+        </p>
+        <Button
+          data-ocid="code_entry.resend_button"
+          className="w-full font-semibold"
+          variant="outline"
+          disabled={resendLoading}
+          onClick={handleResendRequest}
+        >
+          {resendLoading ? (
+            <>
+              <Loader2 size={13} className="mr-2 animate-spin" /> Sending…
+            </>
+          ) : (
+            <>
+              <RefreshCw size={13} className="mr-2" />
+              Resend Request to Admin
+            </>
+          )}
+        </Button>
+      </div>
+    </div>
+  );
+
+  // ─── Locked screen (no access yet) ───────────────────────────────────────
 
   if (accessLevel === "none") {
     return (
@@ -335,7 +480,7 @@ export function AccessGate({ children }: AccessGateProps) {
             </p>
           </div>
 
-          {/* Lock card */}
+          {/* Registration card */}
           <div
             className="rounded-2xl p-6 mb-4"
             style={{
@@ -359,7 +504,7 @@ export function AccessGate({ children }: AccessGateProps) {
                   Request Access
                 </h2>
                 <p className="text-xs text-muted-foreground">
-                  Fill in your details to browse in read-only mode immediately
+                  Your request will be sent directly to the administrator
                 </p>
               </div>
             </div>
@@ -374,7 +519,11 @@ export function AccessGate({ children }: AccessGateProps) {
                   className="mt-1"
                   placeholder="Dr. Priya Sharma"
                   value={regName}
-                  onChange={(e) => setRegName(e.target.value)}
+                  onChange={(e) => {
+                    setRegName(e.target.value);
+                    setRegError("");
+                  }}
+                  disabled={regLoading}
                 />
               </div>
               <div>
@@ -386,7 +535,11 @@ export function AccessGate({ children }: AccessGateProps) {
                   className="mt-1"
                   placeholder="PharmaTech Laboratories Pvt. Ltd."
                   value={regInstitution}
-                  onChange={(e) => setRegInstitution(e.target.value)}
+                  onChange={(e) => {
+                    setRegInstitution(e.target.value);
+                    setRegError("");
+                  }}
+                  disabled={regLoading}
                 />
               </div>
               <div>
@@ -399,7 +552,11 @@ export function AccessGate({ children }: AccessGateProps) {
                   className="mt-1"
                   placeholder="priya@pharmatech.in"
                   value={regEmail}
-                  onChange={(e) => setRegEmail(e.target.value)}
+                  onChange={(e) => {
+                    setRegEmail(e.target.value);
+                    setRegError("");
+                  }}
+                  disabled={regLoading}
                 />
               </div>
               <div>
@@ -412,21 +569,42 @@ export function AccessGate({ children }: AccessGateProps) {
                   rows={2}
                   placeholder="QA Scientist — conducting herbal ingredient analysis research"
                   value={regPurpose}
-                  onChange={(e) => setRegPurpose(e.target.value)}
+                  onChange={(e) => {
+                    setRegPurpose(e.target.value);
+                    setRegError("");
+                  }}
+                  disabled={regLoading}
                 />
               </div>
+
+              {regError && (
+                <div
+                  className="flex items-start gap-2 rounded-lg px-3 py-2 text-xs"
+                  style={{
+                    background: "oklch(0.95 0.03 25)",
+                    border: "1px solid oklch(0.70 0.10 25 / 0.4)",
+                    color: "oklch(0.45 0.15 25)",
+                  }}
+                >
+                  <AlertCircle size={13} className="flex-shrink-0 mt-0.5" />
+                  <span>{regError}</span>
+                </div>
+              )}
 
               <Button
                 data-ocid="access.register.primary_button"
                 className="w-full bg-primary text-primary-foreground font-semibold hover:opacity-90 mt-1"
-                disabled={regLoading || actorLoading}
+                disabled={regLoading}
                 onClick={handleRegister}
               >
-                {actorLoading
-                  ? "Connecting…"
-                  : regLoading
-                    ? "Submitting…"
-                    : "Request Access"}
+                {regLoading ? (
+                  <>
+                    <Loader2 size={14} className="mr-2 animate-spin" />
+                    Sending request…
+                  </>
+                ) : (
+                  "Request Access"
+                )}
               </Button>
             </div>
           </div>
@@ -523,7 +701,7 @@ export function AccessGate({ children }: AccessGateProps) {
           </div>
         </motion.div>
 
-        {/* Code dialog */}
+        {/* Code dialog for locked screen */}
         <Dialog open={showCodeDialog} onOpenChange={setShowCodeDialog}>
           <DialogContent
             className="max-w-sm mx-4"
@@ -538,78 +716,22 @@ export function AccessGate({ children }: AccessGateProps) {
                 Enter Access Code
               </DialogTitle>
             </DialogHeader>
-            <div className="space-y-4 mt-2">
-              <div>
-                <Label className="text-xs font-semibold text-muted-foreground">
-                  Registered Email
-                </Label>
-                <Input
-                  data-ocid="code_entry.email.input"
-                  type="email"
-                  className="mt-1"
-                  placeholder="your@email.com"
-                  value={codeEmail}
-                  onChange={(e) => {
-                    setCodeEmail(e.target.value);
-                    setCodeError("");
-                  }}
-                />
-              </div>
-              <div>
-                <Label className="text-xs font-semibold text-muted-foreground">
-                  6-Digit Access Code
-                </Label>
-                <div className="flex gap-2 mt-2">
-                  {(["d0", "d1", "d2", "d3", "d4", "d5"] as const).map(
-                    (dk, i) => (
-                      <input
-                        key={dk}
-                        ref={(el) => {
-                          codeInputs.current[i] = el;
-                        }}
-                        data-ocid={`code_entry.digit.input.${i + 1}`}
-                        type="text"
-                        inputMode="numeric"
-                        maxLength={1}
-                        className="w-10 h-12 text-center text-lg font-bold rounded-lg border focus:outline-none focus:ring-2"
-                        style={{
-                          background: "oklch(0.97 0.004 240)",
-                          borderColor: codeValue[i]
-                            ? "oklch(0.42 0.14 145)"
-                            : "oklch(0.88 0.012 240)",
-                          color: "oklch(0.14 0.02 250)",
-                        }}
-                        value={codeValue[i] || ""}
-                        onChange={(e) =>
-                          handleCodeDigitChange(i, e.target.value)
-                        }
-                        onKeyDown={(e) => handleCodeKeyDown(i, e)}
-                      />
-                    ),
-                  )}
-                </div>
-                {codeError && (
-                  <p
-                    data-ocid="code_entry.error_state"
-                    className="text-xs text-red-500 mt-1"
-                  >
-                    {codeError}
-                  </p>
-                )}
-              </div>
-              <Button
-                data-ocid="code_entry.submit_button"
-                className="w-full bg-primary text-primary-foreground font-semibold"
-                onClick={handleCodeEntry}
-              >
-                Unlock Access
-              </Button>
-            </div>
+            <CodeDialogContent />
           </DialogContent>
         </Dialog>
+
+        {/* Plan Activated Popup */}
+        {showActivationPopup && (
+          <ActivationPopup
+            days={activationDays}
+            onClose={() => setShowActivationPopup(false)}
+          />
+        )}
       </div>
     );
   }
+
+  // ─── Read-only / Full access layout ──────────────────────────────────
 
   return (
     <div className="relative flex flex-col h-screen">
@@ -669,9 +791,7 @@ export function AccessGate({ children }: AccessGateProps) {
         open={showCodeDialog}
         onOpenChange={(v) => {
           setShowCodeDialog(v);
-          if (!v) {
-            setBannerDismissed(false);
-          }
+          if (!v) setBannerDismissed(false);
         }}
       >
         <DialogContent
@@ -687,123 +807,16 @@ export function AccessGate({ children }: AccessGateProps) {
               Enter Access Code
             </DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 mt-2">
-            <div>
-              <Label className="text-xs font-semibold text-muted-foreground">
-                Registered Email
-              </Label>
-              <Input
-                data-ocid="code_entry2.email.input"
-                type="email"
-                className="mt-1"
-                placeholder="your@email.com"
-                value={codeEmail}
-                onChange={(e) => {
-                  setCodeEmail(e.target.value);
-                  setCodeError("");
-                }}
-              />
-            </div>
-            <div>
-              <Label className="text-xs font-semibold text-muted-foreground">
-                6-Digit Access Code
-              </Label>
-              <div className="flex gap-2 mt-2">
-                {(["d0", "d1", "d2", "d3", "d4", "d5"] as const).map(
-                  (dk, i) => (
-                    <input
-                      key={dk}
-                      ref={(el) => {
-                        codeInputs.current[i] = el;
-                      }}
-                      data-ocid={`code_entry2.digit.input.${i + 1}`}
-                      type="text"
-                      inputMode="numeric"
-                      maxLength={1}
-                      className="w-10 h-12 text-center text-lg font-bold rounded-lg border focus:outline-none focus:ring-2"
-                      style={{
-                        background: "oklch(0.97 0.004 240)",
-                        borderColor: codeValue[i]
-                          ? "oklch(0.42 0.14 145)"
-                          : "oklch(0.88 0.012 240)",
-                        color: "oklch(0.14 0.02 250)",
-                      }}
-                      value={codeValue[i] || ""}
-                      onChange={(e) => handleCodeDigitChange(i, e.target.value)}
-                      onKeyDown={(e) => handleCodeKeyDown(i, e)}
-                    />
-                  ),
-                )}
-              </div>
-              {codeError && (
-                <p
-                  data-ocid="code_entry2.error_state"
-                  className="text-xs text-red-500 mt-1"
-                >
-                  {codeError}
-                </p>
-              )}
-            </div>
-            <Button
-              data-ocid="code_entry2.submit_button"
-              className="w-full bg-primary text-primary-foreground font-semibold"
-              onClick={handleCodeEntry}
-            >
-              Unlock Access
-            </Button>
-          </div>
+          <CodeDialogContent />
         </DialogContent>
       </Dialog>
 
       {/* Plan Activated Popup */}
       {showActivationPopup && (
-        <div
-          className="fixed inset-0 z-[200] flex items-center justify-center p-4"
-          style={{ background: "rgba(0,0,0,0.45)" }}
-        >
-          <div
-            className="relative rounded-2xl p-6 max-w-sm w-full text-center shadow-2xl"
-            style={{
-              background: "oklch(1.0 0 0)",
-              border: "2px solid oklch(0.42 0.14 145 / 0.4)",
-            }}
-          >
-            <div className="flex justify-center mb-3">
-              <div
-                className="w-14 h-14 rounded-full flex items-center justify-center"
-                style={{ background: "oklch(0.42 0.14 145 / 0.1)" }}
-              >
-                <CheckCircle
-                  size={28}
-                  style={{ color: "oklch(0.42 0.14 145)" }}
-                />
-              </div>
-            </div>
-            <h2 className="text-lg font-bold text-foreground mb-1">
-              Plan Activated!
-            </h2>
-            <p className="text-sm text-muted-foreground mb-2">
-              Your plan is activated for{" "}
-              <span
-                className="font-bold"
-                style={{ color: "oklch(0.42 0.14 145)" }}
-              >
-                {activationDays} {activationDays === 1 ? "day" : "days"}
-              </span>
-              .
-            </p>
-            <p className="text-xs text-muted-foreground mb-4">
-              Welcome to AyurNexis 3.1 — Full access granted.
-            </p>
-            <Button
-              className="w-full font-semibold"
-              style={{ background: "oklch(0.42 0.14 145)", color: "white" }}
-              onClick={() => setShowActivationPopup(false)}
-            >
-              Get Started
-            </Button>
-          </div>
-        </div>
+        <ActivationPopup
+          days={activationDays}
+          onClose={() => setShowActivationPopup(false)}
+        />
       )}
 
       {/* Expiry Warning Popup */}
@@ -842,8 +855,7 @@ export function AccessGate({ children }: AccessGateProps) {
               .
             </p>
             <p className="text-xs text-muted-foreground mb-4">
-              Please contact your administrator to renew your access code before
-              it expires.
+              Please contact your administrator to renew your access code.
             </p>
             <Button
               className="w-full font-semibold"
@@ -855,6 +867,55 @@ export function AccessGate({ children }: AccessGateProps) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function ActivationPopup({
+  days,
+  onClose,
+}: { days: number; onClose: () => void }) {
+  return (
+    <div
+      className="fixed inset-0 z-[200] flex items-center justify-center p-4"
+      style={{ background: "rgba(0,0,0,0.45)" }}
+    >
+      <div
+        className="relative rounded-2xl p-6 max-w-sm w-full text-center shadow-2xl"
+        style={{
+          background: "oklch(1.0 0 0)",
+          border: "2px solid oklch(0.42 0.14 145 / 0.4)",
+        }}
+      >
+        <div className="flex justify-center mb-3">
+          <div
+            className="w-14 h-14 rounded-full flex items-center justify-center"
+            style={{ background: "oklch(0.42 0.14 145 / 0.1)" }}
+          >
+            <CheckCircle size={28} style={{ color: "oklch(0.42 0.14 145)" }} />
+          </div>
+        </div>
+        <h2 className="text-lg font-bold text-foreground mb-1">
+          Plan Activated!
+        </h2>
+        <p className="text-sm text-muted-foreground mb-2">
+          Your plan is activated for{" "}
+          <span className="font-bold" style={{ color: "oklch(0.42 0.14 145)" }}>
+            {days} {days === 1 ? "day" : "days"}
+          </span>
+          .
+        </p>
+        <p className="text-xs text-muted-foreground mb-4">
+          Welcome to AyurNexis 3.1 — Full access granted.
+        </p>
+        <Button
+          className="w-full font-semibold"
+          style={{ background: "oklch(0.42 0.14 145)", color: "white" }}
+          onClick={onClose}
+        >
+          Get Started
+        </Button>
+      </div>
     </div>
   );
 }

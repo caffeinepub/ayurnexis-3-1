@@ -272,6 +272,8 @@ persistent actor class AyurNexis() = self {
 
   let ADMIN_TOKEN = "AYURNEXIS-ADMIN-TOKEN-2026";
 
+  // Keep the original UserRecord shape to preserve stable variable compatibility.
+  // codeExpiryDays is stored in the separate codeExpiryMap below.
   public type UserRecord = {
     id : Text;
     name : Text;
@@ -286,10 +288,12 @@ persistent actor class AyurNexis() = self {
   };
 
   var userRecords : Map.Map<Text, UserRecord> = Map.empty<Text, UserRecord>();
-  // Separate map for code expiry days (avoids schema migration on userRecords)
+  // Kept from previous version — must not be dropped without explicit migration.
   var codeExpiryMap : Map.Map<Text, Nat> = Map.empty<Text, Nat>();
 
-  // Anyone can submit a request
+  // Submit or re-submit a request.
+  // If the user already exists and is STILL PENDING, update the record (enables Resend).
+  // If already approved or revoked, do not overwrite.
   public shared func submitAccessRequest(
     id : Text,
     name : Text,
@@ -299,7 +303,16 @@ persistent actor class AyurNexis() = self {
     registeredAt : Int,
   ) : async Bool {
     switch (userRecords.get(id)) {
-      case (?_) { return false };
+      case (?existing) {
+        if (existing.status == "pending") {
+          userRecords.add(id, {
+            id; name; institution; email; purpose; registeredAt;
+            status = "pending"; accessCode = null; codeGeneratedAt = null; approvedAt = null;
+          });
+          return true;
+        };
+        return false;
+      };
       case (null) {};
     };
     userRecords.add(id, {
@@ -355,7 +368,7 @@ persistent actor class AyurNexis() = self {
     if (adminToken != ADMIN_TOKEN) { return false };
     switch (userRecords.get(userId)) {
       case (null) { false };
-      case (?_) { userRecords.remove(userId); true };
+      case (?_) { userRecords.remove(userId); codeExpiryMap.remove(userId); true };
     };
   };
 
@@ -407,7 +420,7 @@ persistent actor class AyurNexis() = self {
     null;
   };
 
-  // Get code expiry info for a user by email (for expiry warnings)
+  // Get code expiry info for a user by email
   public query func getUserCodeExpiry(email : Text) : async ?(Int, Nat) {
     for (u in userRecords.values()) {
       if (u.email == email and u.status == "approved") {
@@ -421,6 +434,32 @@ persistent actor class AyurNexis() = self {
       };
     };
     null;
+  };
+
+  // Check whether a user's access is currently active, expired, or revoked.
+  // Used by the frontend to enforce revocation on load.
+  public query func checkUserAccess(userId : Text) : async Text {
+    switch (userRecords.get(userId)) {
+      case (null) { "not_found" };
+      case (?u) {
+        if (u.status != "approved") { return u.status };
+        switch (u.codeGeneratedAt) {
+          case (null) { "no_code" };
+          case (?genAt) {
+            let expiryD : Nat = switch (codeExpiryMap.get(userId)) { case (?d) d; case (null) 30 };
+            let now : Int = Prim.nat64ToNat(Prim.time());
+            let expiryNs : Int = expiryD * 24 * 60 * 60 * 1_000_000_000;
+            if (now - genAt >= expiryNs) { "expired" } else { "active" };
+          };
+        };
+      };
+    };
+  };
+
+  // Get a single user record by ID (admin use)
+  public query func getUserRecord(userId : Text, adminToken : Text) : async ?UserRecord {
+    if (adminToken != ADMIN_TOKEN) { return null };
+    userRecords.get(userId);
   };
 
 }

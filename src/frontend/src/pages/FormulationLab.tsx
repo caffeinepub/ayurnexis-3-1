@@ -20,8 +20,8 @@ import {
 } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import { jsPDF } from "jspdf";
-import autoTable from "jspdf-autotable";
+
+import { autoTable, getJsPDF, loadJsPDF } from "@/utils/pdfLib";
 import {
   AlertTriangle,
   Award,
@@ -2183,7 +2183,9 @@ async function generateCertificatePDF(data: {
   certNum: string;
   date: string;
 }): Promise<void> {
-  const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+  await loadJsPDF();
+  const JsPDF = getJsPDF();
+  const doc = new JsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
   const pageW = doc.internal.pageSize.getWidth();
 
   // Background white with diagonal pattern
@@ -2463,7 +2465,9 @@ async function generateLabelPDF(data: {
   contraindications?: string;
 }): Promise<void> {
   // Full A4 professional drug label
-  const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+  await loadJsPDF();
+  const JsPDF = getJsPDF();
+  const doc = new JsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
   const W = doc.internal.pageSize.getWidth();
   const margin = 14;
   let y = 0;
@@ -3421,7 +3425,9 @@ export function FormulationLab({
   async function handleExport() {
     setExporting(true);
     try {
-      const doc = new jsPDF({
+      await loadJsPDF();
+      const JsPDF = getJsPDF();
+      const doc = new JsPDF({
         orientation: "portrait",
         unit: "mm",
         format: "a4",

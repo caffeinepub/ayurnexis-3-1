@@ -6,6 +6,8 @@ import type { ActorMethod } from '@icp-sdk/core/agent';
 import type { IDL } from '@icp-sdk/core/candid';
 import type { Principal } from '@icp-sdk/core/principal';
 
+// UserRecord matches the backend exactly — codeExpiryDays is NOT in this struct;
+// it lives in the backend's codeExpiryMap and is returned via getUserCodeExpiry.
 export interface UserRecord {
   id: string;
   name: string;
@@ -49,6 +51,8 @@ export interface _SERVICE {
   adminGenerateCode: ActorMethod<[string, string, bigint], [] | [string]>;
   getUserCodeExpiry: ActorMethod<[string], [] | [[bigint, bigint]]>;
   verifyUserCode: ActorMethod<[string, string], [] | [string]>;
+  getUserRecord: ActorMethod<[string, string], [] | [UserRecord]>;
+  checkUserAccess: ActorMethod<[string], string>;
 }
 export declare const idlService: IDL.ServiceClass;
 export declare const idlInitArgs: IDL.Type[];

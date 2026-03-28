@@ -11,9 +11,8 @@ import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import {
+  AlertCircle,
   CheckCircle2,
-  ChevronDown,
-  ChevronUp,
   Copy,
   Key,
   Leaf,
@@ -28,30 +27,26 @@ import {
   Users,
   XCircle,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { createActorWithConfig } from "../config";
-import { useActor } from "../hooks/useActor";
 import {
   type UserRegistration,
-  approveUser,
-  generateCodeForUser,
-  getAllUsers,
+  backendUserToLocal,
   isAdminAuthed,
-  mergeBackendUsers,
-  revokeUser,
-  saveAllUsers,
   setAdminAuthed,
 } from "../utils/accessControl";
 
-const ADMIN_PASSWORD = "AYURNEXIS-ADMIN-TOKEN-2026";
+const ADMIN_TOKEN = "AYURNEXIS-ADMIN-TOKEN-2026";
+
+// ─── Admin Login ───────────────────────────────────────────────────────
 
 function AdminLogin({ onLogin }: { onLogin: () => void }) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
 
   const handleLogin = () => {
-    if (password === ADMIN_PASSWORD) {
+    if (password === ADMIN_TOKEN) {
       setAdminAuthed(true);
       onLogin();
       toast.success("Admin access granted");
@@ -139,6 +134,8 @@ function AdminLogin({ onLogin }: { onLogin: () => void }) {
   );
 }
 
+// ─── Code Modal ────────────────────────────────────────────────────────
+
 function CodeModal({
   user,
   code,
@@ -148,16 +145,16 @@ function CodeModal({
   code: string;
   onClose: () => void;
 }) {
-  const validDays = user.codeExpiryDays ?? 30;
+  const days = user.codeExpiryDays ?? 30;
   const expiry = user.codeGeneratedAt
     ? new Date(
-        user.codeGeneratedAt + validDays * 24 * 60 * 60 * 1000,
+        user.codeGeneratedAt + days * 24 * 60 * 60 * 1000,
       ).toLocaleDateString("en-IN", {
         day: "2-digit",
         month: "short",
         year: "numeric",
       })
-    : "—";
+    : "N/A";
 
   const handleCopy = () => {
     navigator.clipboard.writeText(code);
@@ -167,7 +164,7 @@ function CodeModal({
   return (
     <Dialog open onOpenChange={onClose}>
       <DialogContent
-        className="max-w-sm mx-4"
+        className="max-w-sm"
         style={{
           background: "oklch(1.0 0 0)",
           border: "1px solid oklch(0.88 0.012 240)",
@@ -180,20 +177,20 @@ function CodeModal({
           </DialogTitle>
         </DialogHeader>
         <div className="space-y-4 mt-2">
-          <p className="text-xs text-muted-foreground">
+          <p className="text-sm text-muted-foreground">
             Share this code with{" "}
-            <strong className="text-foreground">{user.name}</strong>
+            <span className="font-semibold text-foreground">{user.name}</span>
           </p>
           <div
-            className="flex items-center justify-between rounded-xl p-4 gap-4"
+            className="flex items-center justify-between rounded-xl px-4 py-3"
             style={{
-              background: "oklch(0.42 0.14 145 / 0.06)",
+              background: "oklch(0.42 0.14 145 / 0.08)",
               border: "2px solid oklch(0.42 0.14 145 / 0.3)",
             }}
           >
             <span
-              className="text-3xl font-bold tracking-widest"
-              style={{ color: "oklch(0.42 0.14 145)", fontFamily: "monospace" }}
+              className="text-3xl font-mono font-bold tracking-widest"
+              style={{ color: "oklch(0.42 0.14 145)" }}
             >
               {code}
             </span>
@@ -214,8 +211,7 @@ function CodeModal({
             }}
           >
             <Key size={12} />
-            Valid for {validDays} {validDays === 1 ? "day" : "days"} · Expires{" "}
-            {expiry}
+            Valid for {days} {days === 1 ? "day" : "days"} · Expires {expiry}
           </div>
           <Button
             data-ocid="admin.code_modal.close_button"
@@ -231,149 +227,154 @@ function CodeModal({
   );
 }
 
+// ─── User Card ───────────────────────────────────────────────────────────
+
 function UserCard({
-  user,
+  user: initialUser,
   onRefresh,
 }: { user: UserRegistration; onRefresh: () => void }) {
-  const [showLog, setShowLog] = useState(false);
+  const [user, setUser] = useState(initialUser);
+  const [loading, setLoading] = useState<string | null>(null);
   const [generatedCode, setGeneratedCode] = useState("");
   const [showCodeModal, setShowCodeModal] = useState(false);
-  const [localUser, setLocalUser] = useState(user);
   const [showDaysInput, setShowDaysInput] = useState(false);
   const [expiryDays, setExpiryDays] = useState(30);
-  const { actor } = useActor();
 
-  const days = localUser.codeExpiryDays ?? 30;
-  const codeExpiry = localUser.codeGeneratedAt
-    ? new Date(localUser.codeGeneratedAt + days * 24 * 60 * 60 * 1000)
+  const days = user.codeExpiryDays ?? 30;
+  const codeExpiry = user.codeGeneratedAt
+    ? new Date(user.codeGeneratedAt + days * 24 * 60 * 60 * 1000)
     : null;
   const isCodeExpired = codeExpiry ? codeExpiry < new Date() : false;
 
+  // All admin actions call backend directly
+  const callBackend = async <T,>(
+    fn: (actor: any) => Promise<T>,
+  ): Promise<T | null> => {
+    try {
+      const actor = await createActorWithConfig();
+      return await fn(actor);
+    } catch (err) {
+      console.error("Backend call failed:", err);
+      toast.error("Backend call failed. Please try again.");
+      return null;
+    }
+  };
+
   const handleApprove = async () => {
-    approveUser(localUser.id);
-    setLocalUser((u) => ({
-      ...u,
-      status: "approved" as const,
-      approvedAt: Date.now(),
-    }));
-    toast.success(`${localUser.name} approved`);
-    onRefresh();
-    if (actor) {
-      try {
-        await actor.adminApproveUser(localUser.id, ADMIN_PASSWORD);
-      } catch {
-        console.warn("Backend sync for approve failed");
-      }
+    setLoading("approve");
+    const ok = await callBackend((a) =>
+      a.adminApproveUser(user.id, ADMIN_TOKEN),
+    );
+    setLoading(null);
+    if (ok === true) {
+      setUser((u) => ({
+        ...u,
+        status: "approved" as const,
+        approvedAt: Date.now(),
+      }));
+      toast.success(`${user.name} approved`);
+      onRefresh();
+    } else {
+      toast.error("Failed to approve. Please refresh and try again.");
     }
   };
 
   const handleRevoke = async () => {
-    revokeUser(localUser.id);
-    setLocalUser((u) => ({
-      ...u,
-      status: "revoked" as const,
-      accessCode: undefined,
-    }));
-    toast.success(`${localUser.name}'s access revoked`);
-    onRefresh();
-    if (actor) {
-      try {
-        await actor.adminRevokeUser(localUser.id, ADMIN_PASSWORD);
-      } catch {
-        console.warn("Backend sync for revoke failed");
-      }
+    setLoading("revoke");
+    const ok = await callBackend((a) =>
+      a.adminRevokeUser(user.id, ADMIN_TOKEN),
+    );
+    setLoading(null);
+    if (ok === true) {
+      setUser((u) => ({
+        ...u,
+        status: "revoked" as const,
+        accessCode: undefined,
+      }));
+      toast.success(`${user.name}'s access revoked`);
+      onRefresh();
+    } else {
+      toast.error("Failed to revoke. Please refresh and try again.");
     }
   };
 
   const handleReactivate = async () => {
-    approveUser(localUser.id);
-    setLocalUser((u) => ({ ...u, status: "approved" as const }));
-    toast.success(`${localUser.name} reactivated`);
-    onRefresh();
-    if (actor) {
-      try {
-        await actor.adminApproveUser(localUser.id, ADMIN_PASSWORD);
-      } catch {
-        console.warn("Backend sync for reactivate failed");
-      }
+    setLoading("reactivate");
+    const ok = await callBackend((a) =>
+      a.adminApproveUser(user.id, ADMIN_TOKEN),
+    );
+    setLoading(null);
+    if (ok === true) {
+      setUser((u) => ({ ...u, status: "approved" as const }));
+      toast.success(`${user.name} reactivated`);
+      onRefresh();
+    } else {
+      toast.error("Failed to reactivate. Please refresh and try again.");
     }
   };
 
   const handleGenerateCode = async () => {
     setShowDaysInput(false);
-    // Try backend first — backend code is authoritative for cross-device access
-    if (actor) {
-      try {
-        const result = await actor.adminGenerateCode(
-          localUser.id,
-          ADMIN_PASSWORD,
-          BigInt(expiryDays),
-        );
-        let code: string | undefined;
-        if (Array.isArray(result)) {
-          code = result.length > 0 ? String(result[0]) : undefined;
-        } else if (result?.__kind__ === "Some") {
-          code = result.value;
-        }
-        if (code) {
-          // Save backend code locally too
-          generateCodeForUser(localUser.id, expiryDays, code);
-          setLocalUser((u) => ({
-            ...u,
-            accessCode: code,
-            codeGeneratedAt: Date.now(),
-            codeExpiryDays: expiryDays,
-          }));
-          setGeneratedCode(code);
-          setShowCodeModal(true);
-          onRefresh();
-          return;
-        }
-      } catch {
-        console.warn("Backend generate code failed, falling back to local");
-      }
+    setLoading("code");
+    const result = await callBackend((a) =>
+      a.adminGenerateCode(user.id, ADMIN_TOKEN, BigInt(expiryDays)),
+    );
+    setLoading(null);
+
+    let code: string | undefined;
+    if (Array.isArray(result) && result.length > 0) code = String(result[0]);
+    else if (
+      result &&
+      typeof result === "object" &&
+      "__kind__" in result &&
+      (result as any).__kind__ === "Some"
+    )
+      code = String((result as any).value);
+
+    if (code) {
+      const now = Date.now();
+      setUser((u) => ({
+        ...u,
+        accessCode: code,
+        codeGeneratedAt: now,
+        codeExpiryDays: expiryDays,
+        status: "approved" as const,
+      }));
+      setGeneratedCode(code);
+      setShowCodeModal(true);
+      onRefresh();
+    } else {
+      toast.error("Failed to generate code. Please try again.");
     }
-    // Fallback: local-only code
-    const localCode = generateCodeForUser(localUser.id, expiryDays);
-    setLocalUser((u) => ({
-      ...u,
-      accessCode: localCode,
-      codeGeneratedAt: Date.now(),
-      codeExpiryDays: expiryDays,
-    }));
-    setGeneratedCode(localCode);
-    setShowCodeModal(true);
-    toast.warning("Code saved locally only — backend unavailable");
-    onRefresh();
   };
 
   const handleDelete = async () => {
     if (
-      !confirm(`Delete request for ${localUser.name}? This cannot be undone.`)
+      !window.confirm(
+        `Delete ${user.name}'s request permanently? This cannot be undone.`,
+      )
     )
       return;
-    // Remove from localStorage
-    const allUsers = getAllUsers();
-    saveAllUsers(allUsers.filter((u) => u.id !== localUser.id));
-    // Remove from backend
-    if (actor) {
-      try {
-        await actor.adminDeleteUser(localUser.id, ADMIN_PASSWORD);
-      } catch {
-        console.warn("Backend sync for delete failed");
-      }
+    setLoading("delete");
+    const ok = await callBackend((a) =>
+      a.adminDeleteUser(user.id, ADMIN_TOKEN),
+    );
+    setLoading(null);
+    if (ok === true) {
+      toast.success(`${user.name}'s request deleted`);
+      onRefresh(); // will remove from list
+    } else {
+      toast.error("Failed to delete. Please try again.");
     }
-    toast.success(`${localUser.name}'s request deleted`);
-    onRefresh();
   };
 
   const statusBadge = {
     pending: (
       <Badge
         style={{
-          background: "oklch(0.88 0.10 78 / 0.2)",
-          color: "oklch(0.45 0.12 78)",
-          border: "1px solid oklch(0.72 0.130 78 / 0.4)",
+          background: "oklch(0.72 0.130 78 / 0.15)",
+          color: "oklch(0.50 0.12 78)",
+          border: "1px solid oklch(0.72 0.130 78 / 0.3)",
         }}
       >
         Pending
@@ -382,8 +383,8 @@ function UserCard({
     approved: (
       <Badge
         style={{
-          background: "oklch(0.42 0.14 145 / 0.1)",
-          color: "oklch(0.32 0.10 145)",
+          background: "oklch(0.42 0.14 145 / 0.15)",
+          color: "oklch(0.35 0.13 145)",
           border: "1px solid oklch(0.42 0.14 145 / 0.3)",
         }}
       >
@@ -393,15 +394,17 @@ function UserCard({
     revoked: (
       <Badge
         style={{
-          background: "oklch(0.54 0.174 24 / 0.1)",
-          color: "oklch(0.44 0.14 24)",
-          border: "1px solid oklch(0.54 0.174 24 / 0.3)",
+          background: "oklch(0.55 0.20 25 / 0.15)",
+          color: "oklch(0.45 0.18 25)",
+          border: "1px solid oklch(0.55 0.20 25 / 0.3)",
         }}
       >
         Revoked
       </Badge>
     ),
-  }[localUser.status];
+  }[user.status];
+
+  const isLoading = loading !== null;
 
   return (
     <div
@@ -416,23 +419,21 @@ function UserCard({
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-semibold text-foreground text-sm">
-              {localUser.name}
+              {user.name}
             </span>
             {statusBadge}
           </div>
           <p className="text-xs text-muted-foreground mt-0.5 truncate">
-            {localUser.institution}
+            {user.institution}
           </p>
-          <p className="text-xs text-muted-foreground truncate">
-            {localUser.email}
-          </p>
+          <p className="text-xs text-muted-foreground truncate">{user.email}</p>
           <p className="text-xs text-muted-foreground mt-0.5 italic line-clamp-1">
-            {localUser.purpose}
+            {user.purpose}
           </p>
           <p className="text-xs text-muted-foreground mt-1">
             Joined:{" "}
             <span className="font-medium text-foreground">
-              {new Date(localUser.registeredAt).toLocaleString("en-IN", {
+              {new Date(user.registeredAt).toLocaleString("en-IN", {
                 day: "2-digit",
                 month: "short",
                 year: "numeric",
@@ -450,12 +451,13 @@ function UserCard({
               color: "oklch(0.42 0.14 145)",
             }}
           >
-            {localUser.name.charAt(0).toUpperCase()}
+            {user.name.charAt(0).toUpperCase()}
           </div>
         </div>
       </div>
 
-      {localUser.status === "approved" && localUser.accessCode && (
+      {/* Code info */}
+      {user.status === "approved" && user.accessCode && (
         <div
           className="flex items-center gap-2 mt-3 px-3 py-1.5 rounded-lg text-xs"
           style={{
@@ -473,10 +475,16 @@ function UserCard({
             codeExpiry &&
             (() => {
               const remMs = codeExpiry.getTime() - Date.now();
-              const remDays = Math.ceil(remMs / (24 * 60 * 60 * 1000));
+              const remDays = Math.ceil(remMs / 86400000);
               return (
                 <span
-                  className={`text-[10px] ml-1 font-semibold ${remDays <= 2 ? "text-red-500" : remDays <= 7 ? "text-amber-500" : "text-green-600"}`}
+                  className={`text-[10px] ml-1 font-semibold ${
+                    remDays <= 2
+                      ? "text-red-500"
+                      : remDays <= 7
+                        ? "text-amber-500"
+                        : "text-green-600"
+                  }`}
                 >
                   {remDays}d left
                 </span>
@@ -497,28 +505,36 @@ function UserCard({
 
       {/* Actions */}
       <div className="flex flex-wrap gap-2 mt-3">
-        {localUser.status === "pending" && (
+        {user.status === "pending" && (
           <>
             <Button
               data-ocid="admin.users.approve_button"
               size="sm"
               className="h-7 text-xs px-3 bg-primary text-primary-foreground"
+              disabled={isLoading}
               onClick={handleApprove}
             >
-              <UserCheck size={12} className="mr-1" /> Approve
+              {loading === "approve" ? (
+                <Loader2 size={11} className="mr-1 animate-spin" />
+              ) : (
+                <UserCheck size={12} className="mr-1" />
+              )}
+              Approve
             </Button>
             <Button
               data-ocid="admin.users.delete_button"
               size="sm"
               variant="outline"
               className="h-7 text-xs px-3 text-red-500 border-red-200 hover:bg-red-50"
+              disabled={isLoading}
               onClick={handleRevoke}
             >
               <XCircle size={12} className="mr-1" /> Reject
             </Button>
           </>
         )}
-        {localUser.status === "approved" && (
+
+        {user.status === "approved" && (
           <>
             {showDaysInput ? (
               <div className="flex items-center gap-2 flex-wrap">
@@ -542,9 +558,15 @@ function UserCard({
                   size="sm"
                   className="h-7 text-xs px-3"
                   style={{ background: "oklch(0.42 0.14 145)", color: "white" }}
+                  disabled={isLoading}
                   onClick={handleGenerateCode}
                 >
-                  <Key size={12} className="mr-1" /> Confirm
+                  {loading === "code" ? (
+                    <Loader2 size={11} className="mr-1 animate-spin" />
+                  ) : (
+                    <Key size={12} className="mr-1" />
+                  )}
+                  Confirm
                 </Button>
                 <Button
                   size="sm"
@@ -561,10 +583,11 @@ function UserCard({
                 size="sm"
                 className="h-7 text-xs px-3"
                 style={{ background: "oklch(0.42 0.14 145)", color: "white" }}
+                disabled={isLoading}
                 onClick={() => setShowDaysInput(true)}
               >
                 <Key size={12} className="mr-1" />
-                {localUser.accessCode ? "Regenerate Code" : "Generate Code"}
+                {user.accessCode ? "Regenerate Code" : "Generate Code"}
               </Button>
             )}
             <Button
@@ -572,123 +595,57 @@ function UserCard({
               size="sm"
               variant="outline"
               className="h-7 text-xs px-3 text-red-500 border-red-200 hover:bg-red-50"
+              disabled={isLoading}
               onClick={handleRevoke}
             >
-              <UserMinus size={12} className="mr-1" /> Revoke
+              {loading === "revoke" ? (
+                <Loader2 size={11} className="mr-1 animate-spin" />
+              ) : (
+                <UserMinus size={12} className="mr-1" />
+              )}
+              Revoke
             </Button>
           </>
         )}
-        {localUser.status === "revoked" && (
+
+        {user.status === "revoked" && (
           <Button
             data-ocid="admin.users.save_button"
             size="sm"
             variant="outline"
             className="h-7 text-xs px-3"
+            disabled={isLoading}
             onClick={handleReactivate}
           >
-            <RefreshCw size={12} className="mr-1" /> Reactivate
+            {loading === "reactivate" ? (
+              <Loader2 size={11} className="mr-1 animate-spin" />
+            ) : (
+              <RefreshCw size={12} className="mr-1" />
+            )}
+            Reactivate
           </Button>
         )}
+
         <Button
           data-ocid="admin.users.delete_request_button"
           size="sm"
           variant="outline"
           className="h-7 text-xs px-3 text-red-500 border-red-200 hover:bg-red-50 ml-auto"
+          disabled={isLoading}
           onClick={handleDelete}
         >
-          <Trash2 size={12} className="mr-1" /> Delete Request
+          {loading === "delete" ? (
+            <Loader2 size={11} className="mr-1 animate-spin" />
+          ) : (
+            <Trash2 size={12} className="mr-1" />
+          )}
+          Delete Request
         </Button>
-
-        {(localUser.claimedFormulations?.length ?? 0) > 0 && (
-          <div className="mt-3">
-            <div className="text-xs font-semibold text-muted-foreground mb-2">
-              Claimed Formulations ({localUser.claimedFormulations!.length})
-            </div>
-            <div className="space-y-1.5">
-              {localUser.claimedFormulations!.map((cf) => (
-                <div
-                  key={cf.id}
-                  className="flex flex-wrap items-center gap-2 px-3 py-2 rounded-lg text-xs"
-                  style={{
-                    background: "oklch(0.42 0.14 145 / 0.08)",
-                    border: "1px solid oklch(0.42 0.14 145 / 0.2)",
-                  }}
-                >
-                  <span className="font-semibold text-foreground">
-                    {cf.disease}
-                  </span>
-                  <Badge style={{ fontSize: 9 }}>{cf.dosageForm}</Badge>
-                  <Badge
-                    style={{
-                      fontSize: 9,
-                      background: "oklch(0.50 0.10 240 / 0.1)",
-                    }}
-                  >
-                    {cf.drugType}
-                  </Badge>
-                  <span className="text-muted-foreground flex-1 min-w-0 truncate">
-                    {cf.compositionName}
-                  </span>
-                  <span className="text-muted-foreground whitespace-nowrap">
-                    {new Date(cf.claimedAt).toLocaleDateString()}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {(localUser.activityLog?.length ?? 0) > 0 && (
-          <button
-            type="button"
-            data-ocid="admin.users.activity_toggle"
-            className="h-7 flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground px-2 transition-colors"
-            onClick={() => setShowLog(!showLog)}
-          >
-            {showLog ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-            Activity ({localUser.activityLog?.length})
-          </button>
-        )}
       </div>
-
-      {/* Activity log */}
-      {showLog && localUser.activityLog && localUser.activityLog.length > 0 && (
-        <div
-          className="mt-3 rounded-lg p-3"
-          style={{
-            background: "oklch(0.97 0.004 240)",
-            border: "1px solid oklch(0.88 0.012 240)",
-          }}
-        >
-          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">
-            Activity Log
-          </p>
-          <div className="space-y-1 max-h-32 overflow-y-auto">
-            {[...localUser.activityLog].reverse().map((entry, i) => (
-              <div
-                key={`${entry.timestamp}-${i}`}
-                className="flex items-center gap-2 text-[10px] text-muted-foreground"
-              >
-                <span className="text-foreground font-medium">
-                  {entry.module}
-                </span>
-                <span>—</span>
-                <span>{entry.action}</span>
-                <span className="ml-auto">
-                  {new Date(entry.timestamp).toLocaleTimeString("en-IN", {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
       {showCodeModal && generatedCode && (
         <CodeModal
-          user={{ ...localUser }}
+          user={user}
           code={generatedCode}
           onClose={() => setShowCodeModal(false)}
         />
@@ -697,63 +654,48 @@ function UserCard({
   );
 }
 
+// ─── Main AdminDashboard ──────────────────────────────────────────────────
+
 export function AdminDashboard() {
-  const [authed, setAuthed] = useState(isAdminAuthed);
+  const [authed, setAuthed] = useState(isAdminAuthed());
   const [users, setUsers] = useState<UserRegistration[]>([]);
   const [loading, setLoading] = useState(false);
-  const [backendSyncing, setBackendSyncing] = useState(false);
+  const [backendError, setBackendError] = useState("");
   const [search, setSearch] = useState("");
   const [activeFilter, setActiveFilter] = useState<
     "all" | "pending" | "approved" | "revoked"
   >("all");
-  const { actor, isFetching } = useActor();
 
-  // Load localStorage users immediately on mount (synchronous, no backend needed)
-  useEffect(() => {
-    if (!authed) return;
-    const localUsers = getAllUsers();
-    setUsers(localUsers);
-  }, [authed]);
-
-  const refreshUsers = async () => {
-    // Always show localStorage users first
-    const localUsers = getAllUsers();
-    setUsers(localUsers);
-
-    setBackendSyncing(true);
+  // Load users exclusively from backend
+  const loadUsers = useCallback(async () => {
     setLoading(true);
-    // Silent retry — up to 3 attempts, 2s apart. No error shown to user.
-    for (let attempt = 0; attempt < 3; attempt++) {
-      try {
-        if (attempt > 0) await new Promise((r) => setTimeout(r, 2000));
-        // Use hook actor if available, otherwise create a fresh one
-        const adminActor = actor || (await createActorWithConfig());
-        const records = await (adminActor as any).getAccessRequests(
-          ADMIN_PASSWORD,
-        );
-        if (Array.isArray(records)) {
-          mergeBackendUsers(records);
-          setUsers(getAllUsers());
-        }
-        break; // success — exit retry loop
-      } catch (err) {
-        console.warn(`Backend sync attempt ${attempt + 1} failed:`, err);
-      }
+    setBackendError("");
+    try {
+      const actor = await createActorWithConfig();
+      const records: any[] = await actor.getAccessRequests(ADMIN_TOKEN);
+      const parsed: UserRegistration[] = records.map(backendUserToLocal);
+      // Sort newest first
+      parsed.sort((a, b) => b.registeredAt - a.registeredAt);
+      setUsers(parsed);
+      console.log(`Admin panel: loaded ${parsed.length} users from backend`);
+    } catch (err) {
+      console.error("Failed to load users from backend:", err);
+      setBackendError(
+        "Could not reach backend. Check your connection and click Refresh.",
+      );
+    } finally {
+      setLoading(false);
     }
-    setBackendSyncing(false);
-    setLoading(false);
-  };
+  }, []);
 
-  // Re-run when actor loads or fetching state changes
-  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
-    if (!authed) return;
-    refreshUsers();
-  }, [authed, actor, isFetching]);
+    if (authed) loadUsers();
+  }, [authed, loadUsers]);
 
   const handleLogout = () => {
     setAdminAuthed(false);
     setAuthed(false);
+    setUsers([]);
   };
 
   if (!authed) {
@@ -776,223 +718,200 @@ export function AdminDashboard() {
     revoked: users.filter((u) => u.status === "revoked").length,
   };
 
-  const stats = [
-    {
-      label: "Total Requests",
-      value: counts.total,
-      icon: Users,
-      color: "oklch(0.55 0.14 200)",
-    },
-    {
-      label: "Pending",
-      value: counts.pending,
-      icon: Users,
-      color: "oklch(0.68 0.13 78)",
-    },
-    {
-      label: "Approved",
-      value: counts.approved,
-      icon: UserCheck,
-      color: "oklch(0.42 0.14 145)",
-    },
-    {
-      label: "Revoked",
-      value: counts.revoked,
-      icon: XCircle,
-      color: "oklch(0.54 0.174 24)",
-    },
-  ];
-
   return (
     <div
       className="min-h-screen"
       style={{ background: "oklch(0.97 0.004 240)" }}
     >
       {/* Header */}
-      <header
-        className="sticky top-0 z-10 flex items-center justify-between gap-4 px-4 sm:px-6 py-4"
+      <div
+        className="sticky top-0 z-10 px-4 md:px-6 py-3 flex items-center justify-between gap-4"
         style={{
-          background: "oklch(0.99 0.003 240 / 0.97)",
+          background: "oklch(1.0 0 0)",
           borderBottom: "1px solid oklch(0.88 0.012 240)",
-          backdropFilter: "blur(12px)",
         }}
       >
         <div className="flex items-center gap-3">
           <div
-            className="w-9 h-9 rounded-xl flex items-center justify-center"
-            style={{
-              background: "oklch(0.42 0.14 145 / 0.12)",
-              border: "1px solid oklch(0.42 0.14 145 / 0.3)",
-            }}
+            className="w-8 h-8 rounded-xl flex items-center justify-center"
+            style={{ background: "oklch(0.42 0.14 145 / 0.12)" }}
           >
-            <Shield size={16} style={{ color: "oklch(0.42 0.14 145)" }} />
+            <Leaf size={16} style={{ color: "oklch(0.42 0.14 145)" }} />
           </div>
           <div>
-            <h1 className="text-base font-bold text-foreground leading-tight">
-              Admin Dashboard
+            <h1 className="text-base font-bold text-foreground leading-none">
+              Admin Panel
             </h1>
-            <p className="text-[10px] text-gold font-semibold tracking-wide">
-              AyurNexis 3.1 Admin
-            </p>
+            <p className="text-[10px] text-muted-foreground">AyurNexis 3.1</p>
           </div>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          <Button
+            data-ocid="admin.refresh_button"
+            size="sm"
+            variant="outline"
+            className="h-8 text-xs px-3 gap-1.5"
+            disabled={loading}
+            onClick={loadUsers}
+          >
+            {loading ? (
+              <Loader2 size={12} className="animate-spin" />
+            ) : (
+              <RefreshCw size={12} />
+            )}
+            Refresh
+          </Button>
+          <Button
+            data-ocid="admin.logout_button"
+            size="sm"
+            variant="ghost"
+            className="h-8 text-xs px-2 text-muted-foreground"
+            onClick={handleLogout}
+          >
+            <LogOut size={12} className="mr-1" /> Logout
+          </Button>
           <a
             href="/"
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-colors"
-            style={{
-              background: "oklch(0.42 0.14 145 / 0.08)",
-              color: "oklch(0.42 0.14 145)",
-              border: "1px solid oklch(0.42 0.14 145 / 0.2)",
-            }}
+            className="text-xs text-muted-foreground hover:text-foreground px-2 py-1"
           >
-            <Leaf size={12} />
-            <span className="hidden sm:inline">App</span>
+            ← App
           </a>
-          <button
-            type="button"
-            data-ocid="admin.logout.button"
-            onClick={handleLogout}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-colors hover:bg-red-50"
-            style={{
-              color: "oklch(0.44 0.14 24)",
-              border: "1px solid oklch(0.54 0.174 24 / 0.3)",
-            }}
-          >
-            <LogOut size={12} />
-            <span className="hidden sm:inline">Logout</span>
-          </button>
-          <button
-            type="button"
-            onClick={refreshUsers}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-colors hover:bg-blue-50"
-            style={{
-              color: "oklch(0.44 0.14 240)",
-              border: "1px solid oklch(0.54 0.14 240 / 0.3)",
-            }}
-          >
-            <RefreshCw size={12} className={loading ? "animate-spin" : ""} />
-            <span className="hidden sm:inline">Refresh</span>
-          </button>
         </div>
-      </header>
+      </div>
 
-      <div className="px-4 sm:px-6 py-6 space-y-6 max-w-4xl mx-auto">
-        {/* Stats */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {stats.map((s) => {
-            const Icon = s.icon;
-            return (
-              <div
-                key={s.label}
-                data-ocid="admin.stats.card"
-                className="rounded-xl p-4"
-                style={{
-                  background: "oklch(1.0 0 0)",
-                  border: "1px solid oklch(0.88 0.012 240)",
-                }}
-              >
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs text-muted-foreground">
-                    {s.label}
-                  </span>
-                  <Icon size={14} style={{ color: s.color }} />
-                </div>
-                <div className="text-2xl font-bold" style={{ color: s.color }}>
-                  {s.value}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        <Separator />
-
-        {/* Backend syncing indicator */}
-        {backendSyncing && (
+      <div className="max-w-2xl mx-auto px-4 py-6 space-y-5">
+        {/* Backend error */}
+        {backendError && (
           <div
-            className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs"
+            className="flex items-start gap-3 rounded-xl px-4 py-3 text-sm"
             style={{
-              background: "oklch(0.55 0.14 200 / 0.08)",
-              border: "1px solid oklch(0.55 0.14 200 / 0.2)",
-              color: "oklch(0.40 0.10 200)",
+              background: "oklch(0.95 0.03 25)",
+              border: "1px solid oklch(0.70 0.10 25 / 0.4)",
+              color: "oklch(0.45 0.15 25)",
             }}
           >
-            <Loader2 size={12} className="animate-spin" />
-            Syncing with server…
+            <AlertCircle size={16} className="flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="font-semibold">Backend unavailable</p>
+              <p className="text-xs mt-0.5">{backendError}</p>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs px-2 flex-shrink-0"
+              onClick={loadUsers}
+            >
+              Retry
+            </Button>
           </div>
         )}
 
-        {/* Search + Filter */}
-        <div className="flex flex-col sm:flex-row gap-3">
-          <div className="relative flex-1">
-            <Search
-              size={13}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
-            />
-            <Input
-              data-ocid="admin.search.search_input"
-              className="pl-8 h-9 text-sm"
-              placeholder="Search by name or email…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </div>
-          <div className="flex gap-1.5">
-            {(["all", "pending", "approved", "revoked"] as const).map((f) => (
-              <button
-                key={f}
-                type="button"
-                data-ocid={`admin.filter.${f}.tab`}
-                onClick={() => setActiveFilter(f)}
-                className="px-3 py-1.5 rounded-lg text-xs font-medium capitalize transition-all"
-                style={{
-                  background:
-                    activeFilter === f
-                      ? "oklch(0.42 0.14 145)"
-                      : "oklch(1.0 0 0)",
-                  color: activeFilter === f ? "white" : "oklch(0.45 0.015 240)",
-                  border: `1px solid ${
-                    activeFilter === f
-                      ? "oklch(0.42 0.14 145)"
-                      : "oklch(0.88 0.012 240)"
-                  }`,
-                }}
-              >
-                {f}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* User list */}
-        <div className="space-y-3">
-          {filtered.length === 0 && (
-            <div
-              data-ocid="admin.users.empty_state"
-              className="text-center py-12 text-muted-foreground text-sm"
+        {/* Stats */}
+        <div className="grid grid-cols-4 gap-3">
+          {(
+            [
+              { label: "Total", count: counts.total, filter: "all" as const },
+              {
+                label: "Pending",
+                count: counts.pending,
+                filter: "pending" as const,
+              },
+              {
+                label: "Active",
+                count: counts.approved,
+                filter: "approved" as const,
+              },
+              {
+                label: "Revoked",
+                count: counts.revoked,
+                filter: "revoked" as const,
+              },
+            ] as const
+          ).map(({ label, count, filter }) => (
+            <button
+              key={filter}
+              type="button"
+              data-ocid={`admin.filter.${filter}`}
+              onClick={() => setActiveFilter(filter)}
+              className="rounded-xl p-3 text-center transition-all"
+              style={{
+                background:
+                  activeFilter === filter
+                    ? "oklch(0.42 0.14 145 / 0.1)"
+                    : "oklch(1.0 0 0)",
+                border:
+                  activeFilter === filter
+                    ? "1.5px solid oklch(0.42 0.14 145 / 0.5)"
+                    : "1px solid oklch(0.88 0.012 240)",
+              }}
             >
-              {search || activeFilter !== "all"
-                ? "No users match your filter."
-                : "No access requests yet."}
-            </div>
-          )}
-          {filtered.map((user) => (
-            <UserCard key={user.id} user={user} onRefresh={refreshUsers} />
+              <p className="text-xl font-bold text-foreground">{count}</p>
+              <p className="text-[10px] text-muted-foreground">{label}</p>
+            </button>
           ))}
         </div>
 
-        {/* Footer */}
-        <div className="pt-4 border-t text-center text-[10px] text-muted-foreground">
-          © {new Date().getFullYear()} AyurNexis 3.1 Admin · Built with ♥ using{" "}
-          <a
-            href={`https://caffeine.ai?utm_source=caffeine-footer&utm_medium=referral&utm_content=${encodeURIComponent(window.location.hostname)}`}
-            className="underline hover:text-foreground"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            caffeine.ai
-          </a>
+        {/* Search */}
+        <div
+          className="flex items-center gap-2 rounded-xl px-3 py-2"
+          style={{
+            background: "oklch(1.0 0 0)",
+            border: "1px solid oklch(0.88 0.012 240)",
+          }}
+        >
+          <Search size={14} className="text-muted-foreground" />
+          <input
+            data-ocid="admin.search.input"
+            type="text"
+            placeholder="Search by name or email…"
+            className="flex-1 text-sm bg-transparent outline-none placeholder:text-muted-foreground"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+
+        {/* User list */}
+        {loading && (
+          <div className="flex items-center justify-center py-12">
+            <Loader2
+              size={28}
+              className="animate-spin"
+              style={{ color: "oklch(0.42 0.14 145)" }}
+            />
+            <span className="ml-3 text-sm text-muted-foreground">
+              Loading users from backend…
+            </span>
+          </div>
+        )}
+
+        {!loading && !backendError && users.length === 0 && (
+          <div className="text-center py-12">
+            <Users
+              size={32}
+              className="mx-auto mb-3"
+              style={{ color: "oklch(0.75 0.01 240)" }}
+            />
+            <p className="text-sm font-medium text-muted-foreground">
+              No access requests yet
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">
+              When users submit registration forms, they will appear here.
+            </p>
+          </div>
+        )}
+
+        {!loading && filtered.length === 0 && users.length > 0 && (
+          <div className="text-center py-8">
+            <p className="text-sm text-muted-foreground">
+              No users match your filter.
+            </p>
+          </div>
+        )}
+
+        <div className="space-y-3">
+          {filtered.map((u) => (
+            <UserCard key={u.id} user={u} onRefresh={loadUsers} />
+          ))}
         </div>
       </div>
     </div>

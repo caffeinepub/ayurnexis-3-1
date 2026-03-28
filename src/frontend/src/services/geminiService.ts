@@ -1,37 +1,48 @@
-// AI Service for AyurNexis 3.1 (powered by Puter.js)
+// AI Service for AyurNexis 3.1
 
-/* global puter */
-declare const puter: {
-  ai: {
-    chat: (
-      prompt: string,
-      options?: { model?: string; stream?: boolean },
-    ) => Promise<
-      | { message?: { content?: { text?: string }[] }; toString?: () => string }
-      | string
-    >;
-  };
-};
+const GEMINI_API_KEY = "AIzaSyCkAAD9UcBo5KH1edlmz4vs61rAPJpRHQU";
+const GEMINI_MODELS = [
+  "gemini-2.0-flash",
+  "gemini-1.5-flash",
+  "gemini-1.5-flash-8b",
+];
 
-async function callAI(prompt: string): Promise<string | null> {
-  try {
-    const response = await puter.ai.chat(prompt);
-    if (!response) return null;
-    if (typeof response === "string") return response;
-    // Claude-style response
-    const msg = (response as { message?: { content?: { text?: string }[] } })
-      .message;
-    if (msg?.content?.[0]?.text) return msg.content[0].text;
-    // Fallback toString
-    if (
-      typeof (response as { toString?: () => string }).toString === "function"
-    ) {
-      return (response as { toString: () => string }).toString();
-    }
-    return JSON.stringify(response);
-  } catch {
+async function callAIWithModel(
+  prompt: string,
+  model: string,
+): Promise<string | null> {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`;
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: { temperature: 0.7, maxOutputTokens: 8192 },
+    }),
+  });
+  if (!response.ok) {
+    const errText = await response.text().catch(() => "");
+    console.warn(
+      `AI model ${model} returned ${response.status}:`,
+      errText.slice(0, 200),
+    );
     return null;
   }
+  const data = await response.json();
+  return data?.candidates?.[0]?.content?.parts?.[0]?.text ?? null;
+}
+
+async function callAI(prompt: string): Promise<string | null> {
+  for (const model of GEMINI_MODELS) {
+    try {
+      const result = await callAIWithModel(prompt, model);
+      if (result) return result;
+    } catch (err) {
+      console.warn(`AI call with model ${model} threw:`, err);
+    }
+  }
+  console.error("All AI models failed. Check API key and network connection.");
+  return null;
 }
 
 function stripMarkdown(text: string): string {
