@@ -1,48 +1,35 @@
 // AI Service for AyurNexis 3.1
 
-const GEMINI_API_KEY = "AIzaSyCkAAD9UcBo5KH1edlmz4vs61rAPJpRHQU";
-const GEMINI_MODELS = [
-  "gemini-2.0-flash",
-  "gemini-1.5-flash",
-  "gemini-1.5-flash-8b",
-];
-
-async function callAIWithModel(
-  prompt: string,
-  model: string,
-): Promise<string | null> {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`;
-  const response = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { temperature: 0.7, maxOutputTokens: 8192 },
-    }),
-  });
-  if (!response.ok) {
-    const errText = await response.text().catch(() => "");
-    console.warn(
-      `AI model ${model} returned ${response.status}:`,
-      errText.slice(0, 200),
-    );
-    return null;
-  }
-  const data = await response.json();
-  return data?.candidates?.[0]?.content?.parts?.[0]?.text ?? null;
-}
+const AI_API_KEY = "sk-2d7fcf900b344a198815df1f571fce11";
+const AI_BASE_URL = "https://api.deepseek.com/v1/chat/completions";
+const AI_MODEL = "deepseek-chat";
 
 async function callAI(prompt: string): Promise<string | null> {
-  for (const model of GEMINI_MODELS) {
-    try {
-      const result = await callAIWithModel(prompt, model);
-      if (result) return result;
-    } catch (err) {
-      console.warn(`AI call with model ${model} threw:`, err);
+  try {
+    const response = await fetch(AI_BASE_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${AI_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: AI_MODEL,
+        messages: [{ role: "user", content: prompt }],
+        temperature: 0.7,
+        max_tokens: 8192,
+      }),
+    });
+    if (!response.ok) {
+      const errText = await response.text().catch(() => "");
+      console.warn(`AI returned ${response.status}:`, errText.slice(0, 300));
+      return null;
     }
+    const data = await response.json();
+    return data?.choices?.[0]?.message?.content ?? null;
+  } catch (err) {
+    console.error("AI call threw:", err);
+    return null;
   }
-  console.error("All AI models failed. Check API key and network connection.");
-  return null;
 }
 
 function stripMarkdown(text: string): string {
