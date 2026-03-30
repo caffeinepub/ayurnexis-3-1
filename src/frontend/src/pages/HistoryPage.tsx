@@ -12,8 +12,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { jsPDF } from "@/utils/pdfLib";
-import autoTable from "jspdf-autotable";
+import { autoTable, jsPDF } from "@/utils/pdfLib";
 import {
   Activity,
   Award,
@@ -219,7 +218,7 @@ async function generateHistoryCertPDF(
   doc.setFont("helvetica", "normal");
   doc.setFontSize(9.5);
   doc.setTextColor(40, 40, 40);
-  doc.text((f.ownerName || "—").slice(0, 32), M + 4, y + 15);
+  doc.text((f.ownerName || "-").slice(0, 32), M + 4, y + 15);
   if (f.designation) {
     doc.setFontSize(7);
     doc.setTextColor(100, 100, 100);
@@ -245,7 +244,7 @@ async function generateHistoryCertPDF(
   );
   doc.setFontSize(7);
   doc.setTextColor(100, 100, 100);
-  doc.text(`${f.dosageForm} · ${f.method} · ${dateStr}`, col2x + 4, y + 21);
+  doc.text(`${f.dosageForm} - ${f.method} - ${dateStr}`, col2x + 4, y + 21);
   y += 30;
 
   if (f.institution) {
@@ -334,8 +333,8 @@ async function generateHistoryCertPDF(
   doc.setTextColor(approved ? 27 : 183, approved ? 94 : 28, approved ? 32 : 28);
   doc.text(
     approved
-      ? "✓  APPROVED FOR PLATFORM RELEASE"
-      : "✗  NOT APPROVED — QUALITY SCORE BELOW THRESHOLD",
+      ? "APPROVED FOR PLATFORM RELEASE"
+      : "NOT APPROVED - QUALITY SCORE BELOW THRESHOLD",
     W / 2,
     y + 10,
     { align: "center" },
@@ -412,7 +411,7 @@ async function generateHistoryLabelPDF(f: SavedFormulation): Promise<void> {
   doc.setFont("helvetica", "bold");
   doc.setTextColor(0, 0, 0);
   doc.text(
-    prodName.length > 32 ? `${prodName.slice(0, 32)}…` : prodName,
+    prodName.length > 32 ? `${prodName.slice(0, 32)}...` : prodName,
     M + 4,
     M + 9,
   );
@@ -485,7 +484,7 @@ async function generateHistoryLabelPDF(f: SavedFormulation): Promise<void> {
   doc.setFont("helvetica", "bold");
   doc.setTextColor(0, 0, 0);
   doc.text(
-    "Storage: Store at 25°C ± 2°C / 60% RH. Protect from light.",
+    "Storage: Store at 25 degrees C / 60% RH. Protect from light.",
     M + 3,
     y,
   );
@@ -503,7 +502,7 @@ async function generateHistoryLabelPDF(f: SavedFormulation): Promise<void> {
       });
   doc.setFont("helvetica", "normal");
   doc.text(
-    `Mfg by: AyurNexis Formulation Lab | ${f.ownerName || "—"} | ${dateStr}`,
+    `Mfg by: AyurNexis Formulation Lab | ${f.ownerName || "-"} | ${dateStr}`,
     M + 3,
     y + 10,
   );
@@ -633,7 +632,7 @@ export function HistoryPage() {
     filteredPredictions.length;
 
   const formatDate = (dateStr: string | undefined | number) => {
-    if (!dateStr) return "—";
+    if (!dateStr) return "-";
     try {
       return new Date(Number(dateStr) || dateStr).toLocaleDateString("en-IN", {
         day: "2-digit",
@@ -674,7 +673,7 @@ export function HistoryPage() {
         />
         <Input
           data-ocid="history.search_input"
-          placeholder="Search across all history…"
+          placeholder="Search across all history..."
           className="pl-9 h-9 text-sm"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
@@ -725,7 +724,7 @@ export function HistoryPage() {
           </TabsTrigger>
         </TabsList>
 
-        {/* ── ALL ── */}
+        {/* ALL */}
         <TabsContent value="all" className="mt-4 space-y-6">
           {allCount === 0 ? (
             <EmptyState label="No records found" />
@@ -786,7 +785,7 @@ export function HistoryPage() {
           )}
         </TabsContent>
 
-        {/* ── BATCH INTAKE ── */}
+        {/* BATCH INTAKE */}
         <TabsContent value="batches" className="mt-4">
           <div className="glass-card rounded-xl overflow-hidden">
             <div className="flex items-center justify-between px-4 py-3 border-b border-border/60">
@@ -839,7 +838,7 @@ export function HistoryPage() {
           </div>
         </TabsContent>
 
-        {/* ── QUALITY ANALYSIS ── */}
+        {/* QUALITY ANALYSIS */}
         <TabsContent value="analyses" className="mt-4">
           <div className="glass-card rounded-xl overflow-hidden">
             <div className="flex items-center justify-between px-4 py-3 border-b border-border/60">
@@ -883,7 +882,7 @@ export function HistoryPage() {
           </div>
         </TabsContent>
 
-        {/* ── FORMULATIONS ── */}
+        {/* FORMULATIONS */}
         <TabsContent value="formulations" className="mt-4">
           <div className="glass-card rounded-xl overflow-hidden">
             <div className="flex items-center justify-between px-4 py-3 border-b border-border/60">
@@ -936,7 +935,7 @@ export function HistoryPage() {
           </div>
         </TabsContent>
 
-        {/* ── PREDICTIONS ── */}
+        {/* PREDICTIONS */}
         <TabsContent value="predictions" className="mt-4">
           <div className="glass-card rounded-xl overflow-hidden">
             <div className="flex items-center justify-between px-4 py-3 border-b border-border/60">
@@ -1073,7 +1072,7 @@ function BatchTable({
               {(b as any).qualityScore !== undefined &&
               (b as any).qualityScore !== null
                 ? Number((b as any).qualityScore).toFixed(1)
-                : "—"}
+                : "-"}
             </TableCell>
           </TableRow>
         ))}
@@ -1184,14 +1183,14 @@ function generateHistoryReportPDF(f: SavedFormulation): void {
 
   const summaryData = [
     ["Formulation Name", f.name || "Unnamed"],
-    ["Dosage Form", f.dosageForm || "—"],
-    ["Method", f.method || "—"],
-    ["Formulator", f.ownerName || "—"],
-    ["Institution", f.institution || "—"],
+    ["Dosage Form", f.dosageForm || "-"],
+    ["Method", f.method || "-"],
+    ["Formulator", f.ownerName || "-"],
+    ["Institution", f.institution || "-"],
     ["Date", dateStr],
     [
       "No. of Ingredients",
-      String(f.ingredientCount ?? f.ingredients?.length ?? "—"),
+      String(f.ingredientCount ?? f.ingredients?.length ?? "-"),
     ],
   ];
   for (const [label, value] of summaryData) {
@@ -1221,7 +1220,7 @@ function generateHistoryReportPDF(f: SavedFormulation): void {
         i.name,
         String(i.qty),
         i.unit,
-        (i as any).category || "—",
+        (i as any).category || "-",
       ]),
       theme: "striped",
       headStyles: { fillColor: [0, 137, 123], textColor: 255, fontSize: 8 },
@@ -1342,10 +1341,10 @@ function FormulationTable({
               {f.method}
             </TableCell>
             <TableCell className="text-xs text-center">
-              {f.ingredientCount ?? f.ingredients?.length ?? "—"}
+              {f.ingredientCount ?? f.ingredients?.length ?? "-"}
             </TableCell>
             <TableCell className="text-xs text-muted-foreground">
-              {f.ownerName || "—"}
+              {f.ownerName || "-"}
             </TableCell>
             <TableCell>
               <button

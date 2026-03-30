@@ -28,6 +28,7 @@ export interface _SERVICE {
   isCallerAdmin: ActorMethod<[], boolean>;
   setAppRole: ActorMethod<[Principal, { admin: null } | { qaManager: null } | { labTechnician: null }], void>;
   getMyAppRole: ActorMethod<[], [] | [{ admin: null } | { qaManager: null } | { labTechnician: null }]>;
+  callDeepSeek: ActorMethod<[string], string>;
   createBatch: ActorMethod<[any], bigint>;
   getBatch: ActorMethod<[bigint], [] | [any]>;
   getAllBatches: ActorMethod<[], any[]>;
