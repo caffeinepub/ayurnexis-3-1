@@ -381,14 +381,16 @@ export class jsPDF {
 export function autoTable(doc: jsPDF, options: AutoTableOptions): void {
   const marginL = options.margin?.left ?? 20;
   const marginR = options.margin?.right ?? 20;
+  const marginTop = options.margin?.top ?? 15;
   const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
   const tableWidth = pageWidth - marginL - marginR;
 
   const headFontSize = options.headStyles?.fontSize ?? 9;
   const bodyFontSize = options.bodyStyles?.fontSize ?? 8;
   const pad = 3; // cell padding in mm
-  const headRowH = (headFontSize / 2.8346) * 1.8 + pad;
-  const bodyRowH = (bodyFontSize / 2.8346) * 1.8 + pad;
+  const headRowH = (headFontSize / 2.8346) * 1.8 + pad * 2;
+  const lineHeightMM = (bodyFontSize / 2.8346) * 1.35;
 
   const numCols =
     options.head[0]?.length ??
@@ -406,31 +408,35 @@ export function autoTable(doc: jsPDF, options: AutoTableOptions): void {
     }
   }
 
-  let y = options.startY;
-
-  // Header row
   const headFill = options.headStyles?.fillColor ?? [0, 137, 123];
   const headTextColor = options.headStyles?.textColor;
 
-  for (let ci = 0; ci < numCols; ci++) {
-    const cx = marginL + colWidths.slice(0, ci).reduce((a, b) => a + b, 0);
-    doc.setFillColor(headFill[0], headFill[1], headFill[2]);
-    doc.setDrawColor(200, 200, 200);
-    doc.setLineWidth(0.1);
-    doc.rect(cx, y, colWidths[ci], headRowH, "FD");
+  function renderHeader(yPos: number): void {
+    for (let ci = 0; ci < numCols; ci++) {
+      const cx = marginL + colWidths.slice(0, ci).reduce((a, b) => a + b, 0);
+      doc.setFillColor(headFill[0], headFill[1], headFill[2]);
+      doc.setDrawColor(200, 200, 200);
+      doc.setLineWidth(0.1);
+      doc.rect(cx, yPos, colWidths[ci], headRowH, "FD");
 
-    if (Array.isArray(headTextColor)) {
-      doc.setTextColor(headTextColor[0], headTextColor[1], headTextColor[2]);
-    } else if (typeof headTextColor === "number") {
-      doc.setTextColor(headTextColor, headTextColor, headTextColor);
-    } else {
-      doc.setTextColor(255, 255, 255);
+      if (Array.isArray(headTextColor)) {
+        doc.setTextColor(headTextColor[0], headTextColor[1], headTextColor[2]);
+      } else if (typeof headTextColor === "number") {
+        doc.setTextColor(headTextColor, headTextColor, headTextColor);
+      } else {
+        doc.setTextColor(255, 255, 255);
+      }
+      doc.setFontSize(headFontSize);
+      doc.setFont("helvetica", options.headStyles?.fontStyle ?? "bold");
+      const hText = String(options.head[0]?.[ci] ?? "");
+      doc.text(hText, cx + pad, yPos + pad + (headFontSize / 2.8346) * 0.8);
     }
-    doc.setFontSize(headFontSize);
-    doc.setFont("helvetica", options.headStyles?.fontStyle ?? "bold");
-    const hText = String(options.head[0]?.[ci] ?? "");
-    doc.text(hText, cx + pad, y + headRowH - pad - 0.5);
   }
+
+  let y = options.startY;
+
+  // Header row
+  renderHeader(y);
   y += headRowH;
 
   // Body rows
@@ -439,17 +445,40 @@ export function autoTable(doc: jsPDF, options: AutoTableOptions): void {
     const isAlt = ri % 2 === 1;
     const altFill = options.alternateRowStyles?.fillColor;
 
+    // Pre-compute all splits and dynamic row height
+    const allSplits: string[][] = [];
+    for (let ci = 0; ci < numCols; ci++) {
+      const cellVal = String(row[ci] ?? "");
+      const maxCellW = colWidths[ci] - pad * 2;
+      doc.setFontSize(bodyFontSize);
+      doc.setFont("helvetica", options.bodyStyles?.fontStyle ?? "normal");
+      allSplits.push(doc.splitTextToSize(cellVal, maxCellW));
+    }
+    const maxLines = Math.max(...allSplits.map((s) => s.length), 1);
+    const dynamicRowH = Math.max(
+      (bodyFontSize / 2.8346) * 1.8 + pad * 2,
+      maxLines * lineHeightMM + pad * 2,
+    );
+
+    // Page break check
+    if (y + dynamicRowH > pageHeight - 20) {
+      doc.addPage();
+      y = marginTop;
+      renderHeader(y);
+      y += headRowH;
+    }
+
     for (let ci = 0; ci < numCols; ci++) {
       const cx = marginL + colWidths.slice(0, ci).reduce((a, b) => a + b, 0);
       if (isAlt && altFill) {
         doc.setFillColor(altFill[0], altFill[1], altFill[2]);
         doc.setDrawColor(220, 220, 220);
         doc.setLineWidth(0.1);
-        doc.rect(cx, y, colWidths[ci], bodyRowH, "FD");
+        doc.rect(cx, y, colWidths[ci], dynamicRowH, "FD");
       } else {
         doc.setDrawColor(220, 220, 220);
         doc.setLineWidth(0.1);
-        doc.rect(cx, y, colWidths[ci], bodyRowH, "S");
+        doc.rect(cx, y, colWidths[ci], dynamicRowH, "S");
       }
 
       const bodyText = options.bodyStyles?.textColor;
@@ -461,12 +490,13 @@ export function autoTable(doc: jsPDF, options: AutoTableOptions): void {
       doc.setFontSize(bodyFontSize);
       doc.setFont("helvetica", options.bodyStyles?.fontStyle ?? "normal");
 
-      const cellVal = String(row[ci] ?? "");
-      const maxCellW = colWidths[ci] - pad * 2;
-      const splits = doc.splitTextToSize(cellVal, maxCellW);
-      doc.text(splits[0] ?? "", cx + pad, y + bodyRowH - pad - 0.5);
+      const splits = allSplits[ci];
+      for (let li = 0; li < splits.length; li++) {
+        const lineY = y + pad + lineHeightMM * 0.8 + li * lineHeightMM;
+        doc.text(splits[li] ?? "", cx + pad, lineY);
+      }
     }
-    y += bodyRowH;
+    y += dynamicRowH;
   }
 
   (doc as any).lastAutoTable = { finalY: y };

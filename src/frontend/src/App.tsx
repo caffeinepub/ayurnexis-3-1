@@ -899,29 +899,60 @@ function AppShell() {
 }
 
 function ConfigPage() {
-  const [thresholds, setThresholds] = useState({
+  const defaultThresholds = {
     moisture: 12,
     totalAsh: 5,
     extractiveValue: 10,
     heavyMetals: 10,
     microbialCount: 1000,
-  });
-  const [analysisSettings, setAnalysisSettings] = useState({
+  };
+  const defaultAnalysis = {
     anomalySensitivity: 60,
     moistureWeight: 20,
     ashWeight: 20,
     extractiveWeight: 20,
     heavyMetalsWeight: 20,
     microbialWeight: 20,
-  });
-  const [formulationSettings, setFormulationSettings] = useState({
+  };
+  const defaultFormulation = {
     defaultDosageForm: "Tablet",
     defaultDrugType: "Allopathic",
-  });
-  const [displaySettings, setDisplaySettings] = useState({
-    units: "SI",
-    referenceSource: "IP 2022",
-  });
+  };
+  const defaultDisplay = { units: "SI", referenceSource: "IP 2022" };
+
+  function loadFromStorage() {
+    try {
+      const cfg = JSON.parse(localStorage.getItem("ayurnexis_config") || "{}");
+      return {
+        thresholds: { ...defaultThresholds, ...(cfg.thresholds || {}) },
+        analysisSettings: {
+          ...defaultAnalysis,
+          ...(cfg.analysisSettings || {}),
+        },
+        formulationSettings: {
+          ...defaultFormulation,
+          ...(cfg.formulationSettings || {}),
+        },
+        displaySettings: { ...defaultDisplay, ...(cfg.displaySettings || {}) },
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  const saved0 = loadFromStorage();
+  const [thresholds, setThresholds] = useState(
+    saved0?.thresholds ?? defaultThresholds,
+  );
+  const [analysisSettings, setAnalysisSettings] = useState(
+    saved0?.analysisSettings ?? defaultAnalysis,
+  );
+  const [formulationSettings, setFormulationSettings] = useState(
+    saved0?.formulationSettings ?? defaultFormulation,
+  );
+  const [displaySettings, setDisplaySettings] = useState(
+    saved0?.displaySettings ?? defaultDisplay,
+  );
   const [saved, setSaved] = useState(false);
 
   const handleSave = () => {
@@ -991,6 +1022,9 @@ function ConfigPage() {
           </h3>
           <p className="text-xs text-muted-foreground -mt-2">
             Batch accept/reject limits per parameter (max acceptable values)
+          </p>
+          <p className="text-[10px] text-primary/70 font-medium">
+            ✦ Applied in Run New Analysis and Batch QA
           </p>
           {(
             [
@@ -1074,6 +1108,9 @@ function ConfigPage() {
           </h3>
           <p className="text-xs text-muted-foreground -mt-2">
             Scoring weights and anomaly detection sensitivity
+          </p>
+          <p className="text-[10px] text-primary/70 font-medium">
+            ✦ Affects quality score weighting in Run New Analysis
           </p>
           <div>
             <p className={labelClass}>Anomaly Detection Sensitivity (%)</p>
@@ -1170,6 +1207,9 @@ function ConfigPage() {
           </h3>
           <p className="text-xs text-muted-foreground -mt-2">
             Default values for the Formulation Lab
+          </p>
+          <p className="text-[10px] text-primary/70 font-medium">
+            ✦ Pre-fills Formulation Lab defaults
           </p>
           <div>
             <p className={labelClass}>Default Dosage Form</p>

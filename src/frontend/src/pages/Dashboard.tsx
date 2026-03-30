@@ -504,14 +504,36 @@ function StatCard({
   value,
   sub,
   color,
-}: { icon: any; label: string; value: string; sub?: string; color?: string }) {
+  sourceType,
+}: {
+  icon: any;
+  label: string;
+  value: string;
+  sub?: string;
+  color?: string;
+  sourceType?: "live" | "local" | "static";
+}) {
+  const sourceDot =
+    sourceType === "live"
+      ? { bg: "oklch(0.42 0.14 145)", title: "Live backend data" }
+      : sourceType === "local"
+        ? { bg: "oklch(0.68 0.13 78)", title: "Session/local data" }
+        : { bg: "oklch(0.55 0.14 200)", title: "Static library data" };
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4 }}
-      className="glass-card rounded-xl p-5 flex items-center gap-4"
+      className="glass-card rounded-xl p-5 flex items-center gap-4 relative"
     >
+      {sourceType && (
+        <span
+          className="absolute top-2.5 right-2.5 w-2 h-2 rounded-full"
+          style={{ background: sourceDot.bg }}
+          title={sourceDot.title}
+        />
+      )}
       <div
         className="flex-shrink-0 w-11 h-11 rounded-lg flex items-center justify-center"
         style={{ background: `${color || GOLD_COLOR}22` }}
@@ -697,43 +719,49 @@ export function Dashboard() {
               icon={Package}
               label="Total Batches Processed"
               value={String(effectiveStats.totalBatches)}
-              sub={`${effectiveStats.passCount} passed`}
+              sub="From batch intake records"
               color={GOLD_COLOR}
+              sourceType="live"
             />
             <StatCard
               icon={CheckCircle2}
               label="QA Compliance Rate"
               value={`${effectiveStats.passRate.toFixed(1)}%`}
-              sub="Pass rate"
+              sub="Based on all batch analyses"
               color={PASS_COLOR}
+              sourceType="live"
             />
             <StatCard
               icon={AlertTriangle}
               label="Open Deviations"
               value={String(effectiveStats.openDeviations)}
-              sub="Requires review"
+              sub="Batches requiring review"
               color={FAIL_COLOR}
+              sourceType="live"
             />
             <StatCard
               icon={Activity}
               label="Avg Quality Score"
               value={`${effectiveStats.avgQualityScore.toFixed(1)}`}
-              sub="/ 100"
+              sub="Weighted pharmacopeia score"
               color="oklch(0.55 0.140 200)"
+              sourceType="live"
             />
             <StatCard
               icon={Beaker}
               label="Formulation Sessions"
               value={String(formulationSessions.length)}
-              sub="Saved formulations"
+              sub="Saved formulation records"
               color="oklch(0.55 0.14 295)"
+              sourceType="local"
             />
             <StatCard
               icon={Leaf}
               label="Herb Monographs"
               value={String(pharmacopeiaData.length)}
-              sub="Ayurvedic herbs"
+              sub="IP/BP/WHO pharmacopeia entries"
               color={PASS_COLOR}
+              sourceType="static"
             />
           </>
         )}

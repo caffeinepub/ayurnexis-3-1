@@ -12,10 +12,13 @@ import {
   CheckCircle2,
   ChevronRight,
   Clock,
+  Database,
   FlaskConical,
+  Globe,
   Lightbulb,
   Loader2,
   Package,
+  Plus,
   Search,
   ShieldCheck,
   Sparkles,
@@ -34,6 +37,7 @@ import {
   NOVEL_COMPOSITIONS,
   generateDynamicCompositions,
 } from "../data/formulationIdeaData";
+import { pharmacologicalProfiles } from "../data/pharmacologicalProfiles";
 import {
   type DiseaseResult,
   type MarketedDrugResult,
@@ -105,14 +109,24 @@ const ALL_DISEASES = Array.from(new Set([...DISEASES, ...EXTRA_COMMON]));
 
 function getMarketedDrugsStatic(
   disease: string,
-  drugType: string,
+  _drugType: string,
   dosageForm: string,
 ): MarketedDrugFallback[] {
   const byDisease = MARKETED_DRUGS[disease];
   if (!byDisease) return [];
-  const drugs: MarketedDrug[] =
-    byDisease[drugType] ?? byDisease.Allopathic ?? [];
-  return drugs.map((drug) => ({
+  // Show ALL drug types for the disease, not filtered by selected drug type
+  const allDrugs: MarketedDrug[] = [];
+  const seen = new Set<string>();
+  for (const typeKey of Object.keys(byDisease)) {
+    const drugs = byDisease[typeKey] ?? [];
+    for (const drug of drugs) {
+      if (!seen.has(drug.name)) {
+        seen.add(drug.name);
+        allDrugs.push(drug);
+      }
+    }
+  }
+  return allDrugs.map((drug) => ({
     brandName: drug.name,
     genericName: drug.generic,
     manufacturer: drug.manufacturer,
@@ -252,7 +266,7 @@ function DiseaseSearch({ onSelect }: { onSelect: (disease: string) => void }) {
           What condition are you formulating for?
         </h2>
         <p className="text-muted-foreground">
-          Search any disease or condition — AI-powered global search
+          Search any disease or condition — live global data
         </p>
       </div>
 
@@ -270,46 +284,67 @@ function DiseaseSearch({ onSelect }: { onSelect: (disease: string) => void }) {
           placeholder="Type any disease or condition (e.g. fever, diabetes, headache)…"
           className="pl-9 pr-10 h-12 text-base"
           data-ocid="idea.input"
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && query.trim().length >= 2) {
+              handleSelect(query.trim());
+            }
+          }}
         />
         {aiLoading && (
           <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-primary" />
         )}
         <AnimatePresence>
-          {open && combinedResults.length > 0 && (
-            <motion.div
-              initial={{ opacity: 0, y: -4 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -4 }}
-              className="absolute z-50 top-full mt-1 w-full bg-card border border-border rounded-xl shadow-lg overflow-hidden"
-            >
-              <ScrollArea className="max-h-64">
-                {combinedResults.map((d) => {
-                  const isAi = !staticFiltered.includes(d);
-                  return (
+          {open &&
+            query.trim().length >= 2 &&
+            (combinedResults.length > 0 || !aiLoading) && (
+              <motion.div
+                initial={{ opacity: 0, y: -4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4 }}
+                className="absolute z-50 top-full mt-1 w-full bg-card border border-border rounded-xl shadow-lg overflow-hidden"
+              >
+                <ScrollArea className="max-h-64">
+                  {combinedResults.map((d) => {
+                    const isAi = !staticFiltered.includes(d);
+                    return (
+                      <button
+                        type="button"
+                        key={d}
+                        onMouseDown={() => handleSelect(d)}
+                        className="w-full px-4 py-2.5 text-left text-sm hover:bg-primary/5 flex items-center gap-2 transition-colors"
+                        data-ocid="idea.dropdown_menu"
+                      >
+                        {isAi ? (
+                          <Sparkles className="w-3.5 h-3.5 text-primary shrink-0" />
+                        ) : (
+                          <ChevronRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                        )}
+                        <span className="flex-1">{d}</span>
+                        {isAi && (
+                          <Badge className="text-[9px] py-0 px-1.5 bg-primary/10 text-primary border-0">
+                            AI
+                          </Badge>
+                        )}
+                      </button>
+                    );
+                  })}
+                  {!combinedResults.some(
+                    (d) => d.toLowerCase() === query.trim().toLowerCase(),
+                  ) && (
                     <button
                       type="button"
-                      key={d}
-                      onMouseDown={() => handleSelect(d)}
-                      className="w-full px-4 py-2.5 text-left text-sm hover:bg-primary/5 flex items-center gap-2 transition-colors"
-                      data-ocid="idea.dropdown_menu"
+                      onMouseDown={() => handleSelect(query.trim())}
+                      className="w-full px-4 py-2.5 text-left text-sm hover:bg-primary/5 flex items-center gap-2 transition-colors border-t border-border"
                     >
-                      {isAi ? (
-                        <Sparkles className="w-3.5 h-3.5 text-primary shrink-0" />
-                      ) : (
-                        <ChevronRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                      )}
-                      <span className="flex-1">{d}</span>
-                      {isAi && (
-                        <Badge className="text-[9px] py-0 px-1.5 bg-primary/10 text-primary border-0">
-                          AI
-                        </Badge>
-                      )}
+                      <Plus className="w-3.5 h-3.5 text-primary shrink-0" />
+                      <span className="flex-1">
+                        Use "<strong>{query.trim()}</strong>" as condition
+                      </span>
                     </button>
-                  );
-                })}
-              </ScrollArea>
-            </motion.div>
-          )}
+                  )}
+                </ScrollArea>
+              </motion.div>
+            )}
         </AnimatePresence>
       </div>
 
@@ -530,7 +565,7 @@ function MarketedDrugsStep({
             </h3>
             {aiSource && (
               <Badge className="text-[10px] gap-1 bg-primary/10 text-primary border-0">
-                <Sparkles className="w-2.5 h-2.5" /> AI-Powered
+                <Globe className="w-2.5 h-2.5" /> Live Data
               </Badge>
             )}
           </div>
@@ -661,20 +696,24 @@ interface AINovelComp {
 }
 
 function mapAIToComp(ai: NovelFormulationIdea, index: number): AINovelComp {
+  const ingredients = ai.ingredients.map((ing) => ({
+    name: ing.name,
+    category: ing.role,
+    quantity: Number.parseFloat(ing.quantity) || 100,
+    unit: ing.quantity.replace(/[0-9.]/g, "").trim() || "mg",
+    role: ing.role,
+    pharmacologicalEffect:
+      ing.pharmacologicalEffect || getIngredientPharmEffect(ing.name),
+  }));
   return {
     id: `AI-${String(index + 1).padStart(3, "0")}`,
     name: ai.name,
     dosageForm: ai.dosageForm,
     drugType: ai.drugType,
-    ingredients: ai.ingredients.map((ing) => ({
-      name: ing.name,
-      category: ing.role,
-      quantity: Number.parseFloat(ing.quantity) || 100,
-      unit: ing.quantity.replace(/[0-9.]/g, "").trim() || "mg",
-      role: ing.role,
-      pharmacologicalEffect: ing.pharmacologicalEffect,
-    })),
-    pharmacologicalEffects: ai.pharmacologicalEffects,
+    ingredients,
+    pharmacologicalEffects:
+      ai.pharmacologicalEffects ||
+      buildFullFormulationEffect(ingredients, ai.name),
     mechanism: ai.mechanism,
     advantages: ai.advantages,
     disadvantages: ai.disadvantages,
@@ -686,21 +725,51 @@ function mapAIToComp(ai: NovelFormulationIdea, index: number): AINovelComp {
   };
 }
 
-function mapStaticToComp(comp: NovelComposition): AINovelComp {
+function getIngredientPharmEffect(ingredientName: string): string {
+  const lower = ingredientName.toLowerCase();
+  const profile = pharmacologicalProfiles.find(
+    (p) =>
+      p.herbName.toLowerCase() === lower ||
+      p.herbName.toLowerCase().includes(lower) ||
+      lower.includes(p.herbName.toLowerCase().split(" ")[0]),
+  );
+  if (!profile) return "";
+  return profile.mechanismOfAction ?? profile.therapeuticUses[0] ?? "";
+}
+
+function buildFullFormulationEffect(
+  ingredients: AINovelComp["ingredients"],
+  disease: string,
+): string {
+  const effects: string[] = [];
+  for (const ing of ingredients) {
+    const eff = ing.pharmacologicalEffect;
+    if (eff && !effects.includes(eff)) effects.push(eff);
+  }
+  if (effects.length === 0) return "";
+  return `For ${disease}: ${effects.slice(0, 4).join("; ")}.`;
+}
+
+function mapStaticToComp(comp: NovelComposition, disease = ""): AINovelComp {
+  const ingredients = comp.ingredients.map((ing) => ({
+    name: ing.name,
+    category: ing.category,
+    quantity: ing.quantity,
+    unit: ing.unit,
+    role: ing.role,
+    pharmacologicalEffect: getIngredientPharmEffect(ing.name),
+  }));
+  const pharmacologicalEffects =
+    comp.pharmacologicalEffects ||
+    buildFullFormulationEffect(ingredients, disease) ||
+    "";
   return {
     id: comp.id,
     name: comp.name,
     dosageForm: comp.dosageForm,
     drugType: "Allopathic",
-    ingredients: comp.ingredients.map((ing) => ({
-      name: ing.name,
-      category: ing.category,
-      quantity: ing.quantity,
-      unit: ing.unit,
-      role: ing.role,
-      pharmacologicalEffect: "",
-    })),
-    pharmacologicalEffects: comp.pharmacologicalEffects,
+    ingredients,
+    pharmacologicalEffects,
     mechanism: "",
     advantages: comp.advantages,
     disadvantages: comp.disadvantages,
@@ -731,7 +800,7 @@ function NovelCompositionsStep({
   const [aiSource, setAiSource] = useState(false);
 
   const staticComps = getNovelCompositions(disease, dosageForm, drugType).map(
-    mapStaticToComp,
+    (c) => mapStaticToComp(c, disease),
   );
 
   useEffect(() => {
@@ -800,7 +869,7 @@ function NovelCompositionsStep({
           ))}
           <p className="text-xs text-center text-muted-foreground flex items-center justify-center gap-1.5">
             <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />
-            Generating novel formulations with AI…
+            Generating possible formulations…
           </p>
         </div>
       </motion.div>
@@ -827,7 +896,7 @@ function NovelCompositionsStep({
             <h3 className="font-semibold text-foreground">{disease}</h3>
             {aiSource && (
               <Badge className="text-[10px] gap-1 bg-primary/10 text-primary border-0">
-                <Sparkles className="w-2.5 h-2.5" /> AI-Generated
+                <Database className="w-2.5 h-2.5" /> Possible Formulation
               </Badge>
             )}
           </div>
@@ -970,10 +1039,14 @@ function NovelCompositionsStep({
               <CardContent>
                 <div>
                   <p className="text-xs font-semibold text-amber-600 mb-1">
-                    Combined Mechanism of Action
+                    Combined Effect for {disease}
                   </p>
                   <p className="text-xs text-muted-foreground leading-relaxed">
-                    {comp.pharmacologicalEffects}
+                    {comp.pharmacologicalEffects
+                      ? comp.pharmacologicalEffects.startsWith("For ")
+                        ? comp.pharmacologicalEffects
+                        : `For ${disease}: ${comp.pharmacologicalEffects}`
+                      : `This formulation targets ${disease} through synergistic action of its active ingredients.`}
                   </p>
                 </div>
               </CardContent>

@@ -1288,8 +1288,105 @@ export function QualityAnalysis() {
   const handleRunAnalysis = () => {
     const batch = allBatchOptions.find((b) => b.batchId === selectedBatchId);
     if (!batch) return;
-    const result = computeLocalAnalysis(batch, params);
-    setRunResult(result);
+
+    // Read config thresholds and weights from localStorage
+    let cfgThresholds = {
+      moisture: 12,
+      totalAsh: 8,
+      extractiveValue: 15,
+      heavyMetals: 1.0,
+      microbialCount: 10000,
+    };
+    let cfgWeights = {
+      moistureWeight: 20,
+      ashWeight: 20,
+      extractiveWeight: 20,
+      heavyMetalsWeight: 20,
+      microbialWeight: 20,
+    };
+    try {
+      const cfg = JSON.parse(localStorage.getItem("ayurnexis_config") || "{}");
+      if (cfg.thresholds) {
+        cfgThresholds = {
+          moisture: cfg.thresholds.moisture ?? 12,
+          totalAsh: cfg.thresholds.totalAsh ?? 8,
+          extractiveValue: cfg.thresholds.extractiveValue ?? 15,
+          heavyMetals: cfg.thresholds.heavyMetals ?? 1.0,
+          microbialCount: cfg.thresholds.microbialCount ?? 10000,
+        };
+      }
+      if (cfg.analysisSettings) {
+        cfgWeights = {
+          moistureWeight: cfg.analysisSettings.moistureWeight ?? 20,
+          ashWeight: cfg.analysisSettings.ashWeight ?? 20,
+          extractiveWeight: cfg.analysisSettings.extractiveWeight ?? 20,
+          heavyMetalsWeight: cfg.analysisSettings.heavyMetalsWeight ?? 20,
+          microbialWeight: cfg.analysisSettings.microbialWeight ?? 20,
+        };
+      }
+    } catch {
+      /* ignore */
+    }
+
+    const p = {
+      moisture: params.moisture ?? batch.moisture,
+      ash: params.ash ?? batch.ash,
+      extractiveValue: params.extractiveValue ?? batch.extractiveValue,
+      heavyMetals: params.heavyMetals ?? batch.heavyMetals,
+      microbialCount: params.microbialCount ?? batch.microbialCount,
+    };
+
+    const moistureOk = p.moisture <= cfgThresholds.moisture;
+    const ashOk = p.ash <= cfgThresholds.totalAsh;
+    const extractiveOk = p.extractiveValue >= cfgThresholds.extractiveValue;
+    const heavyMetalsOk = p.heavyMetals <= cfgThresholds.heavyMetals;
+    const microbialOk = p.microbialCount <= cfgThresholds.microbialCount;
+
+    const totalW =
+      cfgWeights.moistureWeight +
+      cfgWeights.ashWeight +
+      cfgWeights.extractiveWeight +
+      cfgWeights.heavyMetalsWeight +
+      cfgWeights.microbialWeight;
+    let score = 0;
+    if (moistureOk) score += cfgWeights.moistureWeight;
+    if (ashOk) score += cfgWeights.ashWeight;
+    if (extractiveOk) score += cfgWeights.extractiveWeight;
+    if (heavyMetalsOk) score += cfgWeights.heavyMetalsWeight;
+    if (microbialOk) score += cfgWeights.microbialWeight;
+    const qualityScore = Math.round((score / totalW) * 100);
+    const status = qualityScore >= 60 ? "Accept" : "Reject";
+
+    const anomalyDetails: string[] = [];
+    if (!moistureOk && p.moisture > cfgThresholds.moisture * 2)
+      anomalyDetails.push("Moisture (>2x limit)");
+    if (!ashOk && p.ash > cfgThresholds.totalAsh * 2)
+      anomalyDetails.push("Ash (>2x limit)");
+    if (!extractiveOk && p.extractiveValue < cfgThresholds.extractiveValue / 2)
+      anomalyDetails.push("Extractive Value (<50% of limit)");
+    if (!heavyMetalsOk && p.heavyMetals > cfgThresholds.heavyMetals * 2)
+      anomalyDetails.push("Heavy Metals (>2x limit)");
+    if (!microbialOk && p.microbialCount > cfgThresholds.microbialCount * 2)
+      anomalyDetails.push("Microbial Count (>2x limit)");
+
+    setRunResult({
+      batchId: batch.batchId,
+      herbName: batch.herbName,
+      supplier: batch.supplier,
+      region: batch.region,
+      dateReceived: batch.dateReceived,
+      qualityScore,
+      status,
+      probability: qualityScore / 100,
+      anomaly: anomalyDetails.length > 0,
+      anomalyDetails: anomalyDetails.join("; "),
+      moistureOk,
+      ashOk,
+      extractiveOk,
+      heavyMetalsOk,
+      microbialOk,
+      timestamp: BigInt(Date.now()),
+    });
   };
 
   return (
@@ -1541,44 +1638,53 @@ export function QualityAnalysis() {
                     {/* Score bar */}
                     <div className="mb-3">
                       <div className="flex items-center justify-between text-xs mb-1">
-                        <span className="text-muted-foreground">
-                          Quality Score
-                        </span>
+                        <span style={{ color: "#e2e8f0" }}>Quality Score</span>
                         <span
                           className="font-mono font-bold"
                           style={{
                             color:
                               runResult.status === "Accept"
-                                ? "oklch(0.64 0.168 145)"
-                                : "oklch(0.54 0.174 24)",
+                                ? "oklch(0.80 0.168 145)"
+                                : "oklch(0.78 0.174 24)",
                           }}
                         >
                           {runResult.qualityScore.toFixed(0)}/100
                         </span>
                       </div>
-                      <Progress
-                        value={runResult.qualityScore}
-                        className="h-2"
-                        style={{
-                          ["--progress-background" as string]:
-                            runResult.status === "Accept"
-                              ? "oklch(0.64 0.168 145)"
-                              : "oklch(0.54 0.174 24)",
-                        }}
-                      />
+                      <div
+                        className="h-2 rounded-full overflow-hidden"
+                        style={{ background: "rgba(255,255,255,0.15)" }}
+                      >
+                        <div
+                          className="h-full rounded-full transition-all"
+                          style={{
+                            width: `${runResult.qualityScore}%`,
+                            background:
+                              runResult.status === "Accept"
+                                ? "oklch(0.75 0.168 145)"
+                                : "oklch(0.70 0.174 24)",
+                          }}
+                        />
+                      </div>
                     </div>
 
                     {/* ML Confidence */}
-                    <div className="text-xs text-muted-foreground mb-3">
+                    <div className="text-xs mb-3" style={{ color: "#94a3b8" }}>
                       ML Confidence:{" "}
-                      <span className="font-mono font-bold text-foreground">
+                      <span
+                        className="font-mono font-bold"
+                        style={{ color: "#e2e8f0" }}
+                      >
                         {(runResult.probability * 100).toFixed(1)}%
                       </span>{" "}
                       accept probability
                     </div>
 
                     {/* Parameter status */}
-                    <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+                    <div
+                      className="text-xs font-semibold uppercase tracking-wider mb-2"
+                      style={{ color: "#94a3b8" }}
+                    >
                       Parameter QA Status
                     </div>
                     <div className="flex flex-wrap gap-2">
@@ -1596,11 +1702,11 @@ export function QualityAnalysis() {
                           className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium"
                           style={{
                             background: ok
-                              ? "oklch(0.64 0.168 145 / 0.12)"
-                              : "oklch(0.54 0.174 24 / 0.12)",
+                              ? "oklch(0.64 0.168 145 / 0.18)"
+                              : "oklch(0.54 0.174 24 / 0.18)",
                             color: ok
-                              ? "oklch(0.64 0.168 145)"
-                              : "oklch(0.54 0.174 24)",
+                              ? "oklch(0.80 0.168 145)"
+                              : "oklch(0.78 0.174 24)",
                           }}
                         >
                           {ok ? (

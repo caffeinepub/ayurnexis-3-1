@@ -2825,7 +2825,7 @@ export function FormulationLab({
     reason: string;
   } | null>(null);
 
-  // ── AI Analysis State ─────────────────────────────────────────────────────
+  // ── Analysis State ─────────────────────────────────────────────────────
   const [aiPharmacology, setAiPharmacology] =
     useState<PharmacologyResult | null>(null);
   const [aiPharmacologyLoading, setAiPharmacologyLoading] = useState(false);
@@ -4104,7 +4104,7 @@ export function FormulationLab({
                     data-ocid="formulation.analysis.reactions_tab"
                     value="reactions"
                   >
-                    AI Reactions
+                    Drug Interactions
                   </TabsTrigger>
                 </TabsList>
 
@@ -4212,18 +4212,18 @@ export function FormulationLab({
                       );
                     })
                   )}
-                  {/* AI Pharmacology Section */}
+                  {/* Pharmacology Section */}
                   {ingredients.length > 0 && (
                     <Card className="border-border">
                       <CardHeader className="pb-2">
                         <div className="flex items-center justify-between">
                           <CardTitle className="text-sm flex items-center gap-2">
                             <Zap className="w-4 h-4 text-amber-500" />
-                            AI Pharmacological Analysis
+                            Pharmacological Analysis
                           </CardTitle>
                           <div className="flex items-center gap-2">
                             <Badge className="text-[10px] bg-primary/10 text-primary border-0">
-                              AI-Predicted
+                              Predicted Data
                             </Badge>
                             <Button
                               size="sm"
@@ -4242,8 +4242,8 @@ export function FormulationLab({
                                 <RefreshCw className="w-3 h-3" />
                               )}
                               {aiPharmacologyLoading
-                                ? "Loading…"
-                                : "Get AI Analysis"}
+                                ? "Analyzing…"
+                                : "Get Analysis"}
                             </Button>
                           </div>
                         </div>
@@ -4268,7 +4268,7 @@ export function FormulationLab({
                             className="text-center py-4"
                           >
                             <p className="text-xs text-red-600 mb-2">
-                              Could not load AI predictions.
+                              Could not load analysis data.
                             </p>
                             <Button
                               size="sm"
@@ -4331,8 +4331,8 @@ export function FormulationLab({
                           !aiPharmacology &&
                           !aiPharmacologyError && (
                             <p className="text-xs text-muted-foreground text-center py-3">
-                              Click "Get AI Analysis" to fetch real
-                              pharmacological predictions for this formulation.
+                              Click "Get Analysis" to fetch real pharmacological
+                              predictions for this formulation.
                             </p>
                           )}
                       </CardContent>
@@ -4612,7 +4612,7 @@ export function FormulationLab({
                           )}
                           {aiCompatLoading || aiPharmacologyLoading
                             ? "Analyzing…"
-                            : "Run AI Analysis"}
+                            : "Run Analysis"}
                         </Button>
                       </div>
 
@@ -4636,7 +4636,7 @@ export function FormulationLab({
                           className="rounded-lg border border-red-200 bg-red-50 p-4 text-center"
                         >
                           <p className="text-xs text-red-600 mb-2">
-                            Could not load AI predictions.
+                            Could not load analysis data.
                           </p>
                           <Button
                             size="sm"
@@ -4660,7 +4660,7 @@ export function FormulationLab({
                                 <Shield className="w-4 h-4 text-primary" /> Drug
                                 Interactions
                                 <Badge className="ml-auto text-[10px] bg-primary/10 text-primary border-0">
-                                  AI-Predicted
+                                  Predicted Data
                                 </Badge>
                               </CardTitle>
                             </CardHeader>
@@ -4732,7 +4732,7 @@ export function FormulationLab({
                         !aiPharmacologyError && (
                           <div className="text-center py-8 text-muted-foreground">
                             <p className="text-sm mb-3">
-                              Click "Run AI Analysis" to get real-time drug
+                              Click "Run Analysis" to get real-time drug
                               interaction predictions
                             </p>
                             <Button
@@ -4753,7 +4753,7 @@ export function FormulationLab({
                               <Layers className="w-4 h-4 text-primary" /> AI
                               Compatibility Pairs
                               <Badge className="ml-auto text-[10px] bg-primary/10 text-primary border-0">
-                                AI-Predicted
+                                Predicted Data
                               </Badge>
                             </CardTitle>
                           </CardHeader>
@@ -4785,7 +4785,7 @@ export function FormulationLab({
                               ).length === 0 && (
                                 <p className="text-xs text-green-600">
                                   ✓ All ingredient pairs appear compatible per
-                                  AI analysis.
+                                  pharmacopeia analysis.
                                 </p>
                               )}
                             </div>
@@ -5414,17 +5414,17 @@ export function FormulationLab({
                   )}
                 </CardContent>
               </Card>
-              {/* AI SOP Preview */}
+              {/* SOP Preview */}
               <Card className="border-border">
                 <CardHeader className="pb-2">
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-sm flex items-center gap-2">
                       <BookOpen className="w-4 h-4 text-primary" />
-                      AI Manufacturing Procedure
+                      Manufacturing Procedure
                     </CardTitle>
                     <div className="flex items-center gap-2">
                       <Badge className="text-[10px] bg-primary/10 text-primary border-0">
-                        AI-Predicted
+                        Predicted Data
                       </Badge>
                       <Button
                         size="sm"
@@ -5535,8 +5535,8 @@ export function FormulationLab({
                   )}
                   {!aiSOPLoading && !aiSOP && (
                     <p className="text-xs text-muted-foreground text-center py-3">
-                      Click "Generate SOP" to get an AI-predicted step-by-step
-                      manufacturing procedure.
+                      Click "Generate SOP" to get a pharmacopeia-based
+                      step-by-step manufacturing procedure.
                     </p>
                   )}
                 </CardContent>
