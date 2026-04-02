@@ -162,20 +162,46 @@ export function useSeedData() {
   });
 }
 
-// Merged analyses: backend + local seed batch computations
-import { useMemo } from "react";
+// Merged analyses: backend + local seed batch computations + localStorage analyses
+import { useCallback, useMemo, useState } from "react";
 import { SEED_BATCHES, computeLocalAnalysis } from "../data/seedBatches";
+import { getDeletedIds, getLocalAnalyses } from "../utils/analysisStore";
 
 export function useAllAnalysesMerged() {
   const backendResult = useAllAnalyses();
   const backendData = backendResult.data ?? [];
+  const [localVersion, setLocalVersion] = useState(0);
+
+  // Expose refresh function
+  const refreshLocal = useCallback(() => setLocalVersion((v) => v + 1), []);
 
   const merged = useMemo(() => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-expressions
+    localVersion; // track for refresh
+    const deletedIds = getDeletedIds();
+    const localAnalyses = getLocalAnalyses();
     const seedAnalyses = SEED_BATCHES.map((b) => computeLocalAnalysis(b));
     const backendIds = new Set(backendData.map((a) => a.batchId));
-    const filteredSeed = seedAnalyses.filter((a) => !backendIds.has(a.batchId));
-    return [...backendData, ...filteredSeed];
-  }, [backendData]);
+    const localIds = new Set(localAnalyses.map((a) => a.batchId));
 
-  return { ...backendResult, data: merged };
+    // Seed analyses not overridden by backend or local
+    const filteredSeed = seedAnalyses.filter(
+      (a) =>
+        !backendIds.has(a.batchId) &&
+        !localIds.has(a.batchId) &&
+        !deletedIds.has(a.batchId),
+    );
+
+    // Filter out deleted from all sources
+    const filteredBackend = backendData.filter(
+      (a) => !deletedIds.has(a.batchId),
+    );
+    const filteredLocal = localAnalyses.filter(
+      (a) => !deletedIds.has(a.batchId),
+    );
+
+    return [...filteredLocal, ...filteredBackend, ...filteredSeed];
+  }, [backendData, localVersion]);
+
+  return { ...backendResult, data: merged, refreshLocal };
 }

@@ -18,6 +18,7 @@ import {
   ChevronRight,
   Database,
   FileBarChart,
+  FileCheck2,
   FlaskConical,
   History,
   LayoutDashboard,
@@ -44,6 +45,7 @@ import { AdminDashboard } from "./pages/AdminDashboard";
 import { BatchRecords } from "./pages/BatchRecords";
 import { Dashboard } from "./pages/Dashboard";
 import { FormulationLab } from "./pages/FormulationLab";
+import { Gamp5Page } from "./pages/Gamp5Page";
 import { GetFormulationIdea } from "./pages/GetFormulationIdea";
 import { HistoryPage } from "./pages/HistoryPage";
 import { Predictions } from "./pages/Predictions";
@@ -78,7 +80,8 @@ type Page =
   | "formulation"
   | "formulationIdea"
   | "history"
-  | "adminDashboard";
+  | "adminDashboard"
+  | "gamp5";
 
 const NAV_ITEMS: {
   id: Page;
@@ -117,6 +120,7 @@ const NAV_ITEMS: {
     icon: Beaker,
     short: "Formula",
   },
+  { id: "gamp5", label: "GAMP 5 Validator", icon: FileCheck2, short: "GAMP5" },
 ];
 
 function AppShell() {
@@ -283,6 +287,8 @@ function AppShell() {
         return <HistoryPage />;
       case "adminDashboard":
         return <AdminDashboard />;
+      case "gamp5":
+        return <Gamp5Page />;
     }
   };
 

@@ -30,6 +30,7 @@ import {
   RefreshCw,
   Save,
   Search,
+  Trash2,
   X,
   XCircle,
 } from "lucide-react";
@@ -69,6 +70,7 @@ import {
   computeLocalAnalysis,
 } from "../data/seedBatches";
 import { useAllAnalysesMerged, useAllBatches } from "../hooks/useQueries";
+import { deleteAnalysis, saveLocalAnalysis } from "../utils/analysisStore";
 
 const paramLabels: [string, keyof import("../backend.d").AnalysisResult][] = [
   ["Moisture", "moistureOk"],
@@ -1226,7 +1228,11 @@ function ComparisonPanel({
 
 // ---- Main Page ----
 export function QualityAnalysis() {
-  const { data: analyses = [], isLoading } = useAllAnalysesMerged();
+  const {
+    data: analyses = [],
+    isLoading,
+    refreshLocal,
+  } = useAllAnalysesMerged();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [expandedHerb, setExpandedHerb] = useState<string | null>(null);
@@ -1250,6 +1256,11 @@ export function QualityAnalysis() {
 
   const toggleComparison = (batchId: string) => {
     setShowComparison((prev) => ({ ...prev, [batchId]: !prev[batchId] }));
+  };
+
+  const handleDeleteAnalysis = (batchId: string) => {
+    deleteAnalysis(batchId);
+    refreshLocal();
   };
   // ---- Run Analysis Panel State ----
   const { data: backendBatches = [] } = useAllBatches();
@@ -1369,7 +1380,7 @@ export function QualityAnalysis() {
     if (!microbialOk && p.microbialCount > cfgThresholds.microbialCount * 2)
       anomalyDetails.push("Microbial Count (>2x limit)");
 
-    setRunResult({
+    const result = {
       batchId: batch.batchId,
       herbName: batch.herbName,
       supplier: batch.supplier,
@@ -1386,7 +1397,10 @@ export function QualityAnalysis() {
       heavyMetalsOk,
       microbialOk,
       timestamp: BigInt(Date.now()),
-    });
+    };
+    setRunResult(result);
+    saveLocalAnalysis(result);
+    refreshLocal();
   };
 
   return (
@@ -1638,7 +1652,7 @@ export function QualityAnalysis() {
                     {/* Score bar */}
                     <div className="mb-3">
                       <div className="flex items-center justify-between text-xs mb-1">
-                        <span style={{ color: "#e2e8f0" }}>Quality Score</span>
+                        <span style={{ color: "#1e293b" }}>Quality Score</span>
                         <span
                           className="font-mono font-bold"
                           style={{
@@ -1653,7 +1667,7 @@ export function QualityAnalysis() {
                       </div>
                       <div
                         className="h-2 rounded-full overflow-hidden"
-                        style={{ background: "rgba(255,255,255,0.15)" }}
+                        style={{ background: "#e2e8f0" }}
                       >
                         <div
                           className="h-full rounded-full transition-all"
@@ -1669,11 +1683,11 @@ export function QualityAnalysis() {
                     </div>
 
                     {/* ML Confidence */}
-                    <div className="text-xs mb-3" style={{ color: "#94a3b8" }}>
+                    <div className="text-xs mb-3" style={{ color: "#475569" }}>
                       ML Confidence:{" "}
                       <span
                         className="font-mono font-bold"
-                        style={{ color: "#e2e8f0" }}
+                        style={{ color: "#1e293b" }}
                       >
                         {(runResult.probability * 100).toFixed(1)}%
                       </span>{" "}
@@ -1683,7 +1697,7 @@ export function QualityAnalysis() {
                     {/* Parameter status */}
                     <div
                       className="text-xs font-semibold uppercase tracking-wider mb-2"
-                      style={{ color: "#94a3b8" }}
+                      style={{ color: "#475569" }}
                     >
                       Parameter QA Status
                     </div>
@@ -1829,23 +1843,34 @@ export function QualityAnalysis() {
                 </div>
               </div>
 
-              {/* Gauge + probability */}
-              <div className="flex items-center gap-6">
-                <SemiGauge
-                  value={a.qualityScore}
-                  max={100}
-                  label="Quality Score"
-                  size={120}
-                />
-                <div className="flex flex-col gap-1 text-xs">
-                  <div className="text-muted-foreground">ML Confidence</div>
-                  <div className="text-xl font-bold text-foreground">
-                    {(a.probability * 100).toFixed(1)}%
-                  </div>
-                  <div className="text-muted-foreground text-xs">
-                    Accept probability
+              {/* Gauge + probability + delete */}
+              <div className="flex items-start gap-4">
+                <div className="flex items-center gap-6">
+                  <SemiGauge
+                    value={a.qualityScore}
+                    max={100}
+                    label="Quality Score"
+                    size={120}
+                  />
+                  <div className="flex flex-col gap-1 text-xs">
+                    <div className="text-muted-foreground">ML Confidence</div>
+                    <div className="text-xl font-bold text-foreground">
+                      {(a.probability * 100).toFixed(1)}%
+                    </div>
+                    <div className="text-muted-foreground text-xs">
+                      Accept probability
+                    </div>
                   </div>
                 </div>
+                <button
+                  type="button"
+                  data-ocid={`analysis.delete_button.${i + 1}`}
+                  onClick={() => handleDeleteAnalysis(a.batchId)}
+                  className="p-1.5 rounded hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors mt-1"
+                  title="Delete analysis record"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
               </div>
             </div>
 

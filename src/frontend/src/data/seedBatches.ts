@@ -98,14 +98,21 @@ export function computeLocalAnalysis(
   const ashOk = p.ash <= 8;
   const extractiveOk = p.extractiveValue >= 15;
   const heavyMetalsOk = p.heavyMetals <= 1.0;
-  const microbialOk = p.microbialCount <= 10000;
+  // E.coli or Salmonella presence overrides microbial count check
+  const pathogenPresent =
+    (batch.ecoli && batch.ecoli === "Present") ||
+    (batch.salmonella && batch.salmonella === "Present");
+  const microbialOk = !pathogenPresent && p.microbialCount <= 10000;
 
-  const qualityScore =
+  let qualityScore =
     (moistureOk ? 20 : 0) +
     (ashOk ? 20 : 0) +
     (extractiveOk ? 20 : 0) +
     (heavyMetalsOk ? 20 : 0) +
     (microbialOk ? 20 : 0);
+
+  // Pathogen detected adds additional penalty
+  if (pathogenPresent) qualityScore = Math.max(0, qualityScore - 20);
 
   const status = qualityScore >= 60 ? "Accept" : "Reject";
 
@@ -119,6 +126,10 @@ export function computeLocalAnalysis(
     anomalyDetails.push("Heavy Metals (>2x limit)");
   if (!microbialOk && p.microbialCount > 10000 * 2)
     anomalyDetails.push("Microbial Count (>2x limit)");
+  if (batch.ecoli === "Present")
+    anomalyDetails.push("E.coli Detected — batch condemned");
+  if (batch.salmonella === "Present")
+    anomalyDetails.push("Salmonella Detected — batch condemned");
 
   const anomaly = anomalyDetails.length > 0;
 
@@ -224,9 +235,9 @@ export const SEED_BATCHES: SeedBatch[] = [
     supplier: "Nagarjuna Botanicals",
     region: "Maharashtra",
     dateReceived: "2025-01-22",
-    moisture: 8.1,
-    ash: 6.3,
-    extractiveValue: 16.8,
+    moisture: 11.8,
+    ash: 7.6,
+    extractiveValue: 15.4,
     heavyMetals: 0.38,
     microbialCount: 2200,
     notes:
@@ -373,8 +384,8 @@ export const SEED_BATCHES: SeedBatch[] = [
     region: "Karnataka",
     dateReceived: "2025-03-01",
     moisture: 11.5,
-    ash: 5.1,
-    extractiveValue: 17.9,
+    ash: 7.8,
+    extractiveValue: 14.2,
     heavyMetals: 0.58,
     microbialCount: 1800,
     notes:
@@ -521,9 +532,9 @@ export const SEED_BATCHES: SeedBatch[] = [
     region: "Punjab",
     dateReceived: "2025-04-15",
     moisture: 9.7,
-    ash: 6.8,
+    ash: 7.9,
     extractiveValue: 31.2,
-    heavyMetals: 0.68,
+    heavyMetals: 0.92,
     microbialCount: 1600,
     notes:
       "Yellowish-brown fibrous powder. Glycyrrhizin content 3.6% by HPLC. Ash content slightly elevated.",
@@ -597,8 +608,8 @@ export const SEED_BATCHES: SeedBatch[] = [
     moisture: 10.8,
     ash: 7.2,
     extractiveValue: 18.4,
-    heavyMetals: 0.72,
-    microbialCount: 2800,
+    heavyMetals: 1.15,
+    microbialCount: 18500,
     notes:
       "Reddish-brown fibrous powder. FAIL: E.coli detected; microbial count exceeds IP limits. Quarantine batch.",
     volatileOil: 0.1,
@@ -743,9 +754,9 @@ export const SEED_BATCHES: SeedBatch[] = [
     region: "Gujarat",
     dateReceived: "2025-07-02",
     moisture: 8.7,
-    ash: 7.8,
+    ash: 7.9,
     extractiveValue: 20.3,
-    heavyMetals: 0.89,
+    heavyMetals: 0.88,
     microbialCount: 1900,
     notes:
       "Greenish-yellow aromatic powder. Anethole content 2.8% by GC. High ash content — under review.",

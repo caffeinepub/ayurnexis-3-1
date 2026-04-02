@@ -7,9 +7,9 @@
 
 import { createActorWithConfig } from "../config";
 
-// ─── AI helper (used ONLY for novel formulations) ────────────────────────────
+// ─── AI helper (used for novel formulations, SOP, pharmacology, GAMP5) ────────
 
-async function callDeepSeekRaw(prompt: string): Promise<string> {
+export async function callDeepSeekRaw(prompt: string): Promise<string> {
   let lastError: Error | null = null;
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
@@ -154,7 +154,7 @@ export async function searchDiseases(query: string): Promise<DiseaseResult[]> {
   return results.slice(0, 15);
 }
 
-// ─── Marketed Drugs — OpenFDA ────────────────────────────────────────────────
+// ─── Marketed Drugs — OpenFDA (no drug-type filter) ──────────────────────────
 
 export interface MarketedDrugResult {
   brandName: string;
@@ -163,60 +163,92 @@ export interface MarketedDrugResult {
   dosageForm: string;
   strength: string;
   drugType: string;
+  pharmacologicalEffect?: string;
   liveData?: boolean;
 }
 
 export async function getMarketedDrugs(
   disease: string,
   drugType: string,
-  dosageForm: string,
+  _dosageForm: string,
 ): Promise<MarketedDrugResult[]> {
   const q = encodeURIComponent(disease.trim());
+  const firstWord = encodeURIComponent(disease.trim().split(/\s+/)[0]);
   const results: MarketedDrugResult[] = [];
+  const seen = new Set<string>();
 
+  const processLabels = (labels: Record<string, unknown>[]) => {
+    for (const label of labels) {
+      const openfda = ((label as Record<string, unknown>).openfda ??
+        {}) as Record<string, string[]>;
+      const brandNames: string[] = openfda.brand_name ?? [];
+      const genericNames: string[] = openfda.generic_name ?? [];
+      const manufacturers: string[] = openfda.manufacturer_name ?? [];
+      const dosageForms: string[] = openfda.dosage_form ?? [];
+      const substances: string[] = openfda.substance_name ?? [];
+      const pharmClassEpc: string[] = openfda.pharm_class_epc ?? [];
+      const pharmClassMoa: string[] = openfda.pharm_class_moa ?? [];
+
+      const brand = brandNames[0] ?? "";
+      const generic = genericNames[0] ?? substances[0] ?? "";
+      if (!brand && !generic) continue;
+      const displayBrand = brand || generic;
+      const key = displayBrand.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+
+      // Derive pharmacological effect from pharm_class fields
+      const pharmEffect =
+        pharmClassEpc[0] ||
+        pharmClassMoa[0] ||
+        ((label as Record<string, unknown>).pharmacological_class as string) ||
+        "";
+
+      results.push({
+        brandName: displayBrand,
+        genericName: generic,
+        manufacturer: manufacturers[0] ?? "Various",
+        dosageForm: dosageForms[0] ?? "Oral",
+        strength: "",
+        drugType: drugType,
+        pharmacologicalEffect: pharmEffect || undefined,
+        liveData: true,
+      });
+    }
+  };
+
+  // Primary search
   try {
     const fdaRes = await fetch(
-      `https://api.fda.gov/drug/label.json?search=indications_and_usage:"${q}"&limit=30`,
+      `https://api.fda.gov/drug/label.json?search=indications_and_usage:"${q}"&limit=25`,
     );
     if (fdaRes.ok) {
       const data = await fdaRes.json();
-      const labels: Record<string, unknown>[] = data.results ?? [];
-      const seen = new Set<string>();
-
-      for (const label of labels) {
-        const openfda = ((label as Record<string, unknown>).openfda ??
-          {}) as Record<string, string[]>;
-        const brandNames: string[] = openfda.brand_name ?? [];
-        const genericNames: string[] = openfda.generic_name ?? [];
-        const manufacturers: string[] = openfda.manufacturer_name ?? [];
-        const dosageForms: string[] = openfda.dosage_form ?? [];
-        const substances: string[] = openfda.substance_name ?? [];
-
-        const brand = brandNames[0] ?? "Unknown";
-        const generic = genericNames[0] ?? substances[0] ?? "Unknown";
-        const key = (brand + generic).toLowerCase();
-        if (!seen.has(key) && brand !== "Unknown") {
-          seen.add(key);
-          results.push({
-            brandName: brand,
-            genericName: generic,
-            manufacturer: manufacturers[0] ?? "Unknown",
-            dosageForm: dosageForms[0] ?? dosageForm,
-            strength: "",
-            drugType: drugType,
-            liveData: true,
-          });
-        }
-      }
+      processLabels(data.results ?? []);
     }
   } catch {
     // ignore
   }
 
-  return results.slice(0, 20);
+  // Fallback with first word if fewer than 3 results
+  if (results.length < 3 && firstWord !== q) {
+    try {
+      const fallbackRes = await fetch(
+        `https://api.fda.gov/drug/label.json?search=indications_and_usage:"${firstWord}"&limit=20`,
+      );
+      if (fallbackRes.ok) {
+        const data = await fallbackRes.json();
+        processLabels(data.results ?? []);
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  return results.slice(0, 25);
 }
 
-// ─── Novel Formulations — DeepSeek AI (only AI call in this file) ─────────────
+// ─── Novel Formulations — DeepSeek AI (pharmacological-class matched) ─────────
 
 export interface NovelFormulationIdea {
   name: string;
@@ -234,6 +266,7 @@ export interface NovelFormulationIdea {
   stabilityPrediction: string;
   therapeuticCategory: string;
   pharmacologicalEffects: string;
+  fullCompositionEffect: string;
   isNovelAI?: boolean;
 }
 
@@ -242,23 +275,30 @@ export async function getNovelFormulations(
   dosageForm: string,
   drugType: string,
 ): Promise<NovelFormulationIdea[]> {
-  const prompt = `You are a pharmaceutical formulation scientist. Generate 15 novel pharmaceutical formulation ideas for treating "${disease}" as a ${dosageForm} (${drugType} type).
+  const prompt = `You are a pharmaceutical formulation scientist with expertise in pharmacopeia standards (IP 2022, BP 2023, WHO). Generate 15 novel pharmaceutical formulations for treating "${disease}" as a ${dosageForm} (${drugType} type).
+
+Each formulation MUST:
+1. Match the pharmacological class used by marketed drugs for ${disease} (e.g., for diabetes: biguanides, sulfonylureas, DPP-4 inhibitors, insulin sensitizers; for hypertension: ACE inhibitors, ARBs, calcium channel blockers, etc.)
+2. Include proper excipients specific to ${dosageForm} (e.g., for tablets: MCC, starch, magnesium stearate, HPMC; for capsules: gelatin/HPMC shells, talc; for syrups: sucrose, glycerol, sodium benzoate)
+3. Include per-ingredient pharmacological effects
+4. Include full composition pharmacological effect for ${disease}
 
 Return ONLY a JSON array of 15 formulations:
 [{
   "name": "Formulation name",
-  "ingredients": [{"name": "ingredient", "quantity": "100mg", "role": "API", "pharmacologicalEffect": "mechanism"}],
+  "ingredients": [{"name": "ingredient", "quantity": "100mg", "role": "API/Excipient/Binder/Disintegrant/Lubricant", "pharmacologicalEffect": "specific mechanism or functional role"}],
   "dosageForm": "${dosageForm}",
   "drugType": "${drugType}",
-  "mechanism": "Mechanism of action for this disease",
-  "advantages": ["advantage 1", "advantage 2"],
-  "disadvantages": ["disadvantage 1"],
-  "stabilityPrediction": "2 years at 25°C/60% RH",
-  "therapeuticCategory": "category",
-  "pharmacologicalEffects": "Combined pharmacological effects of the formulation"
+  "mechanism": "Specific mechanism of action targeting ${disease} pathophysiology",
+  "advantages": ["advantage 1", "advantage 2", "advantage 3"],
+  "disadvantages": ["disadvantage 1", "disadvantage 2"],
+  "stabilityPrediction": "2 years at 25°C/60% RH as per ICH Q1A",
+  "therapeuticCategory": "specific category",
+  "pharmacologicalEffects": "Combined pharmacological effects per ingredient",
+  "fullCompositionEffect": "Overall therapeutic effect of the complete formulation on ${disease} with synergistic mechanisms"
 }]
 
-Use real pharmacopeia-aligned ingredients, evidence-based quantities. Mix Ayurvedic herbs with conventional drugs for combination types. Be scientifically accurate.`;
+Use real pharmacopeia-aligned ingredients, evidence-based quantities. Be scientifically accurate and specific to ${disease}.`;
 
   const results = await callJson<NovelFormulationIdea[]>(prompt);
   if (!results) return [];
@@ -600,7 +640,7 @@ export async function analyzeStability(
   };
 }
 
-// ─── Pharmacology — Static Ingredient Map ────────────────────────────────────
+// ─── Pharmacology — AI-powered with static fallback ──────────────────────────
 
 export interface PharmacologyResult {
   mechanismOfAction: string;
@@ -681,23 +721,18 @@ const PHARMACOLOGY_MAP: Record<
   ibuprofen: {
     mechanism:
       "Non-selective COX-1/COX-2 inhibitor; reduces prostaglandin synthesis",
-    effects: ["Analgesic", "Anti-inflammatory", "Antipyretic"],
-    pk: "Bioavailability ~80%; T½ ~2h; hepatic metabolism; renal excretion",
+    effects: ["Anti-inflammatory", "Analgesic", "Antipyretic"],
+    pk: "Bioavailability ~87%; protein-bound 99%; T½ ~2h; hepatic metabolism",
     interactions: [
-      "Warfarin (bleeding risk)",
-      "ACE inhibitors (reduced efficacy)",
-      "Aspirin (increased GI risk)",
+      "Warfarin (increased bleeding risk)",
+      "ACE inhibitors (reduced antihypertensive effect)",
     ],
     contraindications: [
-      "Peptic ulcer disease",
-      "Renal impairment",
-      "Third trimester pregnancy",
+      "Active peptic ulcer",
+      "Severe renal impairment",
+      "NSAID hypersensitivity",
     ],
-    adverse: [
-      "GI ulceration",
-      "Renal impairment",
-      "Cardiovascular events (chronic use)",
-    ],
+    adverse: ["GI upset", "Renal toxicity", "Cardiovascular risk"],
   },
   paracetamol: {
     mechanism:
@@ -743,12 +778,28 @@ export async function analyzePharmacology(
     const ingredientList = ingredients
       .map((i) => `${i.name} ${i.quantity}${i.unit}`)
       .join(", ");
-    const aiPrompt = `You are a pharmacopeia expert. Analyze this pharmaceutical formulation:\nDosage Form: ${dosageForm}\nIndication: ${disease}\nIngredients: ${ingredientList}\n\nProvide a JSON response with this exact structure:\n{"mechanismOfAction":"...","therapeuticEffects":["..."],"pharmacokinetics":"...","clinicalRationale":"...","drugInteractions":["..."],"contraindications":["..."],"adverseEffects":["..."]}\nOnly return the JSON, no extra text.`;
+    const aiPrompt = `You are a clinical pharmacologist with expertise in pharmacopeia standards (IP 2022, BP 2023, WHO). Analyze this pharmaceutical formulation for ${disease}:
+
+Dosage Form: ${dosageForm}
+Ingredients: ${ingredientList}
+
+Provide detailed pharmacological analysis as JSON:
+{
+  "mechanismOfAction": "Detailed combined mechanism of action targeting ${disease} pathophysiology",
+  "therapeuticEffects": ["effect 1", "effect 2"],
+  "pharmacokinetics": "ADME profile: absorption, distribution, metabolism, excretion with T½ values",
+  "clinicalRationale": "Why this specific combination is clinically rational for ${disease}",
+  "drugInteractions": ["interaction 1"],
+  "contraindications": ["contraindication 1"],
+  "adverseEffects": ["adverse effect 1"]
+}
+Return ONLY the JSON, no extra text.`;
     const aiResult = await callJson<PharmacologyResult>(aiPrompt);
     if (aiResult?.mechanismOfAction) return aiResult;
   } catch (_e) {
     // fall through to static calculation
   }
+
   const mechanisms: string[] = [];
   const therapeuticEffects = new Set<string>();
   const interactions = new Set<string>();
@@ -807,7 +858,7 @@ export async function analyzePharmacology(
   };
 }
 
-// ─── SOP — Pharmacopeia Template by Dosage Form ──────────────────────────────
+// ─── SOP — DeepSeek-powered, method and dosage-form specific ─────────────────
 
 export interface SOPResult {
   procedure: string[];
@@ -984,10 +1035,43 @@ const SOP_TEMPLATES: Record<string, SOPResult> = {
 };
 
 export async function generateSOP(
-  _ingredients: Array<{ name: string; quantity: number; unit: string }>,
+  ingredients: Array<{ name: string; quantity: number; unit: string }>,
   dosageForm: string,
-  _method: string,
+  method: string,
 ): Promise<SOPResult> {
+  try {
+    const ingredientList = ingredients
+      .map((i) => `${i.name} ${i.quantity}${i.unit}`)
+      .join(", ");
+    const prompt = `You are a pharmaceutical manufacturing expert following ICH Q10 and IP 2022 guidelines. Generate a specific, detailed SOP for manufacturing a ${dosageForm} formulation using ${method} method.
+
+Ingredients: ${ingredientList}
+
+Return ONLY a JSON object with this exact structure:
+{
+  "procedure": ["Step 1: ...", "Step 2: ..."],
+  "instruments": ["instrument 1"],
+  "glassware": ["item 1"],
+  "qualityChecks": ["check 1"],
+  "criticalParameters": ["param 1"]
+}
+
+Requirements:
+- procedure: 12–15 very specific steps tailored to ${method} method and ${dosageForm} form. Include exact temperatures (°C), mixing speeds (rpm), mesh sizes (ASTM), drying times, and pharmacopeia test references
+- instruments: 8–10 specific instruments appropriate for ${method} manufacturing of ${dosageForm}
+- glassware: 5–7 specific glassware items with sizes (mL)
+- qualityChecks: 6–8 specific in-process and finished product QC tests with acceptance criteria per IP/BP pharmacopeia
+- criticalParameters: 5–6 critical process parameters (CPPs) specific to ${method} with acceptable ranges
+
+Make everything SPECIFIC to the ${method} method for ${dosageForm}. Do NOT give generic steps.`;
+
+    const result = await callJson<SOPResult>(prompt);
+    if (result?.procedure && result.procedure.length > 0) return result;
+  } catch (_e) {
+    // fall through to static template
+  }
+
+  // Fallback to static template
   const formKey =
     Object.keys(SOP_TEMPLATES).find((k) =>
       dosageForm?.toLowerCase().includes(k.toLowerCase()),
@@ -995,7 +1079,7 @@ export async function generateSOP(
   return SOP_TEMPLATES[formKey] ?? SOP_TEMPLATES.Tablet;
 }
 
-// Re-export callAI for any legacy usage (no-op fallback)
+// Re-export callAI for any legacy usage
 export async function callAI(prompt: string): Promise<string> {
   return callDeepSeekRaw(prompt);
 }
