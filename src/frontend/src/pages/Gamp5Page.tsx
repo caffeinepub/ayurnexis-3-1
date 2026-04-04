@@ -28,7 +28,6 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-import { callDeepSeekRaw } from "../utils/aiService";
 
 // ---------- Types ----------
 
@@ -319,10 +318,9 @@ function downloadDoc(blob: Blob, filename: string) {
 
 // ---------- AI generation helpers ----------
 
-async function generateDocument(
-  docType: string,
-  form: GampFormData,
-): Promise<string> {
+// ---------- Template-based document generation (no AI dependency) ----------
+
+function generateDocument(docType: string, form: GampFormData): string {
   const today = new Date().toLocaleDateString("en-IN", {
     day: "2-digit",
     month: "long",
@@ -334,43 +332,160 @@ async function generateDocument(
     .toUpperCase();
   const scopeStr = form.validationScope.join(", ") || "IQ, OQ, PQ";
 
-  const prompts: Record<string, string> = {
-    urs: `Generate a complete GAMP 5 Second Edition compliant User Requirement Specification (URS) for ${form.systemName} (${form.systemType}).
+  // Parse user requirements into numbered list
+  const rawReqs = form.userRequirements
+    .split(/\n|;|,(?=\s*[A-Z])/)
+    .map((r) => r.trim())
+    .filter((r) => r.length > 3);
+  const reqs =
+    rawReqs.length > 0
+      ? rawReqs
+      : [
+          `The ${form.systemType} system shall support role-based user access control`,
+          "The system shall maintain a complete and tamper-evident electronic audit trail",
+          "The system shall support electronic signatures compliant with 21 CFR Part 11",
+          "The system shall perform all primary functions within 3 seconds response time",
+          "The system shall provide backup and recovery with RPO < 1 hour",
+          "The system shall enforce data integrity per ALCOA+ principles",
+          "The system shall generate audit-ready reports in PDF and/or Excel format",
+          "The system shall support concurrent multi-user access without data corruption",
+          "The system shall be installed and configured per vendor documentation",
+          "The system shall restrict access based on user roles and least-privilege principle",
+        ];
 
-GAMP Category: ${form.gampCategory}
-Intended Use: ${form.intendedUse}
-User Requirements: ${form.userRequirements}
-Risk Level: ${form.riskLevel}
-Validation Scope: ${scopeStr}
+  const gampCatDesc: Record<string, string> = {
+    "1": "Infrastructure Software (OS, network software, databases). Validation focus on installation and configuration verification.",
+    "3": "Non-configured (off-the-shelf) software. Vendor documentation, test summary reports, and configuration testing required.",
+    "4": "Configured software (ERP, LIMS, MES, SCADA). Configuration specifications, functional testing, and integration testing required.",
+    "5": "Custom/bespoke software. Full software development lifecycle documentation, unit testing, integration testing, and full V-model validation.",
+  };
 
-Generate the full URS document with ALL of these sections using proper numbered headings. Use markdown formatting (## for headings, | for tables, - for bullets):
+  const riskDesc = {
+    Low: "Standard controls. Periodic review. No additional mitigation required.",
+    Medium:
+      "Enhanced controls. Additional testing. Periodic risk re-assessment.",
+    High: "Maximum controls. Comprehensive testing. Continuous monitoring required.",
+  };
+
+  const systemTypeDesc: Record<string, string> = {
+    LIMS: "Laboratory Information Management System managing laboratory workflows, sample tracking, test results, and instrument integration.",
+    MES: "Manufacturing Execution System managing production execution, batch records, material traceability, and shop-floor operations.",
+    ERP: "Enterprise Resource Planning system managing business processes including finance, procurement, inventory, and supply chain.",
+    DCS: "Distributed Control System managing process control, sensor integration, and real-time manufacturing process automation.",
+    SCADA:
+      "Supervisory Control and Data Acquisition system for industrial monitoring and control of distributed equipment and processes.",
+    CDS: "Chromatography Data System for instrument control, data acquisition, processing, and reporting of chromatographic analyses.",
+    QMS: "Quality Management System managing quality processes, deviations, CAPAs, change control, and document management.",
+    CTMS: "Clinical Trial Management System managing clinical trial planning, patient data, adverse events, and regulatory submissions.",
+    PMS: "Pharmacovigilance Management System managing adverse event collection, signal detection, and regulatory reporting.",
+    EDMS: "Electronic Document Management System managing controlled documents, version control, review, and approval workflows.",
+    Other:
+      "Regulated computer system supporting GxP-critical operations in the pharmaceutical/life-science environment.",
+  };
+
+  const systemDesc = systemTypeDesc[form.systemType] || systemTypeDesc.Other;
+
+  if (docType === "urs") {
+    const reqRows = reqs
+      .map((r, i) => {
+        const id = `REQ-${String(i + 1).padStart(3, "0")}`;
+        const risk = i < 3 ? "High" : i < 7 ? "Medium" : "Low";
+        return `### ${id}: ${r.replace(/^the system shall /i, "System shall ")}
+
+**Requirement ID:** ${id}
+
+**Requirement Statement:** ${r.charAt(0).toUpperCase() + r.slice(1)}
+
+**Rationale:** Critical requirement for ${form.systemType} ${form.intendedUse || "GxP-regulated operations"} ensuring regulatory compliance and operational integrity.
+
+**Priority:** Must
+
+**Risk Level:** ${risk}
+
+**Source:** ${i < 2 ? "Regulatory (FDA 21 CFR Part 11)" : i < 5 ? "Business / Operational" : "Technical / IT Security"}
+
+**Acceptance Criteria:** Verified and documented during ${i < 2 ? "OQ and PQ" : i < 5 ? "OQ" : "IQ and OQ"} execution.`;
+      })
+      .join("\n\n---\n\n");
+
+    return `# User Requirement Specification (URS)
 
 ## Document Control
+
 | Field | Value |
 |-------|-------|
 | Document Number | URS-${systemShortCode}-001 |
+| System Name | ${form.systemName} |
+| System Type | ${form.systemType} |
+| GAMP Category | Category ${form.gampCategory} |
 | Version | 1.0 |
-| Status | Draft |
+| Status | Draft — Pending QA Review |
 | Date | ${today} |
 | Author | Validation Team |
 | Reviewed By | QA Manager |
 | Approved By | [Pending] |
+| Regulatory Basis | GAMP 5 Second Edition, FDA 21 CFR Part 11, EU Annex 11, ICH Q10, ICH Q9 |
 
 ## Version History
+
 | Version | Date | Author | Description of Change |
 |---------|------|--------|----------------------|
-| 1.0 | ${today} | Validation Team | Initial Draft |
+| 0.1 | ${today} | Validation Team | Initial Draft |
+| 1.0 | ${today} | Validation Team | Issued for QA Review |
 
 ## 1. Purpose and Scope
-Write 2-3 paragraphs describing: (a) purpose of this URS document, (b) scope of the system being validated — include system name, GAMP category, and intended use.
+
+### 1.1 Purpose
+
+This User Requirement Specification (URS) defines the requirements that **${form.systemName}** must satisfy to be acceptable for its intended use. This document provides the basis for all subsequent validation activities including Design Qualification (DQ), Installation Qualification (IQ), Operational Qualification (OQ), and Performance Qualification (PQ).
+
+### 1.2 Scope
+
+This URS covers the complete **${form.systemType}** system designated as **${form.systemName}**, classified as GAMP Category ${form.gampCategory}. The document describes functional, data integrity, security, performance, and interface requirements.
+
+**Intended Use:** ${form.intendedUse || `${form.systemType} for GxP-regulated pharmaceutical operations`}
+
+**Validation Scope:** ${scopeStr}
+
+**Risk Level:** ${form.riskLevel} — ${riskDesc[form.riskLevel]}
+
+### 1.3 Exclusions
+
+- Hardware procurement and installation (covered separately in DQ/IQ)
+- Third-party vendor validation activities (covered in vendor assessment)
+- Network infrastructure beyond system boundaries
 
 ## 2. Regulatory Basis
-List all applicable regulations and guidelines. Must reference: GAMP 5 Second Edition (ISPE), FDA 21 CFR Part 11, EU Annex 11, ICH Q10, ICH Q9, USP <1058>, applicable ISO standards.
+
+This URS has been prepared in compliance with and with reference to the following regulations, guidelines, and standards:
+
+| Regulation / Guideline | Applicability |
+|------------------------|---------------|
+| GAMP 5 Second Edition (ISPE, 2022) | Primary validation framework — risk-based approach |
+| FDA 21 CFR Part 11 | Electronic records and electronic signatures |
+| EU Annex 11 (2011) | Computerised systems in regulated environments |
+| ICH Q10 | Pharmaceutical Quality System |
+| ICH Q9 | Quality Risk Management |
+| USP <1058> | Analytical Instrument Qualification |
+| ISO/IEC 27001 | Information security management |
+| FDA Data Integrity Guidance (2018) | ALCOA+ data integrity principles |
 
 ## 3. System Overview
-Describe system type, GAMP category justification, intended use, deployment environment, and user community. Include a note on data integrity requirements (ALCOA+ principles).
+
+**System Name:** ${form.systemName}
+
+**System Type:** ${form.systemType} — ${systemDesc}
+
+**GAMP Category:** ${form.gampCategory} — ${gampCatDesc[form.gampCategory] || "Regulated computer system requiring risk-based validation."}
+
+**GxP Impact:** This system directly supports GxP-critical processes. Data generated, managed, or reported by this system is used for regulatory submissions, quality decisions, and/or patient safety. Full computerised system validation is required.
+
+**Data Integrity Classification:** GxP-Critical — All electronic records must comply with ALCOA+ principles and 21 CFR Part 11 / EU Annex 11 electronic records requirements.
+
+**User Community:** QA personnel, laboratory staff, production operators, system administrators, and management personnel as applicable to intended use.
 
 ## 4. Abbreviations and Definitions
+
 | Abbreviation | Definition |
 |---|---|
 | URS | User Requirement Specification |
@@ -380,851 +495,1624 @@ Describe system type, GAMP category justification, intended use, deployment envi
 | OQ | Operational Qualification |
 | PQ | Performance Qualification |
 | GAMP | Good Automated Manufacturing Practice |
-| GxP | Good Practice (GMP/GLP/GCP) |
+| GxP | Good Practice (GMP, GLP, GCP) |
 | CSV | Computerised System Validation |
-| ALCOA | Attributable, Legible, Contemporaneous, Original, Accurate |
+| ALCOA+ | Attributable, Legible, Contemporaneous, Original, Accurate, Complete, Consistent, Enduring, Available |
 | CFR | Code of Federal Regulations |
 | QMS | Quality Management System |
+| RBAC | Role-Based Access Control |
+| RPN | Risk Priority Number |
+| FMEA | Failure Mode and Effects Analysis |
+| SOP | Standard Operating Procedure |
+| CAPA | Corrective and Preventive Action |
+| RPO | Recovery Point Objective |
+| RTO | Recovery Time Objective |
 
 ## 5. User Requirements
-Number each requirement from the provided list as REQ-001, REQ-002, etc. For EACH requirement, provide:
-- **Requirement ID:** REQ-XXX
-- **Requirement Statement:** Clear, testable statement
-- **Rationale:** Why this requirement is needed
-- **Priority:** Must / Should / Could
-- **Risk Level:** High / Medium / Low
-- **Source:** Business / Regulatory / Technical
 
-Include at least 10 numbered requirements based on the provided user requirements and typical requirements for a ${form.systemType}.
+The following requirements have been identified for **${form.systemName}**. Each requirement is individually numbered, with rationale, priority, risk classification, and source documented.
+
+${reqRows}
 
 ## 6. Data Integrity Requirements
-List specific ALCOA+ requirements:
-- Attributable: all data entries must be linked to a user with timestamp
-- Legible: all records must be readable throughout retention period
-- Contemporaneous: data recorded at time of activity
-- Original: first capture of data must be preserved
-- Accurate: data must reflect actual observations
-- Complete, Consistent, Enduring, Available requirements
-Reference 21 CFR Part 11 and EU Annex 11 requirements for electronic records.
+
+All data generated, processed, or stored by ${form.systemName} must conform to ALCOA+ principles as required by FDA Data Integrity Guidance (2018) and EU Annex 11:
+
+| ALCOA+ Principle | Requirement |
+|-----------------|-------------|
+| **Attributable** | All data entries, modifications, and deletions must be linked to a specific user with timestamp. Shared login accounts are prohibited. |
+| **Legible** | All records must be readable throughout the entire retention period (minimum 10 years for GMP; as per applicable regulation). |
+| **Contemporaneous** | Data must be recorded at the time of activity. Backdating of electronic records is prohibited by system design. |
+| **Original** | The first capture of data must be preserved. The system must not allow overwriting of original data without audit trail capture. |
+| **Accurate** | Data must reflect actual measurements, observations, or activities. Calculation algorithms must be validated. |
+| **Complete** | All required fields must be captured. No mandatory data fields may be left blank after record completion. |
+| **Consistent** | Date/time stamps must use a consistent, system-controlled clock. Time zone must be documented and consistently applied. |
+| **Enduring** | Data must be preserved in a durable, retrievable format for the required retention period. |
+| **Available** | Authorized users must be able to retrieve data for inspection, review, and regulatory inspection within a reasonable timeframe. |
+
+**21 CFR Part 11 Compliance Requirements:**
+- Unique user identification and authentication (§11.10(d))
+- Audit trail capturing date, time, operator ID, old value, and new value (§11.10(e))
+- Electronic signature application with printed name, date/time, and meaning (§11.50)
+- Signature manifestation linked to the electronic record (§11.70)
+- System access controls and security (§11.10(d), §11.10(g))
 
 ## 7. Interface Requirements
-Describe: system interfaces (databases, networks, other systems), data exchange formats (XML, HL7, JSON, CSV), network requirements, API interfaces, authentication protocols.
+
+| Interface | Description | Data Format | Protocol |
+|-----------|-------------|-------------|----------|
+| User Interface | Web browser / desktop client | HTML5 / native GUI | HTTPS |
+| Database | Relational database backend | SQL | Internal |
+| External Systems | As applicable to ${form.systemType} | XML/JSON/CSV | REST API / HL7 |
+| Instruments (if applicable) | Laboratory instrument integration | Vendor-specific | RS-232 / TCP/IP |
+| Backup System | Automated backup to designated server/cloud | Vendor-specific | Internal network |
+| Authentication | Active Directory / SSO (if applicable) | LDAP | Internal |
 
 ## 8. Performance Requirements
-| Performance Parameter | Requirement | Rationale |
+
+| Performance Parameter | Requirement | Test Method |
 |---|---|---|
-| System Availability | ≥99.5% uptime during business hours | Business continuity |
-| Response Time | <3 seconds for standard queries | User productivity |
-| Data Processing | <10 seconds for batch operations | Operational efficiency |
-| Backup Frequency | Daily incremental, weekly full | Data protection |
-| RTO (Recovery Time) | <4 hours | Business continuity |
-| RPO (Recovery Point) | <1 hour data loss | Data integrity |
+| System Availability | ≥ 99.5% during business hours (07:00–19:00) | Uptime monitoring over 30 days |
+| Response Time (Standard Query) | < 3 seconds under normal load | Performance testing during OQ |
+| Response Time (Complex Report) | < 15 seconds | Report generation testing |
+| Concurrent Users | Minimum ${form.riskLevel === "High" ? "50" : "25"} simultaneous users without degradation | Load testing during PQ |
+| Data Backup | Daily incremental; weekly full backup | IQ/OQ verification |
+| Recovery Time Objective (RTO) | < 4 hours for full system restoration | Disaster recovery drill during PQ |
+| Recovery Point Objective (RPO) | < 1 hour data loss | Backup/restore test during PQ |
+| Data Retention | Minimum 10 years (or as per applicable regulation) | Configuration verification |
 
 ## 9. Security Requirements
-List security requirements including: role-based access control, password policy (min 8 chars, complexity, 90-day expiry), account lockout (5 failed attempts), session timeout (30 minutes), audit trail for all critical events, electronic signature compliance (21 CFR Part 11 §11.50), encryption requirements.
+
+- **Authentication:** Unique user ID and password required; biometric or smart card optional enhancement
+- **Password Policy:** Minimum 8 characters; upper/lower case, number, and special character required; 90-day mandatory expiry; last 12 passwords remembered; account locked after 5 consecutive failed attempts
+- **Session Timeout:** Automatic session lock after 30 minutes of inactivity
+- **Role-Based Access Control:** Minimum three user roles (read-only, user, administrator); access rights assigned per job function following least-privilege principle
+- **Audit Trail:** Immutable audit trail for all GxP-critical events; audit trail entries include user ID, timestamp (UTC), action, record identifier, old value, and new value; audit trail cannot be deleted or modified by any user including administrator
+- **Electronic Signatures:** Compliant with 21 CFR Part 11 §11.50; signature includes name, date/time, and meaning; linked to record and cannot be reused or transferred
+- **Data Encryption:** Data in transit encrypted with TLS 1.2 or higher; sensitive data at rest encrypted with AES-256 or equivalent
+- **Network Security:** System accessible only from designated network segments; all unnecessary ports closed; firewall rules documented
 
 ## 10. Validation Approach
-Describe the risk-based validation strategy per GAMP 5 Second Edition. Include: validation lifecycle (V-model), testing tiers (DQ→IQ→OQ→PQ), risk-based test coverage, traceability from requirements to test cases, periodic review schedule.
+
+This system will be validated using a risk-based approach per GAMP 5 Second Edition using the V-model lifecycle:
+
+| Phase | Document | Description |
+|-------|----------|-------------|
+| Requirements | URS | User requirement definition (this document) |
+| Design | FS, DQ | Functional and design specification and qualification |
+| Build/Install | IQ | Verification of correct installation and configuration |
+| Testing | OQ | Functional testing against specifications |
+| User Acceptance | PQ | Performance testing in actual or simulated production environment |
+
+**Validation Scope:** ${scopeStr}
+
+Test coverage will be risk-based: GAMP Category ${form.gampCategory} systems require ${form.gampCategory === "5" ? "comprehensive testing of all custom code and configurations" : form.gampCategory === "4" ? "testing of all configured functions and interfaces" : "installation verification and configuration checks"}.
 
 ## 11. Acceptance Criteria
-List overall acceptance criteria: all Must requirements tested and passed, no critical open deviations, QA approval of all validation protocols, system released for intended use by [designated approver].
+
+The system will be considered validated and ready for GxP use when:
+
+1. All **Must** requirements have been tested and passed during OQ/PQ
+2. No **Critical** open deviations exist at system release
+3. All **Major** deviations have approved remediation plans with timeline
+4. QA Manager has reviewed and approved all validation documents
+5. All validation protocol deviations are formally closed or risk-accepted
+6. End-user training is completed and training records are available
+7. System SOPs are approved and available at point of use
 
 ## 12. Responsibilities
+
 | Role | Responsibilities |
 |------|----------------|
-| Validation Lead | Owns validation lifecycle, executes protocols |
-| QA Manager | Reviews and approves all documents |
-| IT/System Owner | Provides system access, technical support |
-| End User/SME | Provides requirements, executes UAT |
-| Project Manager | Coordination and timeline management |
+| Validation Lead | Owns validation strategy; authors protocols; coordinates execution |
+| QA Manager | Reviews and approves all validation documents and protocols |
+| IT / System Owner | Provides system access; resolves technical issues; owns change control |
+| End User / SME | Provides and confirms requirements; participates in UAT |
+| Vendor | Provides installation support, documentation, and test support |
+| Project Manager | Coordinates timeline, resources, and stakeholder communication |
 
 ## 13. Open Issues and Assumptions
-List open items, assumptions made, external dependencies, exclusions from scope.
+
+| Item | Description | Owner | Target Date |
+|------|-------------|-------|-------------|
+| A-001 | System infrastructure specifications to be confirmed by IT prior to DQ | IT Manager | Prior to DQ |
+| A-002 | Vendor qualification audit to be scheduled | QA Manager | Prior to IQ |
+| A-003 | End-user training curriculum to be developed in parallel | Training Lead | Prior to PQ |
+
+**Assumptions:**
+- System will be deployed in a controlled, validated IT environment
+- Vendor has a documented Quality Management System
+- Network infrastructure meets minimum security requirements
+- All end users will receive documented training prior to live use
 
 ## 14. Approval and Sign-off
+
 | Name | Title | Signature | Date |
 |------|-------|-----------|------|
 | | Validation Lead | | |
 | | QA Manager | | |
 | | System Owner | | |
 | | IT Manager | | |
+| | End User Representative | | |
 
-IMPORTANT: Generate comprehensive, specific content relevant to a ${form.systemType} system. All requirements and content must be technically correct and audit-ready per GAMP 5.`,
+*This document is DRAFT until all signatures are obtained. Approved version controls supersede all previous drafts.*`;
+  }
 
-    functionalSpec: `Generate a complete GAMP 5 Second Edition compliant Functional Specification (FS) document for ${form.systemName} (${form.systemType}).
+  if (docType === "functionalSpec") {
+    const fsReqs = reqs
+      .map((r, i) => {
+        const fsId = `FS-${String(i + 1).padStart(3, "0")}`;
+        const reqId = `REQ-${String(i + 1).padStart(3, "0")}`;
+        return `| ${fsId} | ${r.charAt(0).toUpperCase() + r.slice(1)} | ${reqId} | Must | ${i < 3 ? "High" : "Medium"} |`;
+      })
+      .join("\n");
 
-GAMP Category: ${form.gampCategory}
-Intended Use: ${form.intendedUse}
-User Requirements Basis: ${form.userRequirements}
-Risk Level: ${form.riskLevel}
-
-Generate the complete FS document using markdown formatting (## headings, | tables, - bullets):
+    return `# Functional Specification (FS)
 
 ## Document Control
+
 | Field | Value |
 |-------|-------|
 | Document Number | FS-${systemShortCode}-001 |
+| System Name | ${form.systemName} |
 | Version | 1.0 |
-| Status | Draft |
+| Status | Draft — Pending QA Review |
 | Date | ${today} |
 | Parent Document | URS-${systemShortCode}-001 |
 | Author | System Validation Team |
 | Approved By | [Pending] |
+| Regulatory Basis | GAMP 5 Second Edition, FDA 21 CFR Part 11, EU Annex 11 |
 
 ## Version History
+
 | Version | Date | Author | Description |
 |---------|------|--------|-------------|
-| 1.0 | ${today} | Validation Team | Initial Draft |
+| 1.0 | ${today} | Validation Team | Initial Draft based on URS-${systemShortCode}-001 |
 
 ## 1. Purpose and Scope
-Purpose of this FS, relationship to URS, scope of functional description.
+
+This Functional Specification (FS) describes how **${form.systemName}** will meet the requirements defined in URS-${systemShortCode}-001. The FS translates user requirements into testable functional descriptions and forms the basis for OQ test script development.
+
+The FS covers all GxP-critical functions of the **${form.systemType}** system including: ${form.intendedUse || `core ${form.systemType} functions, data management, user management, audit trail, reporting, and system administration`}.
+
+GAMP Category: **${form.gampCategory}** — ${gampCatDesc[form.gampCategory] || "Regulated computer system"}
 
 ## 2. System Architecture Overview
-Describe the overall system architecture for ${form.systemName}: hardware platform, software components, database architecture, network topology, integration points. Include a text-based architecture description.
 
-## 3. Functional Requirements
-For EACH functional requirement FS-001, FS-002, etc., provide:
-| FS ID | Description | URS Reference | Priority | Notes |
-Map each URS requirement (REQ-001+) to one or more functional specifications. Include at least 15 functional requirements specific to a ${form.systemType}. Cover: user management, data entry, data retrieval, calculations, reporting, audit trail, electronic signatures, backup/restore, system configuration.
+### 2.1 Hardware Architecture
+
+**${form.systemName}** is deployed on the following hardware platform:
+
+| Component | Specification | Role |
+|-----------|--------------|------|
+| Application Server | Minimum: 8-core CPU, 32 GB RAM, 500 GB SSD | Application hosting |
+| Database Server | Minimum: 8-core CPU, 64 GB RAM, 2 TB RAID | Data storage |
+| Backup Server | 4-core CPU, 8 TB NAS | Automated backup |
+| Client Workstations | 4-core CPU, 8 GB RAM, modern browser | User access |
+| Network | 1 Gbps LAN; segregated VLAN | Connectivity |
+| UPS | Online UPS with 4-hour runtime | Power continuity |
+
+### 2.2 Software Architecture
+
+| Component | Description | Version |
+|-----------|-------------|---------|
+| Application Software | ${form.systemName} core application | As per DQ |
+| Database Management System | Relational DBMS (validated) | As per DQ |
+| Operating System | Windows Server 2019 or equivalent (validated) | As per DQ |
+| Web Server | IIS / Apache / Nginx | As per DQ |
+| Backup Software | Automated backup solution | As per DQ |
+| Antivirus | Validated endpoint protection | As per DQ |
+
+### 2.3 Data Architecture
+
+All GxP data is stored in a validated relational database. Data fields capture: record identifier, content, creation timestamp (UTC), creator user ID, last modification timestamp, modifier user ID, and record status. Deleted records are logically deleted (flagged) and retained in audit trail; physical deletion is prohibited.
+
+## 3. Functional Requirements Traceability
+
+| FS ID | Functional Description | URS Reference | Priority | Risk |
+|-------|------------------------|---------------|----------|------|
+${fsReqs}
+| FS-${String(reqs.length + 1).padStart(3, "0")} | System shall provide complete, immutable audit trail for all data operations | REQ-002 | Must | High |
+| FS-${String(reqs.length + 2).padStart(3, "0")} | System shall enforce electronic signature requirements per 21 CFR Part 11 §11.50 | REQ-003 | Must | High |
+| FS-${String(reqs.length + 3).padStart(3, "0")} | System shall generate PDF and/or Excel reports on demand and scheduled basis | REQ-007 | Must | Medium |
+| FS-${String(reqs.length + 4).padStart(3, "0")} | System shall enforce RBAC with minimum three user roles | REQ-001 | Must | High |
 
 ## 4. User Interface Requirements
-Describe UI layout, navigation, accessibility requirements, responsive design, error messaging standards, field validation rules, data entry controls.
 
-## 5. Interface Requirements
-- **System Interfaces:** List all external systems and integration specifications
-- **Data Interfaces:** Data formats, exchange protocols, transformation rules
-- **Hardware Interfaces:** Servers, printers, scanners, instruments
-- **Network Interfaces:** Protocols, ports, firewall requirements
+- **Layout:** Clean, consistent interface with navigation menu, breadcrumb trail, and context-sensitive help
+- **Accessibility:** WCAG 2.1 Level AA compliance; keyboard navigable; screen-reader compatible
+- **Data Entry:** Mandatory fields clearly marked; inline validation with specific error messages; auto-populated fields where applicable
+- **Confirmation:** Destructive actions require explicit confirmation dialogs; bulk operations require double confirmation
+- **Error Handling:** All errors displayed with specific message, error code, and recommended corrective action
+- **Responsive Design:** Functional on desktop (1920×1080 minimum) and tablet (1024×768 minimum)
+- **Session Indication:** Current user name, role, and session expiry time displayed at all times
 
-## 6. Security and Access Control
-Describe: user roles and permission matrix, authentication mechanism, session management, data encryption (at rest and in transit), network security, physical security considerations.
+## 5. User Management and Access Control
 
-## 7. Audit Trail and Data Integrity
-Describe audit trail implementation per 21 CFR Part 11: what events are logged, audit trail fields (user ID, timestamp, old value, new value, reason for change), audit trail protection (read-only, tamper-evident), ALCOA+ compliance measures.
+| Role | Permissions | Examples |
+|------|------------|---------|
+| Read-Only User | View records; generate reports; no data modification | Auditors, Management |
+| Standard User | Create, modify, and submit records per job function; cannot approve own records | Lab Technicians, Analysts |
+| Supervisor / Reviewer | All Standard User permissions plus review and approve records | QA Reviewer, Supervisor |
+| System Administrator | User management; system configuration; no GxP data modification | IT Administrator |
 
-## 8. Reporting and Output Requirements
-List all required reports with specifications: report name, data fields, filters, format (PDF/Excel/CSV), access control, scheduled vs. on-demand.
+**Access Control Rules:**
+- No shared user accounts; each user has unique credentials
+- Concurrent session limit: 3 sessions per user maximum
+- Account lockout: 5 consecutive failed login attempts → 30 minute lockout (administrator override available)
+- Password requirements: minimum 8 characters, complexity enforced, 90-day expiry, 12-password history
+- Privileged access (admin) requires secondary authentication
 
-## 9. Error Handling and Validation
-Input validation rules, error message standards, system fault handling, recovery procedures, data backup on failure.
+## 6. Audit Trail Specification
 
-## 10. Performance and Scalability
-Technical performance specifications, database capacity planning, concurrent user support, archiving strategy.
+The system shall maintain an immutable audit trail capturing:
 
-## 11. Installation and Configuration Requirements
-Server requirements, software prerequisites, configuration parameters, network requirements, environment-specific settings (Dev/Test/Prod).
+| Field | Description |
+|-------|-------------|
+| Event Timestamp | UTC date and time to second precision; system-controlled clock |
+| User ID | Unique identifier of the user performing the action |
+| User Name | Full name of the user |
+| User Role | Role at time of action |
+| Event Type | Create / Modify / Delete / Login / Logout / Export / Print / Signature |
+| Record Type | Type of GxP record affected |
+| Record Identifier | Unique ID of the record |
+| Field Name | Name of the field modified (for Modify events) |
+| Old Value | Previous value (for Modify/Delete events) |
+| New Value | New value (for Create/Modify events) |
+| Reason for Change | Required for critical record modifications |
+| Computer Name | Hostname/IP of client workstation |
 
-## 12. Traceability to URS
-| FS ID | FS Description Summary | URS Ref | Status |
-|-------|----------------------|---------|--------|
-List all FS requirements mapped to URS requirements.
+**Audit Trail Protection:** Audit trail records are read-only for all users including administrators. No user can delete, modify, or disable the audit trail. Audit trail integrity is verified by periodic automated hash checks.
 
-## 13. Approval and Sign-off
+## 7. Electronic Signature Requirements
+
+Per 21 CFR Part 11 §11.50 and §11.70, electronic signatures shall:
+
+1. Include the printed name of the signer, date/time of signing (UTC), and meaning of the signature
+2. Be permanently linked to the signed record; if the record changes, the signature is invalidated
+3. Require user to re-authenticate (enter password) at time of signing
+4. Be non-repudiable: signers cannot deny their signature
+5. Appear in printed/exported form of the signed record
+
+## 8. Reporting Specification
+
+| Report Name | Data Fields | Format | Access | Trigger |
+|-------------|------------|--------|--------|---------|
+| Audit Trail Report | All audit fields; date range filter; user filter | PDF, CSV | QA, Admin | On demand |
+| User Activity Report | User ID, actions, timestamps; date range | PDF, CSV | Admin, QA | On demand / Scheduled |
+| Data Integrity Report | Record counts, modification rates, anomalies | PDF | QA Manager | Scheduled (weekly) |
+| System Usage Report | Login counts, session durations, error rates | PDF, Excel | Admin | Scheduled (monthly) |
+| Primary ${form.systemType} Report | All business-process fields; configurable filters | PDF, Excel | All roles | On demand / Scheduled |
+
+## 9. Interface Specifications
+
+| Interface | System | Data Direction | Format | Frequency | Validation Method |
+|-----------|--------|---------------|--------|-----------|------------------|
+| User Authentication | Active Directory / LDAP | Bidirectional | LDAP | Real-time | IQ + OQ |
+| Data Backup | Backup Server | Export | Compressed binary | Daily/Weekly | IQ + PQ |
+| Report Export | File System / Email | Export | PDF, CSV, Excel | On demand | OQ |
+| Instrument (if applicable) | Laboratory Instrument | Import | Vendor format | Real-time | OQ |
+
+## 10. Data Backup and Recovery
+
+- **Backup Frequency:** Daily incremental; weekly full; monthly archive
+- **Backup Verification:** Automated integrity check after each backup; restore test quarterly
+- **Recovery Time Objective (RTO):** System fully operational within 4 hours of declared disaster
+- **Recovery Point Objective (RPO):** Maximum 1 hour of data loss
+- **Backup Location:** Primary backup on-site; secondary backup off-site or cloud (geographically separated)
+- **Backup Encryption:** All backups encrypted with AES-256; encryption keys managed separately from data
+
+## 11. Traceability to URS
+
+All FS items in Section 3 are directly traceable to URS-${systemShortCode}-001 requirements. No URS requirement is without a corresponding FS entry. The complete traceability is maintained in the Validation Traceability Matrix (RTM-${systemShortCode}-001).
+
+## 12. Approval and Sign-off
+
 | Name | Title | Signature | Date |
 |------|-------|-----------|------|
-| | System Architect | | |
+| | System Architect / Developer | | |
 | | Validation Lead | | |
 | | QA Manager | | |
+| | IT Manager | | |`;
+  }
 
-Generate technically accurate, GAMP 5 compliant content specific to ${form.systemType} systems.`,
+  if (docType === "riskAssessment") {
+    const riskItems = [
+      {
+        func: "User Authentication",
+        fail: "Unauthorized system access",
+        cause: "Weak passwords or credential sharing",
+        effect: "Unauthorized data access; GxP data integrity compromise",
+        s: 5,
+        p: 3,
+        d: 2,
+        controls:
+          "Password policy enforcement; account lockout; audit trail; RBAC; MFA option",
+      },
+      {
+        func: "Audit Trail",
+        fail: "Audit trail corruption or deletion",
+        cause: "Software defect; unauthorized admin action",
+        effect: "Loss of regulatory required records; 21 CFR Part 11 violation",
+        s: 5,
+        p: 2,
+        d: 2,
+        controls:
+          "Read-only audit trail; integrity hashing; periodic verification; no admin delete",
+      },
+      {
+        func: "Electronic Signatures",
+        fail: "Signature falsification or reuse",
+        cause: "Weak authentication; software defect",
+        effect: "Invalid approval records; regulatory non-compliance",
+        s: 5,
+        p: 2,
+        d: 2,
+        controls:
+          "Re-authentication at signing; signature permanently bound to record; OQ testing",
+      },
+      {
+        func: "Data Entry",
+        fail: "Incorrect data entry accepted",
+        cause: "Insufficient input validation; user error",
+        effect: "Incorrect GxP records; quality decisions based on wrong data",
+        s: 4,
+        p: 3,
+        d: 2,
+        controls:
+          "Range checks; mandatory fields; data type validation; supervisor review workflow",
+      },
+      {
+        func: "Backup and Recovery",
+        fail: "Data loss after system failure",
+        cause: "Backup failure; hardware failure",
+        effect: "Permanent loss of GxP records; regulatory non-compliance",
+        s: 5,
+        p: 2,
+        d: 3,
+        controls:
+          "Automated daily backups; integrity verification; quarterly restore tests; off-site copy",
+      },
+      {
+        func: "System Availability",
+        fail: "System downtime during critical operations",
+        cause: "Hardware failure; software crash; network outage",
+        effect: "Disruption to GxP operations; delayed reporting",
+        s: 4,
+        p: 3,
+        d: 2,
+        controls:
+          "Redundant hardware; UPS; monitoring; failover; documented downtime procedures",
+      },
+      {
+        func: "Data Calculations",
+        fail: "Incorrect calculations or data processing",
+        cause: "Software defect; incorrect configuration",
+        effect:
+          "Wrong quality decisions; patient safety risk if lab results affected",
+        s: 5,
+        p: 2,
+        d: 2,
+        controls:
+          "Calculation algorithm validation; OQ testing with verified reference data; periodic re-validation",
+      },
+      {
+        func: "Interface / Integration",
+        fail: "Interface failure with external system",
+        cause: "Network failure; data format change; API error",
+        effect: "Missing data; data corruption at transfer; duplicate records",
+        s: 4,
+        p: 3,
+        d: 2,
+        controls:
+          "Interface IQ/OQ testing; error handling and alerting; data reconciliation; retry logic",
+      },
+      {
+        func: "User Training",
+        fail: "Incorrect system use due to training deficiency",
+        cause: "Insufficient training; high staff turnover",
+        effect: "Data entry errors; workflow deviations; audit findings",
+        s: 3,
+        p: 3,
+        d: 3,
+        controls:
+          "Mandatory training before system access; competency assessment; SOP availability; re-training on updates",
+      },
+      {
+        func: "Change Control",
+        fail: "Unauthorized system changes",
+        cause: "Insufficient change control process",
+        effect: "Unvalidated system state; data integrity risk",
+        s: 5,
+        p: 2,
+        d: 2,
+        controls:
+          "Formal change control SOP; change testing and re-validation; approval workflow",
+      },
+      {
+        func: "Cybersecurity",
+        fail: "Cyber attack or data breach",
+        cause: "Malware; phishing; network vulnerability",
+        effect: "Data breach; system compromise; GxP record integrity risk",
+        s: 5,
+        p: 2,
+        d: 3,
+        controls:
+          "Firewall; antivirus; patch management; network segmentation; security monitoring; penetration testing",
+      },
+      {
+        func: "Hardware Failure",
+        fail: "Critical hardware component failure",
+        cause: "Aging hardware; physical damage; power surge",
+        effect: "System downtime; potential data loss",
+        s: 4,
+        p: 2,
+        d: 2,
+        controls:
+          "Redundant components; UPS; hardware maintenance schedule; vendor SLA; spare parts inventory",
+      },
+    ];
 
-    riskAssessment: `Generate a complete GAMP 5 Second Edition and ICH Q9 compliant Risk Assessment document for ${form.systemName} (${form.systemType}, GAMP Category ${form.gampCategory}).
+    const fmeaRows = riskItems
+      .map((item, i) => {
+        const rpn = item.s * item.p * item.d;
+        const riskLevel = rpn >= 37 ? "High" : rpn >= 13 ? "Medium" : "Low";
+        const residualRpn = Math.max(2, Math.round(rpn * 0.4));
+        return `| RI-${String(i + 1).padStart(3, "0")} | ${item.func} | ${item.fail} | ${item.cause} | ${item.effect} | ${item.s} | ${item.p} | ${item.d} | **${rpn}** | ${riskLevel} | ${item.controls} | ${residualRpn} |`;
+      })
+      .join("\n");
 
-Overall Risk Level: ${form.riskLevel}
-Intended Use: ${form.intendedUse}
-User Requirements: ${form.userRequirements}
-
-Generate the full Risk Assessment using markdown formatting:
+    return `# Risk Assessment
 
 ## Document Control
+
 | Field | Value |
 |-------|-------|
 | Document Number | RA-${systemShortCode}-001 |
+| System Name | ${form.systemName} |
+| System Type | ${form.systemType} |
+| GAMP Category | Category ${form.gampCategory} |
 | Version | 1.0 |
-| Status | Draft |
+| Status | Draft — Pending QA Approval |
 | Date | ${today} |
-| Methodology | FMEA (Failure Mode and Effects Analysis) |
+| Methodology | FMEA (Failure Mode and Effects Analysis) per ICH Q9 |
 | Risk Threshold | RPN > 12 requires mitigation |
+| Regulatory Basis | GAMP 5 Second Edition, ICH Q9, FDA 21 CFR Part 11 |
 
 ## Version History
+
 | Version | Date | Author | Description |
 |---------|------|--------|-------------|
 | 1.0 | ${today} | Validation Team | Initial Risk Assessment |
 
 ## 1. Purpose and Scope
-Purpose of this risk assessment, scope (system components, processes, data flows), relationship to GAMP 5 risk-based validation approach, and ICH Q9 risk management principles applied.
+
+This Risk Assessment applies the FMEA methodology per ICH Q9 and GAMP 5 Second Edition principles to identify, evaluate, and mitigate risks associated with **${form.systemName}** (${form.systemType}, GAMP Category ${form.gampCategory}).
+
+**Intended Use:** ${form.intendedUse || `${form.systemType} for GxP pharmaceutical operations`}
+
+**Overall System Risk Level:** **${form.riskLevel}** — ${riskDesc[form.riskLevel]}
+
+**Scope:** This assessment covers risks to patient safety, product quality, data integrity, and regulatory compliance arising from computerised system failures, data integrity breaches, cybersecurity vulnerabilities, and operational errors.
 
 ## 2. Risk Assessment Methodology
+
 ### 2.1 FMEA Approach
-Describe FMEA methodology: identify potential failure modes, their causes, and effects on patient safety, data integrity, and product quality.
+
+For each system function, potential failure modes are identified along with their probable causes and effects on patient safety, product quality, and data integrity. Risk controls are identified and residual risk is assessed after control implementation.
 
 ### 2.2 Risk Scoring
+
 | Factor | Scale | Definition |
 |--------|-------|-----------|
-| Severity (S) | 1-5 | Impact on patient safety/data integrity |
-| Probability (P) | 1-5 | Likelihood of occurrence |
-| Detectability (D) | 1-5 | Ability to detect before impact |
-| **RPN** | S × P × D | Risk Priority Number (max 125) |
+| Severity (S) | 1–5 | 1=Negligible, 3=Moderate (data integrity risk), 5=Critical (patient safety / regulatory action) |
+| Probability (P) | 1–5 | 1=Remote (rare), 3=Occasional (could occur), 5=Frequent (occurs regularly) |
+| Detectability (D) | 1–5 | 1=Certain detection, 3=Likely detection, 5=Very unlikely to detect |
+| **RPN** | S × P × D | **Risk Priority Number (maximum 125)** |
 
 ### 2.3 Risk Acceptance Criteria
-| RPN Range | Risk Level | Action Required |
+
+| RPN Range | Risk Level | Required Action |
 |-----------|-----------|----------------|
-| 1-12 | Low | Accept; standard controls apply |
-| 13-36 | Medium | Mitigate; additional controls required |
-| 37-125 | High | Must mitigate; re-assess after controls |
+| 1–12 | **Low** | Accept with standard controls |
+| 13–36 | **Medium** | Mitigate with additional controls; re-assess |
+| 37–125 | **High** | Must mitigate; re-assess before system release |
 
 ## 3. System Risk Classification
-GAMP Category ${form.gampCategory} justification, overall system risk classification for ${form.systemType}, GxP impact analysis.
+
+**GAMP Category ${form.gampCategory}:** ${gampCatDesc[form.gampCategory] || "Regulated system requiring risk-based validation."}
+
+**GxP Impact Classification:** This system directly supports GxP-critical processes. Any failure could impact product quality decisions or regulatory submissions. **Full validation is mandatory.**
+
+**Overall Risk Level Before Mitigation:** ${form.riskLevel}
+
+**Target Residual Risk Level:** Low (all RPN targets < 12 after controls)
 
 ## 4. Risk Inventory — Failure Mode and Effects Analysis
-Generate a comprehensive FMEA table with at least 12 specific risk items for ${form.systemType}. For EACH risk:
 
-| Risk ID | System Function | Failure Mode | Potential Cause | Effect on Patient/Data | S | P | D | RPN | Risk Level | Mitigation Controls | Residual RPN |
+| Risk ID | System Function | Failure Mode | Probable Cause | Effect on Patient/Data | S | P | D | RPN | Risk Level | Mitigation Controls | Residual RPN |
 |---------|----------------|-------------|----------------|----------------------|---|---|---|-----|-----------|-------------------|-------------|
-
-Include risks covering:
-- Unauthorized access / access control failure
-- Audit trail corruption or deletion
-- Data loss or corruption
-- Electronic signature falsification
-- System downtime / availability
-- Incorrect calculations or data processing
-- Interface failure (data exchange)
-- Backup and recovery failure
-- Software configuration changes
-- User training deficiency
-- Network failure / cybersecurity
-- Hardware failure
+${fmeaRows}
 
 ## 5. Critical Function Identification
-List all GxP-critical functions identified, their criticality justification, and validation approach.
+
+The following functions are identified as GxP-Critical and require priority attention during validation:
+
+| Function | Criticality Justification | Validation Approach |
+|----------|--------------------------|---------------------|
+| User Authentication & Access Control | Unauthorized access could compromise GxP data integrity | OQ — all role restrictions tested |
+| Audit Trail | Required by 21 CFR Part 11; loss = regulatory non-compliance | OQ — all events verified; immutability tested |
+| Electronic Signatures | Required by 21 CFR Part 11 §11.50 | OQ — signature binding, re-authentication, manifestation |
+| Data Calculations | Incorrect results could affect quality decisions | OQ — verified against known reference values |
+| Backup and Recovery | Data loss = unrecoverable GxP record loss | IQ/PQ — automated backup + restore drill |
 
 ## 6. Risk Summary
+
 | Risk Level | Count Before Mitigation | Count After Mitigation |
 |-----------|------------------------|----------------------|
-| High | X | X |
-| Medium | X | X |
-| Low | X | X |
+| High | ${riskItems.filter((r) => r.s * r.p * r.d >= 37).length} | 0 |
+| Medium | ${
+      riskItems.filter((r) => {
+        const rpn = r.s * r.p * r.d;
+        return rpn >= 13 && rpn < 37;
+      }).length
+    } | ${Math.round(
+      riskItems.filter((r) => {
+        const rpn = r.s * r.p * r.d;
+        return rpn >= 13 && rpn < 37;
+      }).length * 0.3,
+    )} |
+| Low | ${riskItems.filter((r) => r.s * r.p * r.d < 13).length} | ${riskItems.length} |
 
-Overall residual risk assessment and acceptability statement.
+**Overall Residual Risk Assessment:** After implementation of all identified mitigation controls and completion of validation testing, the residual risk of **${form.systemName}** is assessed as **ACCEPTABLE** for its intended GxP use.
 
-## 7. Risk Control Measures
-List all mitigation controls implemented, verification method, and responsible party.
+## 7. Risk Control Measures Summary
+
+| Control Category | Controls Implemented | Verification Method |
+|-----------------|---------------------|---------------------|
+| Access Security | RBAC; password policy; lockout; MFA option | OQ test case |
+| Audit Trail | Immutable trail; hashing; no delete | OQ test case |
+| Data Integrity | Input validation; range checks; review workflow | OQ test case |
+| Business Continuity | Redundancy; UPS; backup; DR plan | IQ + PQ drill |
+| Change Management | Formal change control; re-validation trigger | Procedural (SOP) |
+| Training | Mandatory training; competency assessment | Training records |
 
 ## 8. Periodic Risk Review
-Schedule for periodic risk review, trigger criteria for re-assessment, change control integration.
+
+This risk assessment shall be reviewed:
+- Annually as part of the periodic system review
+- Following any significant change to the system (configuration, software update, infrastructure change)
+- Following any GxP deviation, data integrity incident, or security breach
+- Following a change in applicable regulations or guidance
 
 ## 9. Approval and Sign-off
+
 | Name | Title | Signature | Date |
 |------|-------|-----------|------|
 | | Risk Assessment Lead | | |
 | | QA Manager | | |
 | | System Owner | | |
+| | IT / Security Manager | | |`;
+  }
 
-Generate specific, technically accurate risk items for a ${form.systemType} in a pharmaceutical/regulated environment.`,
-
-    dq: `Generate a complete GAMP 5 Second Edition compliant Design Qualification (DQ) document for ${form.systemName} (${form.systemType}, GAMP Category ${form.gampCategory}).
-
-Intended Use: ${form.intendedUse}
-Risk Level: ${form.riskLevel}
-User Requirements: ${form.userRequirements}
-
-Generate the full DQ document using markdown formatting:
+  if (docType === "dq") {
+    return `# Design Qualification (DQ)
 
 ## Document Control
+
 | Field | Value |
 |-------|-------|
 | Document Number | DQ-${systemShortCode}-001 |
+| System Name | ${form.systemName} |
 | Version | 1.0 |
 | Status | Draft |
 | Date | ${today} |
-| Author | Validation Team |
 | Parent Documents | URS-${systemShortCode}-001, FS-${systemShortCode}-001 |
+| Author | Validation Team |
+| Regulatory Basis | GAMP 5 Second Edition, FDA 21 CFR Part 11 |
 
 ## Version History
+
 | Version | Date | Author | Description |
 |---------|------|--------|-------------|
 | 1.0 | ${today} | Validation Team | Initial Draft |
 
 ## 1. Purpose and Scope
-Purpose of Design Qualification for ${form.systemName}, relationship to URS and FS, GAMP 5 DQ principles. DQ confirms that the proposed design of the system meets the user requirements and is fit for intended purpose.
+
+This Design Qualification (DQ) confirms that the proposed design of **${form.systemName}** meets the user requirements defined in URS-${systemShortCode}-001 and is suitable for its intended use. DQ verifies that the design is documented, reviewed, and approved prior to system procurement or build.
+
+GAMP Category: **${form.gampCategory}** — ${gampCatDesc[form.gampCategory] || "Regulated system."}
 
 ## 2. Design Description
+
 ### 2.1 Hardware Architecture
-Describe server specifications, client workstations, network components, storage systems, redundancy/failover design.
+
+| Component | Specification | Justification |
+|-----------|--------------|---------------|
+| Application Server | ≥8-core CPU, ≥32 GB RAM, ≥500 GB SSD RAID | Supports expected concurrent user load and response time requirements |
+| Database Server | ≥8-core CPU, ≥64 GB RAM, ≥2 TB RAID-10 | Data integrity; performance; redundancy |
+| Network | 1 Gbps LAN; dedicated VLAN; firewall | Security segregation; performance |
+| UPS | Online UPS ≥4 hour runtime | RTO requirement; protects against power failures |
+| Backup System | Network-attached storage; off-site replication | RPO < 1 hour; disaster recovery |
 
 ### 2.2 Software Architecture
-Operating system, application software, database management system, middleware, integration components. Version numbers and vendor information.
 
-### 2.3 System Configuration
-Key configuration parameters, environment specifications (CPU, RAM, disk), network configuration, security configuration baseline.
+| Component | Description | Validation Status |
+|-----------|-------------|------------------|
+| ${form.systemName} Application | Core ${form.systemType} application | To be validated |
+| DBMS | Validated relational database | Vendor-qualified |
+| Operating System | Validated server OS (Windows Server 2019+) | Vendor-qualified |
+| Backup Software | Automated enterprise backup | Vendor-qualified |
+| Security / Antivirus | Endpoint protection | Configuration qualified |
 
-## 3. Vendor Assessment (GAMP Category ${form.gampCategory})
-| Assessment Criteria | Vendor Response | Acceptable |
-|---------------------|----------------|-----------|
-| Quality Management System | ISO 9001 certified | Yes/No |
-| Software Development Process | Documented SDLC | Yes/No |
-| Testing and QA Procedures | Unit/Integration/UAT | Yes/No |
-| Change Control Process | Formal change management | Yes/No |
-| Support and Maintenance | SLA documentation available | Yes/No |
-| Regulatory Experience | Previous FDA/EMA submissions | Yes/No |
-| Source Code Access | Available under escrow | Yes/No |
+### 2.3 Security Architecture
 
-Vendor qualification approach per GAMP 5 Category ${form.gampCategory} requirements.
+- Authentication: Username + password; optional MFA for elevated privilege
+- Authorization: RBAC with least-privilege; roles: Read-Only, User, Supervisor, Admin
+- Encryption: TLS 1.2+ for data in transit; AES-256 for sensitive data at rest
+- Audit Trail: Immutable, server-side; accessible to QA; hash-verified integrity
+
+## 3. Vendor Assessment — GAMP Category ${form.gampCategory}
+
+| Assessment Criteria | Finding | Acceptable |
+|---------------------|---------|-----------|
+| Quality Management System | ISO 9001 or equivalent documented | Required |
+| Software Development Lifecycle | Documented SDLC / Agile with testing phases | Required |
+| Software Testing Documentation | Unit, integration, and UAT records available | Required |
+| Formal Change Control Process | Version-controlled releases; change log maintained | Required |
+| Customer Support and Maintenance SLA | Documented SLA ≥ 98% uptime; patch response time defined | Required |
+| Regulatory Compliance Experience | Prior FDA/EMA audit experience; regulatory submissions supported | Preferred |
+| Source Code Access / Escrow | Available under escrow agreement for Category 5 | ${form.gampCategory === "5" ? "Required" : "Preferred"} |
+| Validation Package Availability | IQ/OQ scripts; test results; validation documentation supplied | Required |
 
 ## 4. Design Qualification Test Cases
 
-Generate at least 8 DQ test cases for ${form.systemType}. For each:
+| DQ Test ID | Design Element | URS/FS Reference | Design Specification | Acceptance Criteria | Result |
+|-----------|---------------|-----------------|--------------------|--------------------|--------|
+| DQ-001 | Hardware: Server Specifications | URS REQ-008 | CPU ≥8-core, RAM ≥32 GB, SSD RAID | Hardware procurement spec matches or exceeds URS requirement | Pass / Fail |
+| DQ-002 | Software: Application Version | FS-${systemShortCode}-001 §2.2 | Specified software version per approved procurement | Installed version matches approved version in DQ | Pass / Fail |
+| DQ-003 | Security: Access Control Design | URS REQ-001 | RBAC design with minimum 3 roles; no shared accounts | Security design specification addresses all URS security requirements | Pass / Fail |
+| DQ-004 | Audit Trail: Design Review | URS REQ-002 | Immutable server-side audit trail; 10-field minimum; no-delete | Audit trail design meets 21 CFR Part 11 §11.10(e) requirements | Pass / Fail |
+| DQ-005 | Electronic Signature Design | URS REQ-003 | Signature includes name, date/time (UTC), meaning; linked to record | E-sig design compliant with 21 CFR Part 11 §11.50 | Pass / Fail |
+| DQ-006 | Database Design Review | FS-${systemShortCode}-001 §2.3 | Relational DBMS; referential integrity; transaction logging | Database design supports ALCOA+ requirements | Pass / Fail |
+| DQ-007 | Backup and Recovery Design | URS REQ-005 | Daily backup; RPO <1h; RTO <4h | Backup/recovery design meets URS performance requirements | Pass / Fail |
+| DQ-008 | Network Security Design | URS REQ-009 | Dedicated VLAN; firewall rules; TLS 1.2+ | Network design meets security requirements; no unauthorized ports | Pass / Fail |
+| DQ-009 | Interface Design Review | FS-${systemShortCode}-001 §9 | All interfaces documented; data formats specified; error handling | Interface design addresses all integration requirements in FS | Pass / Fail |
+| DQ-010 | Performance Design Review | URS REQ-004 | Architecture supports ≥${form.riskLevel === "High" ? "50" : "25"} concurrent users at <3s response time | Load capacity design meets performance URS requirements | Pass / Fail |
 
-| DQ Test ID | Design Element | Requirement Reference | Design Specification | Acceptance Criteria | Result |
-|-----------|---------------|---------------------|--------------------|--------------------|--------|
+## 5. DQ Conclusion
 
-Include tests covering: hardware specifications vs URS, software version verification, security architecture design review, database design review, interface design review, backup/recovery design, network design, user access design.
+Design review confirms that the proposed design of **${form.systemName}** addresses all URS requirements. No critical design gaps have been identified. The system design is approved to proceed to procurement/build and Installation Qualification.
 
-## 5. Design Review Records
-### 5.1 Formal Design Review
-Date, attendees, design issues identified, resolutions, action items.
+## 6. Approval and Sign-off
 
-### 5.2 Design Review Outcomes
-| Review Item | Status | Comments |
-|-------------|--------|----------|
-
-## 6. Traceability to URS and FS
-| DQ ID | Design Element | URS Ref | FS Ref | Status |
-|-------|---------------|---------|--------|--------|
-
-## 7. Open Design Issues
-List any open design issues, deviations from requirements, risk items identified during DQ, action items and owners.
-
-## 8. DQ Conclusion
-Summary of design qualification, overall assessment of design adequacy, recommendation to proceed to IQ.
-
-## 9. Approval and Sign-off
 | Name | Title | Signature | Date |
 |------|-------|-----------|------|
 | | System Architect | | |
 | | Validation Lead | | |
 | | QA Manager | | |
+| | IT Manager | | |`;
+  }
 
-Generate technically accurate DQ content specific to ${form.systemType} systems in a pharmaceutical/GxP environment.`,
-
-    iqProtocol: `Generate a complete GAMP 5 Second Edition compliant Installation Qualification (IQ) Protocol for ${form.systemName} (${form.systemType}, GAMP Category ${form.gampCategory}).
-
-Risk Level: ${form.riskLevel}
-Intended Use: ${form.intendedUse}
-Validation Scope: ${scopeStr}
-
-Generate the full IQ Protocol using markdown formatting:
+  if (docType === "iqProtocol") {
+    return `# Installation Qualification (IQ) Protocol
 
 ## Document Control
+
 | Field | Value |
 |-------|-------|
 | Document Number | IQ-${systemShortCode}-001 |
+| System Name | ${form.systemName} |
 | Version | 1.0 |
-| Status | Draft |
+| Status | Draft — Pending Execution |
 | Date | ${today} |
+| Pre-requisites | DQ-${systemShortCode}-001 Approved |
 | Protocol Type | Installation Qualification |
-| Parent Documents | DQ-${systemShortCode}-001, FS-${systemShortCode}-001 |
+| Environment | ${form.riskLevel === "High" ? "Production (GxP)" : "Test / Staging"} |
 
 ## Version History
+
 | Version | Date | Author | Description |
 |---------|------|--------|-------------|
 | 1.0 | ${today} | Validation Team | Initial Protocol |
 
 ## 1. Purpose and Scope
-The IQ Protocol verifies that ${form.systemName} has been installed correctly, in accordance with the vendor specifications and approved design qualification, and that all components are present and documented.
+
+This IQ Protocol verifies that **${form.systemName}** and its supporting infrastructure are installed correctly, completely, and in accordance with the Design Qualification (DQ-${systemShortCode}-001) and vendor installation guide.
+
+IQ confirms the correct installation environment exists and that all components are present, correctly versioned, and configured as specified before functional testing begins.
 
 ## 2. Pre-requisites
-- Design Qualification (DQ-${systemShortCode}-001) completed and approved
-- Server environment provisioned and available
-- Software installation media / access provided by vendor
-- Installation guide and configuration documentation received
-- IQ execution team trained and authorized
 
-## 3. Responsibilities
-| Role | Responsibility |
-|------|---------------|
-| IQ Executor | Execute all test cases, record actual results |
-| Witness | Witness critical steps, co-sign results |
-| Validation Lead | Review completed protocol, raise deviations |
-| IT Administrator | Provide system access, technical support |
-| QA Reviewer | Review and approve completed IQ |
+- DQ-${systemShortCode}-001 reviewed and approved by QA
+- Vendor installation guide obtained and reviewed
+- Hardware provisioned and network configured per DQ specifications
+- Test environment designated, segregated, and documented
+- All IQ executors trained and authorised
+
+## 3. IQ Environment
+
+| Parameter | Specification | Actual (to be completed during execution) |
+|-----------|--------------|------------------------------------------|
+| Environment | ${form.riskLevel === "High" ? "Production (GxP Environment)" : "Validated Test Environment"} | |
+| Server Hostname | As per DQ | |
+| IP Address | As per network configuration | |
+| Date of Installation | | |
+| IQ Executor | | |
+| IQ Approver (QA) | | |
 
 ## 4. IQ Test Cases
-Generate at least 12 detailed IQ test cases for ${form.systemType}. For EACH test case:
+
+---
 
 **IQ-001: Hardware Specification Verification**
-- **Objective:** Verify installed hardware meets DQ specifications
-- **Prerequisites:** Physical access to server room, DQ document
-- **Test Steps:**
-  1. Access server hardware inventory
-  2. Verify CPU model and speed against specification
-  3. Verify RAM capacity against specification
-  4. Verify storage capacity and configuration
-  5. Verify network interface specifications
-- **Expected Result:** All hardware specifications match DQ-approved design
+- **Objective:** Verify that installed hardware meets DQ-approved specifications
+- **Risk Level:** Medium
+- **URS Reference:** REQ-004 (Performance)
+- **Procedure:**
+  1. Obtain hardware inventory report from server/IT
+  2. Compare CPU model and core count against DQ specification
+  3. Compare installed RAM against DQ specification (minimum 32 GB)
+  4. Compare storage capacity and RAID configuration against DQ specification
+  5. Document actual hardware specifications
+- **Acceptance Criteria:** All hardware specifications equal to or exceed DQ-approved minimum requirements
 - **Actual Result:** ___________________________
 - **Pass/Fail:** ___
-- **Tester/Date:** ___________________________ / ___________
-- **Witness:** ___________________________
+- **Executed By / Date:** ___________________________ / ___________
 
-Generate similar detailed test cases for:
-- IQ-002: Operating System Installation and Version
-- IQ-003: Application Software Installation Verification
-- IQ-004: Database Installation and Configuration
-- IQ-005: License Verification
-- IQ-006: Network Connectivity and Ports
-- IQ-007: Security Configuration (Firewall, Antivirus)
-- IQ-008: User Account and Permission Setup
-- IQ-009: Backup System Configuration
-- IQ-010: System Clock and Time Zone
-- IQ-011: Documentation Package (SOPs, User Guides)
-- IQ-012: Integration Component Verification
+---
+
+**IQ-002: Operating System Version and Patch Level**
+- **Objective:** Verify correct OS version is installed with required patch level
+- **Risk Level:** Medium
+- **Procedure:**
+  1. Record installed OS name, version, and build number
+  2. Verify OS version matches DQ-approved specification
+  3. Confirm latest security patches are applied (within 30 days)
+  4. Verify OS activation status
+- **Acceptance Criteria:** OS version matches DQ specification; security patches current
+- **Actual Result:** ___________________________
+- **Pass/Fail:** ___
+- **Executed By / Date:** ___________________________ / ___________
+
+---
+
+**IQ-003: Application Software Installation and Version**
+- **Objective:** Verify ${form.systemName} is installed at the correct version
+- **Risk Level:** High
+- **Procedure:**
+  1. Confirm application is installed in the designated installation path
+  2. Record installed application version number
+  3. Compare version against DQ-approved version
+  4. Verify installation checksum/hash against vendor-supplied value
+  5. Confirm all application components are present (list all expected files/modules)
+- **Acceptance Criteria:** Version matches DQ-approved version; checksum verified; all components installed
+- **Actual Result:** ___________________________
+- **Pass/Fail:** ___
+- **Executed By / Date:** ___________________________ / ___________
+
+---
+
+**IQ-004: Database Installation and Configuration**
+- **Objective:** Verify database is correctly installed and configured
+- **Risk Level:** High
+- **Procedure:**
+  1. Confirm DBMS version matches DQ specification
+  2. Verify database schemas are correctly created (all required tables present)
+  3. Confirm database connection string is correctly configured
+  4. Verify database user accounts and permissions are set per security specification
+  5. Confirm transaction logging is enabled
+- **Acceptance Criteria:** DBMS version correct; all schemas present; transaction logging enabled; permissions set correctly
+- **Actual Result:** ___________________________
+- **Pass/Fail:** ___
+- **Executed By / Date:** ___________________________ / ___________
+
+---
+
+**IQ-005: Backup System Configuration**
+- **Objective:** Verify automated backup is configured and operational
+- **Risk Level:** High
+- **Procedure:**
+  1. Confirm backup software is installed and configured
+  2. Verify backup schedule is set (daily incremental, weekly full)
+  3. Confirm backup destination path and available storage
+  4. Execute a manual backup and confirm successful completion
+  5. Verify backup log file is generated
+- **Acceptance Criteria:** Backup executes successfully; schedule confirmed; log file generated without errors
+- **Actual Result:** ___________________________
+- **Pass/Fail:** ___
+- **Executed By / Date:** ___________________________ / ___________
+
+---
+
+**IQ-006: Network Configuration and Security**
+- **Objective:** Verify network configuration meets DQ security specifications
+- **Risk Level:** High
+- **Procedure:**
+  1. Confirm server is on designated VLAN as per DQ network design
+  2. Verify only required ports are open (document open port list)
+  3. Confirm firewall is active and rules match DQ specification
+  4. Verify TLS 1.2 or higher is enabled; TLS 1.0/1.1 and SSL disabled
+  5. Test connectivity from authorised client workstations
+  6. Test that unauthorised network access is blocked
+- **Acceptance Criteria:** Network on correct VLAN; only required ports open; TLS 1.2+ active; authorised access confirmed; unauthorised blocked
+- **Actual Result:** ___________________________
+- **Pass/Fail:** ___
+- **Executed By / Date:** ___________________________ / ___________
+
+---
+
+**IQ-007: Antivirus / Security Software Installation**
+- **Objective:** Verify endpoint security software is installed and active
+- **Risk Level:** Medium
+- **Procedure:**
+  1. Confirm antivirus/endpoint protection software is installed
+  2. Verify software version and definition file are current
+  3. Confirm real-time scanning is enabled
+  4. Verify scheduled scan is configured
+  5. Confirm exclusions are documented (application directories excluded from real-time scanning if required)
+- **Acceptance Criteria:** Antivirus installed; definitions current; real-time scanning active
+- **Actual Result:** ___________________________
+- **Pass/Fail:** ___
+- **Executed By / Date:** ___________________________ / ___________
+
+---
+
+**IQ-008: User Account Configuration**
+- **Objective:** Verify initial user accounts are created per access control specification
+- **Risk Level:** High
+- **Procedure:**
+  1. Confirm default vendor accounts are disabled or password-changed
+  2. Verify that at least one administrator account is configured
+  3. Confirm no shared accounts exist
+  4. Verify password complexity requirements are enforced in system configuration
+  5. Confirm account lockout policy is configured (5 attempts; 30-minute lockout)
+- **Acceptance Criteria:** No default vendor accounts active; no shared accounts; password policy and lockout configured
+- **Actual Result:** ___________________________
+- **Pass/Fail:** ___
+- **Executed By / Date:** ___________________________ / ___________
 
 ## 5. IQ Deviation Log
-| Dev. No. | Test ID | Description | Severity | Resolution | Status |
-|----------|---------|-------------|----------|------------|--------|
+
+| Dev. No. | Test ID | Description | Severity | Resolution | Closure Date |
+|----------|---------|-------------|----------|------------|-------------|
+| | | | | | |
 
 ## 6. IQ Summary and Conclusion
-Summary of IQ execution, number of test cases executed/passed/failed, open deviations, overall IQ outcome (Pass/Fail), recommendation for OQ.
+
+| Summary Item | Status |
+|---|---|
+| Total IQ Test Cases | 8 |
+| Passed | |
+| Failed | |
+| Deviations Raised | |
+| Deviations Closed | |
+| Critical Open Deviations | Must be zero before OQ |
+
+IQ is considered **COMPLETE** when all test cases are executed, all critical deviations are closed, and this protocol is signed by QA.
 
 ## 7. IQ Approval and Sign-off
+
 | Name | Title | Signature | Date |
 |------|-------|-----------|------|
-| | IQ Lead Executor | | |
-| | Witness | | |
-| | Validation Manager | | |
-| | QA Approver | | |
+| | IQ Executor | | |
+| | Validation Lead | | |
+| | QA Manager | | |`;
+  }
 
-Generate specific, technically accurate IQ test cases for ${form.systemType} installation.`,
+  if (docType === "oqProtocol") {
+    const oqCases = reqs
+      .slice(0, 8)
+      .map((req, i) => {
+        const oqId = `OQ-${String(i + 2).padStart(3, "0")}`;
+        return `---
 
-    oqProtocol: `Generate a complete GAMP 5 Second Edition compliant Operational Qualification (OQ) Protocol for ${form.systemName} (${form.systemType}, GAMP Category ${form.gampCategory}).
+**${oqId}: ${req.charAt(0).toUpperCase() + req.slice(1)}**
+- **Objective:** Verify that ${req.toLowerCase()}
+- **Risk Level:** ${i < 3 ? "High" : "Medium"}
+- **URS Reference:** REQ-${String(i + 1).padStart(3, "0")}
+- **Pre-requisite:** IQ-${systemShortCode}-001 passed; test account available
+- **Test Steps:**
+  1. Log in to the system using an authorised test account
+  2. Navigate to the relevant functional area
+  3. Execute the function being tested with valid test data
+  4. Verify the system response matches expected behaviour
+  5. Record the actual result
+  6. Verify audit trail entry is generated for this action
+- **Expected Result:** System performs function correctly; data saved accurately; audit trail entry present
+- **Actual Result:** ___________________________
+- **Pass/Fail:** ___
+- **Tester / Date:** ___________________________ / ___________
+- **Reviewer / Date:** ___________________________ / ___________`;
+      })
+      .join("\n\n");
 
-Risk Level: ${form.riskLevel}
-Functions to Qualify: ${form.userRequirements}
-Validation Scope: ${scopeStr}
-
-Generate the full OQ Protocol using markdown formatting:
+    return `# Operational Qualification (OQ) Protocol
 
 ## Document Control
+
 | Field | Value |
 |-------|-------|
 | Document Number | OQ-${systemShortCode}-001 |
+| System Name | ${form.systemName} |
 | Version | 1.0 |
-| Status | Draft |
+| Status | Draft — Pending Execution |
 | Date | ${today} |
-| Protocol Type | Operational Qualification |
 | Pre-requisite | IQ-${systemShortCode}-001 Approved |
+| Protocol Type | Operational Qualification |
 
 ## Version History
+
 | Version | Date | Author | Description |
 |---------|------|--------|-------------|
 | 1.0 | ${today} | Validation Team | Initial Protocol |
 
 ## 1. Purpose and Scope
-OQ verifies that ${form.systemName} operates correctly in accordance with the Functional Specification (FS) under all expected operating conditions, including boundary and exception conditions.
+
+This OQ Protocol verifies that **${form.systemName}** operates correctly and consistently within specified operational limits in the test environment. OQ tests functional requirements against FS-${systemShortCode}-001 and demonstrates that the system works as designed.
+
+OQ covers: access control, audit trail, electronic signatures, data entry and validation, reporting, interface functions, and all GxP-critical operations of the ${form.systemType}.
 
 ## 2. Pre-requisites
-- IQ (IQ-${systemShortCode}-001) completed and approved
-- Test environment configured with test data
-- User accounts for test execution configured
-- Test data sets prepared and documented
-- Testers trained on OQ execution procedures
 
-## 3. Test Environment
-| Parameter | Specification |
-|-----------|--------------|
-| Environment Type | OQ Test / Validation Environment |
-| Software Version | [As installed per IQ] |
-| Test Data | Synthetic/anonymized test data sets |
-| Network | Connected per IQ-verified configuration |
+- IQ-${systemShortCode}-001 executed and approved with no critical open deviations
+- Test environment is a clone of the production installation or validated equivalent
+- Test data prepared and documented (do not use live patient/production data)
+- Test user accounts configured with all required roles
+- All OQ executors trained and authorised
+- Test scripts reviewed and approved by QA prior to execution
+
+## 3. OQ Environment
+
+| Parameter | Value |
+|-----------|-------|
+| Environment | Validated Test / QA Environment |
+| Test Data | Representative test data — not live production data |
+| Execution Period | From: ____________ To: ____________ |
+| Lead Tester | |
+| QA Approver | |
 
 ## 4. OQ Test Cases
-Generate at least 15 detailed OQ test cases for ${form.systemType}. For EACH test case:
 
-**OQ-001: User Authentication and Access Control**
-- **Objective:** Verify role-based access control per security requirements
+---
+
+**OQ-001: Role-Based Access Control Verification**
+- **Objective:** Verify that each user role can only access authorised functions
 - **Risk Level:** High
-- **URS/FS Reference:** REQ-001, FS-006
-- **Test Input:** Valid and invalid credentials for each role
+- **URS Reference:** REQ-001
 - **Test Steps:**
-  1. Attempt login with valid Administrator credentials
-  2. Verify Administrator functions are accessible
-  3. Attempt login with valid Read-Only user credentials
-  4. Verify restricted functions are inaccessible
-  5. Attempt login with invalid credentials 5 times
-  6. Verify account lockout after 5 failed attempts
-- **Expected Result:** Role-based access enforced; account locked after 5 failures
+  1. Log in as a Read-Only user; attempt to create a new record — must be denied
+  2. Log in as a Standard User; create a record — must succeed; attempt to approve own record — must be denied
+  3. Log in as a Supervisor; approve a pending record — must succeed
+  4. Log in as System Administrator; access user management — must succeed
+  5. Attempt to access admin function as Standard User — must be denied with error message
+  6. Verify audit trail captures all login attempts and access denials
+- **Expected Result:** All access restrictions enforced as per RBAC specification; error messages displayed for denied actions; audit trail complete
 - **Actual Result:** ___________________________
 - **Pass/Fail:** ___
-- **Tester/Date:** ___________________________ / ___________
+- **Tester / Date:** ___________________________ / ___________
 
-Generate similar detailed test cases covering all critical functions of ${form.systemType}:
-- OQ-002: Data Entry and Validation
-- OQ-003: Data Retrieval and Search
-- OQ-004: Audit Trail Generation and Content
-- OQ-005: Electronic Signature (21 CFR Part 11)
-- OQ-006: Report Generation (all required reports)
-- OQ-007: Data Import/Export Interface
-- OQ-008: Calculation Accuracy Verification
-- OQ-009: Error Handling and Messages
-- OQ-010: Session Timeout
-- OQ-011: Password Policy Enforcement
-- OQ-012: Data Backup and Restore
-- OQ-013: System Alarm/Notification
-- OQ-014: Boundary Value Testing
-- OQ-015: Concurrent User Operation
+---
+
+**OQ-002: Audit Trail — Completeness and Immutability**
+- **Objective:** Verify audit trail records all required events and cannot be modified or deleted
+- **Risk Level:** High
+- **URS Reference:** REQ-002
+- **Test Steps:**
+  1. Create a new record; verify audit trail entry with user ID, timestamp, and new value
+  2. Modify a record field; verify audit trail captures old value, new value, user, and timestamp
+  3. Delete (or logically inactivate) a record; verify audit trail captures deletion event
+  4. Attempt to modify an audit trail entry as administrator — must be denied
+  5. Attempt to delete an audit trail entry — must be denied
+  6. Log out and log in again; verify login/logout events in audit trail
+  7. Verify timestamps are in UTC and consistent with system clock
+- **Expected Result:** All events captured; old/new values present; modification/deletion of audit trail denied; timestamps in UTC
+- **Actual Result:** ___________________________
+- **Pass/Fail:** ___
+- **Tester / Date:** ___________________________ / ___________
+
+---
+
+**OQ-003: Electronic Signature Application and Validation**
+- **Objective:** Verify electronic signatures comply with 21 CFR Part 11 §11.50 requirements
+- **Risk Level:** High
+- **URS Reference:** REQ-003
+- **Test Steps:**
+  1. Complete a record requiring electronic signature approval
+  2. Apply electronic signature: enter user ID and password, select meaning from defined list
+  3. Verify signature captures: printed name, date/time (UTC), and meaning
+  4. Verify signature is displayed on the signed record
+  5. Attempt to apply the same signature credentials to a different record — each signature should require fresh re-authentication
+  6. Modify the signed record and verify original signature is invalidated
+  7. Attempt to sign with incorrect password — must be rejected; verify audit trail captures failed attempt
+- **Expected Result:** Signature captured with all required fields; re-authentication required for each signature; signature invalidated on record change; failed attempts logged
+- **Actual Result:** ___________________________
+- **Pass/Fail:** ___
+- **Tester / Date:** ___________________________ / ___________
+
+---
+
+**OQ-004: Data Entry Validation and Error Handling**
+- **Objective:** Verify system validates all inputs and displays specific error messages
+- **Risk Level:** High
+- **URS Reference:** REQ-006
+- **Test Steps:**
+  1. Attempt to submit form with missing mandatory fields — must be rejected with field-specific error
+  2. Enter alphabetic data in a numeric-only field — must be rejected
+  3. Enter a value outside defined range limits — must be rejected with range specification shown
+  4. Enter a date in incorrect format — must be rejected with format instruction
+  5. Submit a valid record with all fields correctly populated — must succeed
+  6. Verify audit trail records successful creation
+- **Expected Result:** Invalid inputs rejected with specific, actionable error messages; valid inputs accepted; audit trail records creation
+- **Actual Result:** ___________________________
+- **Pass/Fail:** ___
+- **Tester / Date:** ___________________________ / ___________
+
+---
+
+**OQ-005: Password Policy and Account Lockout**
+- **Objective:** Verify password policy and account lockout are enforced
+- **Risk Level:** High
+- **URS Reference:** REQ-009 (Security)
+- **Test Steps:**
+  1. Attempt to set a password shorter than 8 characters — must be rejected
+  2. Attempt to set a password without complexity (no uppercase / number / special char) — must be rejected
+  3. Attempt to set a password to one of the last 12 used — must be rejected
+  4. Simulate 5 consecutive failed login attempts — account must be locked
+  5. Attempt to log in with locked account — access denied; correct error message displayed
+  6. Administrator unlocks account; verify unlock recorded in audit trail
+  7. Verify session automatic lock after 30 minutes inactivity
+- **Expected Result:** Password policy enforced; account locked after 5 failures; session timeout after 30 min; all events in audit trail
+- **Actual Result:** ___________________________
+- **Pass/Fail:** ___
+- **Tester / Date:** ___________________________ / ___________
+
+---
+
+**OQ-006: Report Generation Accuracy**
+- **Objective:** Verify reports are generated accurately and contain correct data
+- **Risk Level:** Medium
+- **URS Reference:** REQ-007
+- **Test Steps:**
+  1. Create 5 known test records with documented values
+  2. Generate the primary ${form.systemType} report filtering for these records
+  3. Compare all fields in the report against the source data
+  4. Verify report header contains: system name, date, user, and page numbers
+  5. Export report in PDF format — verify formatting is correct and all data present
+  6. Export report in Excel/CSV format — verify data integrity
+- **Expected Result:** Report data matches source data exactly; PDF and Excel exports complete and correctly formatted
+- **Actual Result:** ___________________________
+- **Pass/Fail:** ___
+- **Tester / Date:** ___________________________ / ___________
+
+${oqCases}
 
 ## 5. OQ Deviation Log
-| Dev. No. | Test ID | Description | Severity | Root Cause | Resolution | Status |
-|----------|---------|-------------|----------|------------|------------|--------|
+
+| Dev. No. | Test ID | Description | Severity | Root Cause | Resolution | Closure Date |
+|----------|---------|-------------|----------|------------|------------|-------------|
+| | | | | | | |
 
 ## 6. OQ Summary and Conclusion
-Summary of OQ execution, statistics (executed/passed/failed), critical deviations, overall OQ outcome, recommendation for PQ.
+
+| Summary Item | Status |
+|---|---|
+| Total OQ Test Cases | ${8 + Math.min(reqs.length, 8)} |
+| Passed | |
+| Failed | |
+| Deviations Raised | |
+| Deviations Closed | |
+
+OQ is considered **COMPLETE** when all test cases are executed, all critical deviations are closed, and this protocol is signed by QA.
 
 ## 7. OQ Approval and Sign-off
+
 | Name | Title | Signature | Date |
 |------|-------|-----------|------|
-| | OQ Lead Executor | | |
-| | Business SME | | |
-| | Validation Manager | | |
-| | QA Approver | | |
+| | Lead OQ Executor | | |
+| | Validation Lead | | |
+| | QA Manager | | |
+| | System Owner | | |`;
+  }
 
-Generate specific, technically accurate OQ test cases for ${form.systemType} operational functionality.`,
-
-    pqProtocol: `Generate a complete GAMP 5 Second Edition compliant Performance Qualification (PQ) Protocol for ${form.systemName} (${form.systemType}, GAMP Category ${form.gampCategory}).
-
-Risk Level: ${form.riskLevel}
-Intended Use: ${form.intendedUse}
-User Requirements: ${form.userRequirements}
-Validation Scope: ${scopeStr}
-
-Generate the full PQ Protocol using markdown formatting:
+  if (docType === "pqProtocol") {
+    return `# Performance Qualification (PQ) Protocol
 
 ## Document Control
+
 | Field | Value |
 |-------|-------|
 | Document Number | PQ-${systemShortCode}-001 |
+| System Name | ${form.systemName} |
 | Version | 1.0 |
-| Status | Draft |
+| Status | Draft — Pending Execution |
 | Date | ${today} |
-| Protocol Type | Performance Qualification |
 | Pre-requisite | OQ-${systemShortCode}-001 Approved |
+| Protocol Type | Performance Qualification |
+| Environment | Production (or Production-Representative) |
 
 ## Version History
+
 | Version | Date | Author | Description |
 |---------|------|--------|-------------|
 | 1.0 | ${today} | Validation Team | Initial Protocol |
 
 ## 1. Purpose and Scope
-PQ demonstrates that ${form.systemName} consistently performs in accordance with specifications and is suitable for its intended use under actual production conditions. PQ is conducted in the production (or production-representative) environment with real or realistic data.
+
+This PQ Protocol demonstrates that **${form.systemName}** consistently performs in accordance with its specifications and is fit for its intended use under actual (or representative) production conditions.
+
+PQ is conducted in the production environment (or a validated production-representative environment) using realistic production data or representative test data. PQ confirms the complete end-to-end system capability.
+
+**Intended Use:** ${form.intendedUse || `${form.systemType} for GxP pharmaceutical operations`}
 
 ## 2. Pre-requisites
-- OQ (OQ-${systemShortCode}-001) completed and approved with no critical deviations
-- Production environment provisioned
-- End users trained on system operation
-- SOPs for system use reviewed and approved
-- System configured per approved configuration specifications
-- Production data or realistic representative data available
+
+- OQ-${systemShortCode}-001 executed and approved with no critical open deviations
+- Production environment provisioned and configured
+- End-user training completed and training records available
+- All applicable SOPs reviewed, approved, and available
+- Production data or representative data available for testing
+- System administrator training completed
+- Validation Summary Report template available
 
 ## 3. PQ Environment
+
 | Parameter | Specification |
 |-----------|--------------|
 | Environment | Production / Production-Representative |
-| Users | Trained end users executing PQ |
+| Users | Trained end users executing PQ (not validation team) |
 | Data | Production or realistic representative data |
-| Concurrent Users | [Per performance requirements] |
+| Concurrent Users | ${form.riskLevel === "High" ? "Minimum 10 concurrent users simulated during load test" : "Minimum 5 concurrent users simulated"} |
 
 ## 4. PQ Test Cases
-Generate at least 10 detailed PQ test cases using realistic production scenarios for ${form.systemType}. For EACH test case:
 
-**PQ-001: End-to-End Workflow — [Primary Workflow]**
-- **Objective:** Verify complete primary workflow operates correctly in production environment
+---
+
+**PQ-001: End-to-End Primary Workflow — Full Business Process**
+- **Objective:** Verify the complete primary ${form.systemType} workflow operates correctly in the production environment
 - **Risk Level:** High
-- **URS Reference:** REQ-001 through REQ-005
-- **Test Scenario:** Full business process workflow using realistic data
-- **Test Data:** [Realistic representative data set — describe data characteristics]
+- **URS Reference:** All REQ
+- **Test Scenario:** Complete end-to-end primary business process for ${form.intendedUse || `${form.systemType} operations`}
+- **Performed By:** Trained end user (not validation team)
 - **Test Steps:**
-  1. Log in as authorized end user
-  2. Create new record with all required fields
-  3. Submit for review/approval
-  4. Reviewer approves record
-  5. Generate required reports
-  6. Verify audit trail captures all steps with correct user and timestamps
-- **Expected Result:** All workflow steps complete successfully; audit trail complete and accurate; reports generated correctly
+  1. Log in as an authorised production end user
+  2. Create a new primary record with all required fields using realistic data
+  3. Submit the record for review/approval per defined workflow
+  4. Log in as a Reviewer/Supervisor and approve the record
+  5. Generate the primary report for this record
+  6. Export the report in required format
+  7. Review the audit trail and confirm all steps are captured
+- **Expected Result:** Complete workflow executes without errors; audit trail complete and accurate; report generated correctly
 - **Actual Result:** ___________________________
 - **Pass/Fail:** ___
-- **Tester/Date:** ___________________________ / ___________
-- **Approved By:** ___________________________
+- **Tester (End User) / Date:** ___________________________ / ___________
+- **Approved By (QA) / Date:** ___________________________ / ___________
 
-Generate similar detailed PQ test cases covering all end-to-end workflows of ${form.systemType}:
-- PQ-002: Data Integrity Under Normal Operations (concurrent users)
-- PQ-003: Regulatory Compliance Verification (21 CFR Part 11 completeness)
-- PQ-004: Report Accuracy Against Source Data
-- PQ-005: Data Archive and Retrieval
-- PQ-006: System Performance Under Expected Load
-- PQ-007: User Access and Permission in Production
-- PQ-008: Interface Data Exchange with External Systems
-- PQ-009: Backup and Recovery Drill
-- PQ-010: Disaster Recovery / Business Continuity Test
+---
+
+**PQ-002: Data Integrity Under Concurrent Multi-User Operation**
+- **Objective:** Verify data integrity is maintained when multiple users operate simultaneously
+- **Risk Level:** High
+- **Test Steps:**
+  1. Arrange ${form.riskLevel === "High" ? "10+" : "5+"} concurrent test users to log in simultaneously
+  2. Each user creates a unique record at the same time
+  3. Two users attempt to edit the same record simultaneously — verify record locking or conflict resolution
+  4. Verify all records are correctly saved with correct ownership information
+  5. Verify no data corruption or duplicate records
+  6. Monitor system response times during concurrent operation
+- **Expected Result:** All records correctly saved; no data corruption; record locking/conflict resolution works; response time within SLA
+- **Actual Result:** ___________________________
+- **Pass/Fail:** ___
+- **Tester / Date:** ___________________________ / ___________
+
+---
+
+**PQ-003: Regulatory Compliance Verification — 21 CFR Part 11 Completeness**
+- **Objective:** Verify the system meets 21 CFR Part 11 requirements in production environment
+- **Risk Level:** High
+- **Test Steps:**
+  1. Execute a complete production workflow involving data creation, modification, approval, and reporting
+  2. Review the complete audit trail for this workflow
+  3. Verify every GxP event is captured with: user ID, name, timestamp (UTC), action, old value, new value
+  4. Verify electronic signature is present on all records requiring approval
+  5. Attempt to modify an approved record without appropriate privileges — must be denied
+  6. Verify system date/time is synchronised with a reliable time source (NTP)
+- **Expected Result:** Complete audit trail; all electronic signatures present and valid; access restrictions enforced; time synchronisation confirmed
+- **Actual Result:** ___________________________
+- **Pass/Fail:** ___
+- **Tester / Date:** ___________________________ / ___________
+
+---
+
+**PQ-004: Report Accuracy Against Production Source Data**
+- **Objective:** Verify reports accurately reflect production data
+- **Risk Level:** High
+- **Test Steps:**
+  1. Generate a production report covering a defined period
+  2. Independently verify 10 randomly selected records against source data
+  3. Compare all report fields against source database values
+  4. Verify calculations in the report against manual calculation
+  5. Verify report metadata (date, user, system name) is correct
+- **Expected Result:** 100% of sampled records match source data; calculations correct; report metadata correct
+- **Actual Result:** ___________________________
+- **Pass/Fail:** ___
+- **Tester / Date:** ___________________________ / ___________
+
+---
+
+**PQ-005: Data Archive and Retrieval**
+- **Objective:** Verify data can be reliably retrieved after archival
+- **Risk Level:** High
+- **Test Steps:**
+  1. Archive a set of records using the system archival function
+  2. Retrieve archived records by record ID, date range, and user
+  3. Verify all data fields are intact and unmodified after archival
+  4. Verify archived audit trail is intact and readable
+  5. Confirm data is in a format readable without the application (if applicable)
+- **Expected Result:** Archived data retrieved correctly; no data loss; audit trail intact; data readable in long-term format
+- **Actual Result:** ___________________________
+- **Pass/Fail:** ___
+- **Tester / Date:** ___________________________ / ___________
+
+---
+
+**PQ-006: System Performance Under Expected Production Load**
+- **Objective:** Verify system performance meets SLA under expected production load
+- **Risk Level:** Medium
+- **Test Steps:**
+  1. Simulate expected concurrent user load using test users or load testing tool
+  2. Measure response time for: record creation, record search, report generation
+  3. Execute the primary workflow while ${form.riskLevel === "High" ? "10" : "5"} other users are active
+  4. Record all response times and compare against SLA (< 3 seconds for standard queries)
+  5. Monitor server CPU, memory, and disk I/O during load test
+- **Expected Result:** All response times within SLA; no system errors under load; server resources within acceptable limits
+- **Actual Result:** ___________________________
+- **Pass/Fail:** ___
+- **Tester / Date:** ___________________________ / ___________
+
+---
+
+**PQ-007: User Access and Permissions in Production**
+- **Objective:** Verify production user accounts and permissions are correctly configured
+- **Risk Level:** High
+- **Test Steps:**
+  1. Review all production user accounts against the approved user access matrix
+  2. Verify no test accounts or shared accounts exist in production
+  3. Spot-check 5 user accounts: verify correct role, active status, and last login date
+  4. Verify administrator account(s) are assigned only to designated IT/system administrator(s)
+  5. Confirm all production users have completed training (check training records)
+- **Expected Result:** All accounts match approved user access matrix; no test/shared accounts; training records complete
+- **Actual Result:** ___________________________
+- **Pass/Fail:** ___
+- **Tester / Date:** ___________________________ / ___________
+
+---
+
+**PQ-008: Backup and Recovery Drill**
+- **Objective:** Verify backup and recovery procedures work in production
+- **Risk Level:** High
+- **Test Steps:**
+  1. Confirm that a recent full backup exists (within 24 hours)
+  2. Verify backup integrity (checksum or automated verification report)
+  3. Execute a restore from backup to a designated test restore environment (not production)
+  4. Verify all records in the backup are present and intact after restore
+  5. Measure time taken for restore and confirm it meets RTO of < 4 hours
+  6. Verify the most recent data (RPO test) is within 1 hour of restore point
+- **Expected Result:** Backup verified; restore successful; RTO < 4 hours; RPO < 1 hour; all data intact
+- **Actual Result:** ___________________________
+- **Pass/Fail:** ___
+- **Tester / Date:** ___________________________ / ___________
+
+---
+
+**PQ-009: End-User Acceptance Testing (UAT)**
+- **Objective:** Formal end-user confirmation that the system meets their requirements
+- **Risk Level:** High
+- **Test Steps:**
+  1. End users execute their primary daily workflows independently
+  2. End users verify the system supports all their job functions
+  3. End users review and confirm the user interface is fit for purpose
+  4. End users sign the UAT acceptance statement
+- **Expected Result:** All end users confirm system is fit for intended use; UAT acceptance statement signed
+- **Actual Result:** ___________________________
+- **Pass/Fail:** ___
+- **Tester (End User) / Date:** ___________________________ / ___________
+
+---
+
+**PQ-010: Disaster Recovery / Business Continuity Test**
+- **Objective:** Verify the disaster recovery plan is operational
+- **Risk Level:** High
+- **Test Steps:**
+  1. Simulate a server failure scenario (documented tabletop exercise or actual failover)
+  2. Execute the documented disaster recovery procedure
+  3. Measure recovery time from declared failure to system operational
+  4. Verify data integrity after recovery
+  5. Document any gaps in the DR procedure
+- **Expected Result:** System recoverable within RTO (4 hours); data intact after recovery; DR procedure is executable
+- **Actual Result:** ___________________________
+- **Pass/Fail:** ___
+- **Tester / Date:** ___________________________ / ___________
 
 ## 5. System Release Criteria
-The system may be released to production use when ALL of the following are met:
-- All PQ test cases executed and passed
-- No Critical or Major open deviations
-- All Minor deviations have approved remediation plans
-- End-user training records complete
-- SOPs approved and available at point of use
-- System administrator training complete
-- Validation Summary Report approved by QA
+
+The system may be released for production GxP use when **ALL** of the following criteria are met:
+
+- [ ] All PQ test cases executed with documented results
+- [ ] No Critical open deviations
+- [ ] No Major open deviations (or all have approved, time-bound remediation plans)
+- [ ] All Minor deviations closed or risk-accepted
+- [ ] End-user training complete; training records signed and filed
+- [ ] All applicable SOPs approved and available at point of use
+- [ ] System administrator documentation complete
+- [ ] Validation Summary Report (VSR) drafted and approved by QA
+- [ ] System Owner provides formal system release authorisation
 
 ## 6. PQ Deviation Log
+
 | Dev. No. | Test ID | Description | Severity | Root Cause | Resolution | Closure Date |
 |----------|---------|-------------|----------|------------|------------|-------------|
+| | | | | | | |
 
 ## 7. PQ Summary and Conclusion
-Summary of PQ execution, overall system performance, open items, recommendation for system release to production.
+
+| Summary Item | Status |
+|---|---|
+| Total PQ Test Cases | 10 |
+| Passed | |
+| Failed | |
+| Deviations Raised | |
+| Deviations Closed | |
+| System Release Recommendation | |
 
 ## 8. PQ Approval and Sign-off
+
 | Name | Title | Signature | Date |
 |------|-------|-----------|------|
 | | PQ Lead Executor | | |
 | | End User Representative | | |
-| | Validation Manager | | |
+| | Validation Lead | | |
 | | QA Manager | | |
-| | System Owner | | |
-
-Generate specific, technically accurate PQ test cases for ${form.systemType} in a pharmaceutical/regulated environment.`,
-  };
-
-  return callDeepSeekRaw(prompts[docType]);
-}
-
-async function generateTraceability(
-  form: GampFormData,
-): Promise<TraceabilityRow[]> {
-  const today = new Date().toLocaleDateString("en-IN");
-  const prompt = `Generate a comprehensive Validation Traceability Matrix for ${form.systemName} (${form.systemType}, GAMP Category ${form.gampCategory}) that links ALL URS requirements to DQ, IQ, OQ, and PQ test cases.
-
-User Requirements:
-${form.userRequirements}
-
-Return ONLY a valid JSON array (no markdown, no extra text, no code fences):
-[{
-  "reqId": "REQ-001",
-  "requirement": "requirement statement",
-  "testType": "OQ",
-  "testId": "OQ-001",
-  "testDescription": "specific test description",
-  "passCriteria": "specific, measurable pass criteria",
-  "riskLevel": "High"
-}]
-
-Rules:
-- Generate at least 15 rows
-- Each URS requirement should have at least one test case
-- Assign testType based on: DQ=design verification, IQ=installation/infrastructure, OQ=functional/operational testing, PQ=production performance/UAT
-- Include a mix of all four test types (DQ, IQ, OQ, PQ)
-- Make requirements and test descriptions specific to ${form.systemType}
-- Set riskLevel to High/Medium/Low based on patient safety and data integrity impact
-- Today is ${today}`;
-
-  try {
-    const raw = await callDeepSeekRaw(prompt);
-    const jsonMatch =
-      raw.match(/```json\s*([\s\S]*?)\s*```/) ||
-      raw.match(/```\s*([\s\S]*?)\s*```/) ||
-      raw.match(/(\[[\s\S]*\])/);
-    const jsonStr = jsonMatch ? jsonMatch[1] || jsonMatch[0] : raw;
-    const parsed = JSON.parse(jsonStr.trim());
-    if (Array.isArray(parsed) && parsed.length > 0)
-      return parsed as TraceabilityRow[];
-  } catch {
-    // fall through to fallback
+| | System Owner | | |`;
   }
 
-  // Comprehensive fallback traceability
-  return [
+  return `# ${docType.toUpperCase()} Document\n\nDocument for ${form.systemName} — ${today}`;
+}
+
+function generateTraceability(form: GampFormData): TraceabilityRow[] {
+  const rawReqs = form.userRequirements
+    .split(/\n|;|,(?=\s*[A-Z])/)
+    .map((r) => r.trim())
+    .filter((r) => r.length > 3);
+
+  const baseReqs =
+    rawReqs.length > 0
+      ? rawReqs
+      : [
+          `The ${form.systemType} system shall support role-based user access control`,
+          "The system shall maintain a complete and tamper-evident electronic audit trail",
+          "The system shall support electronic signatures compliant with 21 CFR Part 11",
+          "The system shall perform all primary functions within 3 seconds response time",
+          "The system shall provide backup and recovery with RPO < 1 hour",
+          "The system shall enforce data integrity per ALCOA+ principles",
+          "The system shall generate audit-ready reports in PDF and/or Excel format",
+          "The system shall support concurrent multi-user access without data corruption",
+          "The system shall be installed and configured per vendor documentation",
+          "The system shall restrict access based on user roles and least-privilege principle",
+        ];
+
+  const _testMappings: Array<{
+    testType: string;
+    testPrefix: string;
+    reqOffset: number;
+    riskLevel: string;
+  }> = [
+    { testType: "DQ", testPrefix: "DQ", reqOffset: 0, riskLevel: "High" },
+    { testType: "IQ", testPrefix: "IQ", reqOffset: 0, riskLevel: "High" },
+    { testType: "OQ", testPrefix: "OQ", reqOffset: 0, riskLevel: "High" },
+    { testType: "PQ", testPrefix: "PQ", reqOffset: 0, riskLevel: "High" },
+  ];
+
+  const testDescriptions: Record<string, string[]> = {
+    DQ: [
+      "Review hardware design against URS minimum specifications",
+      "Review software architecture for audit trail completeness per 21 CFR Part 11",
+      "Review security design: RBAC model, encryption, and e-signature design",
+      "Review system performance design against URS load requirements",
+      "Review backup and recovery design for RPO/RTO specifications",
+      "Review data architecture for ALCOA+ compliance",
+      "Review report design specification against URS report requirements",
+      "Review interface design for all external system integrations",
+      "Review installation design and vendor documentation availability",
+      "Review access control design for least-privilege principle",
+    ],
+    IQ: [
+      "Verify hardware installation meets DQ-approved specifications",
+      "Verify audit trail module is installed and enabled",
+      "Verify electronic signature module is installed and configured",
+      "Verify network configuration and response time baseline",
+      "Verify backup system installation and schedule configuration",
+      "Verify database installation and integrity settings",
+      "Verify reporting module installation and configuration",
+      "Verify all system interfaces are installed and reachable",
+      "Verify application installation version and component completeness",
+      "Verify user account and RBAC configuration",
+    ],
+    OQ: [
+      "Test role-based access control for all defined user roles",
+      "Test audit trail for all GxP events (create, modify, delete, login)",
+      "Test electronic signature application and immutability",
+      "Test system response time under normal operational load",
+      "Execute backup and verify backup completion and integrity",
+      "Test data validation: mandatory fields, range checks, format validation",
+      "Test report generation accuracy against source data",
+      "Test interface data exchange with all connected systems",
+      "Test installation of all software updates per change control procedure",
+      "Test access restriction enforcement for all defined restrictions",
+    ],
+    PQ: [
+      "Execute full primary workflow with production data by trained end users",
+      "Test audit trail completeness during production operations",
+      "Test 21 CFR Part 11 electronic signature compliance in production",
+      "Measure response time under production concurrent user load",
+      "Execute backup and restore drill; measure RTO and RPO",
+      "Verify data integrity under concurrent multi-user operations",
+      "Generate production reports and verify accuracy against source data",
+      "Verify interface performance under production data volumes",
+      "Execute UAT by end users confirming system meets requirements",
+      "Execute disaster recovery tabletop or drill",
+    ],
+  };
+
+  const passCriteriaTemplates: Record<string, string[]> = {
+    DQ: [
+      "Hardware design meets all URS minimum requirements; no critical gaps",
+      "Audit trail design addresses all 21 CFR Part 11 §11.10(e) requirements",
+      "Security design meets all URS security requirements; no vulnerabilities",
+      "Performance design supports required concurrent load and response time",
+      "Backup design meets RPO < 1 hour and RTO < 4 hours requirements",
+      "Data architecture satisfies all ALCOA+ principles",
+      "Report design addresses all URS reporting requirements",
+      "Interface design covers all required integrations with error handling",
+      "Installation documentation complete; IQ scripts available from vendor",
+      "Access control design implements least-privilege per RBAC specification",
+    ],
+    IQ: [
+      "Hardware specifications equal to or exceed DQ-approved requirements",
+      "Audit trail module active; no configuration errors",
+      "E-signature module installed; re-authentication on sign confirmed",
+      "Network on correct VLAN; TLS 1.2+ active; unauthorised ports closed",
+      "Backup executing on schedule; completion log without errors",
+      "Database installed at correct version; transaction logging enabled",
+      "Reporting module installed; all reports accessible",
+      "All interfaces reachable; connectivity verified",
+      "Software version matches DQ; checksum verified; all components present",
+      "User accounts configured per access matrix; lockout policy active",
+    ],
+    OQ: [
+      "All role restrictions enforced; unauthorised actions denied",
+      "All GxP events in audit trail; old/new values present; immutable",
+      "Signature captures name, time, meaning; invalidated on record change",
+      "All tested functions respond within 3 seconds under normal load",
+      "Backup completes without errors; integrity verified",
+      "All invalid inputs rejected with specific error; valid inputs accepted",
+      "Report data matches source data exactly for all sampled records",
+      "Data transferred correctly; interface errors handled and alerted",
+      "Software update installed; version verified; rollback documented",
+      "Access restrictions enforced for all tested role/function combinations",
+    ],
+    PQ: [
+      "Full workflow completes without errors; audit trail complete",
+      "All events in audit trail during production operations; timestamps UTC",
+      "21 CFR Part 11 §11.50 compliance confirmed; audit trail complete",
+      "Response time < 3 seconds under expected production concurrent load",
+      "RTO < 4 hours; RPO < 1 hour; all data intact after restore",
+      "No data corruption under concurrent load; all records correct",
+      "100% of sampled report data matches source; no discrepancies",
+      "Interface operates correctly at production data volumes",
+      "All end users accept system as fit for intended use (signed UAT)",
+      "System recoverable within RTO; DR procedure validated",
+    ],
+  };
+
+  const rows: TraceabilityRow[] = [];
+  let rowIndex = 0;
+
+  // Generate rows for each requirement with multiple test types
+  baseReqs.forEach((req, reqIdx) => {
+    const reqId = `REQ-${String(reqIdx + 1).padStart(3, "0")}`;
+    const risk = reqIdx < 3 ? "High" : reqIdx < 7 ? "Medium" : "Low";
+
+    // Assign test types based on requirement index (cycling through DQ, IQ, OQ, PQ)
+    const testTypeAssignments =
+      reqIdx < 3
+        ? ["DQ", "OQ"]
+        : reqIdx < 6
+          ? ["IQ", "OQ"]
+          : reqIdx < 8
+            ? ["OQ", "PQ"]
+            : ["IQ", "PQ"];
+
+    for (const testType of testTypeAssignments) {
+      const descArr = testDescriptions[testType] ?? testDescriptions.OQ;
+      const criteriaArr =
+        passCriteriaTemplates[testType] ?? passCriteriaTemplates.OQ;
+      const descIdx = rowIndex % descArr.length;
+      const testNum = String(Math.floor(rowIndex / 4) + 1).padStart(3, "0");
+      const testId = `${testType}-${testNum}`;
+
+      rows.push({
+        reqId,
+        requirement: req.charAt(0).toUpperCase() + req.slice(1),
+        testType,
+        testId,
+        testDescription: descArr[descIdx] ?? descArr[0],
+        passCriteria: criteriaArr[descIdx] ?? criteriaArr[0],
+        riskLevel: risk,
+      });
+      rowIndex++;
+    }
+  });
+
+  // Ensure we have at least 15 rows — add standard regulatory rows if needed
+  const standardRows: TraceabilityRow[] = [
     {
-      reqId: "REQ-001",
+      reqId: "REQ-R01",
       requirement:
-        "System shall provide role-based access control with at least 3 user roles",
+        "System shall comply with FDA 21 CFR Part 11 electronic records and signatures",
       testType: "OQ",
-      testId: "OQ-001",
+      testId: "OQ-R01",
       testDescription:
-        "Verify role-based access by logging in with each defined role and confirming only authorized functions are accessible",
+        "Execute complete audit trail and electronic signature tests per 21 CFR Part 11 requirements; verify all §11.10 controls are operational",
       passCriteria:
-        "All role restrictions enforced; unauthorized access denied with appropriate error message",
+        "All 21 CFR Part 11 §11.10 controls verified; audit trail complete and immutable; e-signatures compliant",
       riskLevel: "High",
     },
     {
-      reqId: "REQ-002",
+      reqId: "REQ-R02",
       requirement:
-        "System shall generate a complete audit trail for all data creation, modification, and deletion",
-      testType: "OQ",
-      testId: "OQ-004",
-      testDescription:
-        "Create, modify, and delete records; verify audit trail captures user ID, timestamp, old value, new value, and reason",
-      passCriteria:
-        "Audit trail entries present for all operations; no gaps; data matches expected values",
-      riskLevel: "High",
-    },
-    {
-      reqId: "REQ-003",
-      requirement:
-        "System shall support electronic signatures compliant with 21 CFR Part 11",
-      testType: "OQ",
-      testId: "OQ-005",
-      testDescription:
-        "Apply electronic signature to critical record; verify signature captures signatory, meaning, and timestamp",
-      passCriteria:
-        "Electronic signature binds to record; cannot be re-used; meaning displayed correctly",
-      riskLevel: "High",
-    },
-    {
-      reqId: "REQ-004",
-      requirement:
-        "System shall provide data backup and recovery capabilities with RPO < 1 hour",
+        "System shall maintain ALCOA+ data integrity throughout all operations",
       testType: "PQ",
-      testId: "PQ-009",
+      testId: "PQ-R01",
       testDescription:
-        "Execute backup, simulate data loss, perform restore; verify all data restored within RPO",
+        "Verify ALCOA+ compliance in production: data is attributable, legible, contemporaneous, original, and accurate throughout complete workflows",
       passCriteria:
-        "System restored within 4 hours; data loss < 1 hour; all records intact",
+        "All ALCOA+ principles satisfied in production operations; no data integrity findings",
       riskLevel: "High",
     },
     {
-      reqId: "REQ-005",
+      reqId: "REQ-R03",
       requirement:
-        "System hardware shall meet minimum specification requirements for deployment environment",
+        "System hardware shall be installed and qualified per DQ-approved specifications",
       testType: "IQ",
-      testId: "IQ-001",
+      testId: "IQ-R01",
       testDescription:
-        "Verify installed hardware specifications against DQ-approved design: CPU, RAM, storage, network",
+        "Verify hardware installation against DQ-approved specifications; confirm all components present and correctly configured",
       passCriteria:
-        "All hardware specifications equal to or exceed DQ-approved requirements",
+        "Hardware meets or exceeds DQ specifications; all components installed; configuration documented",
       riskLevel: "Medium",
     },
     {
-      reqId: "REQ-006",
+      reqId: "REQ-R04",
       requirement:
-        "System software shall be installed per vendor installation guide",
-      testType: "IQ",
-      testId: "IQ-003",
-      testDescription:
-        "Verify software installation: version number, checksum, installation path, and all components present",
-      passCriteria:
-        "Software version matches specification; all components installed; installation log clean",
-      riskLevel: "Medium",
-    },
-    {
-      reqId: "REQ-007",
-      requirement: "System shall generate reports in PDF and Excel format",
-      testType: "OQ",
-      testId: "OQ-006",
-      testDescription:
-        "Generate all required reports in each format; verify data accuracy against source data",
-      passCriteria:
-        "All reports generate successfully; data matches source; format is correct",
-      riskLevel: "Medium",
-    },
-    {
-      reqId: "REQ-008",
-      requirement:
-        "System shall validate all data inputs and provide meaningful error messages",
-      testType: "OQ",
-      testId: "OQ-009",
-      testDescription:
-        "Enter invalid data in all critical fields; verify validation errors are raised with clear messages",
-      passCriteria:
-        "All invalid inputs rejected; error messages are specific and actionable",
-      riskLevel: "Medium",
-    },
-    {
-      reqId: "REQ-009",
-      requirement:
-        "System design shall meet user requirements and intended use specifications",
+        "System design shall address all user requirements and intended use",
       testType: "DQ",
-      testId: "DQ-001",
+      testId: "DQ-R01",
       testDescription:
-        "Review system design documentation against URS; verify all requirements are addressed in design",
+        "Review system design documentation against all URS requirements; confirm all requirements addressed in design specifications",
       passCriteria:
-        "All URS requirements addressed in system design; no gaps identified",
-      riskLevel: "High",
-    },
-    {
-      reqId: "REQ-010",
-      requirement:
-        "System shall perform all critical functions within specified response time (<3 seconds)",
-      testType: "PQ",
-      testId: "PQ-006",
-      testDescription:
-        "Execute critical functions under expected production load with concurrent users; measure response times",
-      passCriteria:
-        "All critical functions respond within 3 seconds under normal production load",
-      riskLevel: "Medium",
-    },
-    {
-      reqId: "REQ-011",
-      requirement:
-        "System shall enforce password complexity and 90-day expiry policy",
-      testType: "OQ",
-      testId: "OQ-011",
-      testDescription:
-        "Test password creation with non-compliant passwords; verify rejection. Simulate 90-day expiry.",
-      passCriteria:
-        "Non-compliant passwords rejected; system forces password change at 90-day expiry",
-      riskLevel: "High",
-    },
-    {
-      reqId: "REQ-012",
-      requirement:
-        "System shall complete end-to-end business workflows correctly in production environment",
-      testType: "PQ",
-      testId: "PQ-001",
-      testDescription:
-        "Execute full primary business workflow with realistic production data; verify all steps complete correctly",
-      passCriteria:
-        "Complete workflow executes without errors; all data correct; audit trail complete",
-      riskLevel: "High",
-    },
-    {
-      reqId: "REQ-013",
-      requirement:
-        "System network and security configuration shall be installed per DQ specifications",
-      testType: "IQ",
-      testId: "IQ-006",
-      testDescription:
-        "Verify network connectivity, open ports, firewall rules match DQ-approved configuration",
-      passCriteria:
-        "All network connections verified; unauthorized ports closed; firewall active",
-      riskLevel: "High",
-    },
-    {
-      reqId: "REQ-014",
-      requirement:
-        "System shall maintain data integrity under concurrent multi-user operation",
-      testType: "PQ",
-      testId: "PQ-002",
-      testDescription:
-        "Simulate expected concurrent user load; verify no data corruption, conflicts, or performance degradation",
-      passCriteria:
-        "No data corruption under concurrent load; all transactions complete successfully",
-      riskLevel: "High",
-    },
-    {
-      reqId: "REQ-015",
-      requirement:
-        "System security configuration shall be verified per approved design",
-      testType: "DQ",
-      testId: "DQ-003",
-      testDescription:
-        "Review security architecture design: access control model, encryption design, audit trail design against security requirements",
-      passCriteria:
-        "Security design meets all security requirements; no design vulnerabilities identified",
+        "All URS requirements addressed in design; no unresolved requirement gaps; DQ approved by QA",
       riskLevel: "High",
     },
   ];
+
+  while (rows.length < 15) {
+    const stdRow = standardRows[rows.length % standardRows.length];
+    if (stdRow)
+      rows.push({ ...stdRow, reqId: stdRow.reqId + String(rows.length) });
+  }
+
+  return rows;
 }
 
 // ---------- Progress steps ----------
@@ -1360,12 +2248,14 @@ export function Gamp5Page() {
         const step = DOC_STEPS.find((s) => s.key === key);
         setCurrentStep(step?.label ?? key);
         setProgress(Math.round((i / (docKeys.length + 1)) * 100));
-        result[key] = await generateDocument(key, form);
+        await new Promise((r) => setTimeout(r, 150)); // brief UX pause
+        result[key] = generateDocument(key, form);
       }
 
       setCurrentStep("Traceability Matrix");
       setProgress(93);
-      result.traceabilityMatrix = await generateTraceability(form);
+      await new Promise((r) => setTimeout(r, 100));
+      result.traceabilityMatrix = generateTraceability(form);
 
       setProgress(100);
       setDocs(result as GeneratedDocuments);
@@ -1456,8 +2346,8 @@ export function Gamp5Page() {
             GAMP 5 Validation Document Generator
           </h1>
           <p className="text-sm text-gray-500 mt-1">
-            AI-powered audit-ready documentation · GAMP 5 Second Edition · FDA
-            21 CFR Part 11 · EU Annex 11 · ICH Q10
+            Audit-ready documentation · GAMP 5 Second Edition · FDA 21 CFR Part
+            11 · EU Annex 11 · ICH Q10
           </p>
         </div>
         {docs && (
@@ -1715,8 +2605,7 @@ export function Gamp5Page() {
                 ))}
               </div>
               <p className="text-xs text-center text-gray-400">
-                Generating 7 GAMP 5 compliant documents — this typically takes
-                60–120 seconds
+                Generating 7 GAMP 5 compliant documents — please wait
               </p>
             </div>
           )}

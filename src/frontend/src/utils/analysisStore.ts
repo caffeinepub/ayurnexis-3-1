@@ -2,6 +2,7 @@ import type { AnalysisResult } from "../backend.d";
 
 const LOCAL_ANALYSES_KEY = "ayurnexis_local_analyses";
 const DELETED_IDS_KEY = "ayurnexis_deleted_analyses";
+const DELETED_BATCH_IDS_KEY = "ayurnexis_deleted_seed_batches";
 
 export function saveLocalAnalysis(result: AnalysisResult): void {
   const existing = getLocalAnalyses();
@@ -45,4 +46,27 @@ export function restoreAnalysis(batchId: string): void {
   const deleted = getDeletedIds();
   deleted.delete(batchId);
   localStorage.setItem(DELETED_IDS_KEY, JSON.stringify([...deleted]));
+}
+
+// ─── Seed batch deletion (frontend-only batches with negative IDs) ────────────
+
+export function deleteSeedBatch(batchId: string): void {
+  const deleted = getDeletedSeedBatchIds();
+  deleted.add(batchId);
+  localStorage.setItem(DELETED_BATCH_IDS_KEY, JSON.stringify([...deleted]));
+  // Also delete the analysis entry
+  deleteAnalysis(batchId);
+}
+
+export function getDeletedSeedBatchIds(): Set<string> {
+  try {
+    const raw = localStorage.getItem(DELETED_BATCH_IDS_KEY);
+    return raw ? new Set(JSON.parse(raw)) : new Set();
+  } catch {
+    return new Set();
+  }
+}
+
+export function isSeedBatchDeleted(batchId: string): boolean {
+  return getDeletedSeedBatchIds().has(batchId);
 }

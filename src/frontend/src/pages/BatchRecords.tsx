@@ -24,7 +24,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { motion } from "motion/react";
-import { useState } from "react";
+import React, { useState } from "react";
 import { toast } from "sonner";
 import type { AnalysisResult } from "../backend.d";
 import type { Option } from "../backend.d";
@@ -34,6 +34,12 @@ import {
   useDeleteBatch,
 } from "../hooks/useQueries";
 import { isAdminAuthed } from "../utils/accessControl";
+import {
+  deleteSeedBatch,
+  getDeletedSeedBatchIds,
+  getLocalAnalyses,
+  saveLocalAnalysis,
+} from "../utils/analysisStore";
 
 type SeedBatch = {
   id: bigint;
@@ -1703,6 +1709,9 @@ export function BatchRecords({
   const { data: batches = [], isLoading } = useAllBatches();
   const deleteBatch = useDeleteBatch();
   const analyzeBatch = useAnalyzeBatch();
+  const [deletedSeedBatchIds, setDeletedSeedBatchIds] = React.useState<
+    Set<string>
+  >(() => getDeletedSeedBatchIds());
   const [search, setSearch] = useState("");
   const [analyzingId, setAnalyzingId] = useState<bigint | null>(null);
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(
@@ -1716,6 +1725,17 @@ export function BatchRecords({
     Record<string, "Approved" | "Rejected">
   >({});
 
+  // Get latest analysis results from localStorage to show current status in table
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional refresh on state changes
+  const localAnalysisMap = React.useMemo(() => {
+    const map = new Map<string, string>();
+    for (const a of getLocalAnalyses()) {
+      map.set(a.batchId, a.status === "Accept" ? "Pass" : "Fail");
+    }
+    return map;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deletedSeedBatchIds, analysisResult]);
+
   const handleUpdateBatchStatus = (
     batchId: string,
     newStatus: "Approved" | "Rejected",
@@ -1726,7 +1746,10 @@ export function BatchRecords({
     }
   };
 
-  const allBatches: DisplayBatch[] = [...SEED_BATCHES, ...batches].map((b) =>
+  const allBatches: DisplayBatch[] = [
+    ...SEED_BATCHES.filter((b) => !deletedSeedBatchIds.has(b.batchId)),
+    ...batches,
+  ].map((b) =>
     statusOverrides[b.batchId]
       ? { ...b, qualityStatus: statusOverrides[b.batchId] }
       : b,
@@ -1750,6 +1773,7 @@ export function BatchRecords({
           return;
         }
         const result = computeLocalAnalysis(batch);
+        saveLocalAnalysis(result);
         setAnalysisResult(result);
         setAnalysisBatch(batch);
         setAnalysisDialogOpen(true);
@@ -1778,11 +1802,18 @@ export function BatchRecords({
   };
 
   const handleDelete = async (id: bigint, batchId: string) => {
+    if (id < 0n) {
+      // Seed batch: delete from localStorage only
+      deleteSeedBatch(batchId);
+      setDeletedSeedBatchIds(getDeletedSeedBatchIds());
+      toast.success(`Batch ${batchId} deleted`);
+      return;
+    }
     try {
       await deleteBatch.mutateAsync(id);
       toast.success(`Batch ${batchId} deleted`);
     } catch {
-      toast.error("Delete failed");
+      toast.error("Delete failed — only admins can delete backend batches");
     }
   };
 
@@ -1884,7 +1915,12 @@ export function BatchRecords({
               </thead>
               <tbody>
                 {filtered.map((b, i) => {
-                  const rowStatus = b.qualityStatus ?? "Pending";
+                  const analysedStatus = localAnalysisMap.get(b.batchId);
+                  const rowStatus =
+                    statusOverrides[b.batchId] ??
+                    analysedStatus ??
+                    b.qualityStatus ??
+                    "Pending";
                   return (
                     <tr
                       key={b.batchId}
