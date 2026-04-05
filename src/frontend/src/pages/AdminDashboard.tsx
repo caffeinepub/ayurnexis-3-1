@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Activity,
   AlertCircle,
@@ -24,11 +25,13 @@ import {
   RefreshCw,
   Search,
   Shield,
+  ShieldAlert,
   Trash2,
   UserCheck,
   UserMinus,
   Users,
   XCircle,
+  Zap,
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -42,7 +45,7 @@ import {
 
 const ADMIN_TOKEN = "AYURNEXIS-ADMIN-TOKEN-2026";
 
-// ─── Admin Login ───────────────────────────────────────────────────────
+// ─── Admin Login ────────────────────────────────────────────────────────────────
 
 function AdminLogin({ onLogin }: { onLogin: () => void }) {
   const [password, setPassword] = useState("");
@@ -137,7 +140,7 @@ function AdminLogin({ onLogin }: { onLogin: () => void }) {
   );
 }
 
-// ─── Code Modal ────────────────────────────────────────────────────────
+// ─── Code Modal ──────────────────────────────────────────────────────────────
 
 function CodeModal({
   user,
@@ -230,12 +233,19 @@ function CodeModal({
   );
 }
 
-// ─── User Card ───────────────────────────────────────────────────────────
+// ─── User Card ────────────────────────────────────────────────────────────────────
 
 function UserCard({
   user: initialUser,
   onRefresh,
-}: { user: UserRegistration; onRefresh: () => void }) {
+  creditBalance,
+  onSetCredits,
+}: {
+  user: UserRegistration;
+  onRefresh: () => void;
+  creditBalance?: number;
+  onSetCredits?: (userId: string, amount: number) => Promise<void>;
+}) {
   const [user, setUser] = useState(initialUser);
   const [loading, setLoading] = useState<string | null>(null);
   const [generatedCode, setGeneratedCode] = useState("");
@@ -243,6 +253,8 @@ function UserCard({
   const [showDaysInput, setShowDaysInput] = useState(false);
   const [expiryDays, setExpiryDays] = useState(30);
   const [showActivity, setShowActivity] = useState(false);
+  const [newCreditAmount, setNewCreditAmount] = useState(10);
+  const [settingCredits, setSettingCredits] = useState(false);
 
   const getUserActivity = () => {
     const activities: { time: string; label: string }[] = [];
@@ -300,7 +312,6 @@ function UserCard({
     : null;
   const isCodeExpired = codeExpiry ? codeExpiry < new Date() : false;
 
-  // All admin actions call backend directly
   const callBackend = async <T,>(
     fn: (actor: any) => Promise<T>,
   ): Promise<T | null> => {
@@ -416,9 +427,22 @@ function UserCard({
     setLoading(null);
     if (ok === true) {
       toast.success(`${user.name}'s request deleted`);
-      onRefresh(); // will remove from list
+      onRefresh();
     } else {
       toast.error("Failed to delete. Please try again.");
+    }
+  };
+
+  const handleSetCredits = async () => {
+    if (!onSetCredits) return;
+    setSettingCredits(true);
+    try {
+      await onSetCredits(user.id, newCreditAmount);
+      toast.success(`Set ${newCreditAmount} credits for ${user.name}`);
+    } catch {
+      toast.error("Failed to set credits.");
+    } finally {
+      setSettingCredits(false);
     }
   };
 
@@ -552,6 +576,21 @@ function UserCard({
                 month: "short",
               })}
               )
+            </span>
+          )}
+          {/* AI Credits inline */}
+          {creditBalance !== undefined && (
+            <span
+              className="ml-auto flex items-center gap-1 text-[10px] font-semibold"
+              style={{
+                color:
+                  creditBalance > 0
+                    ? "oklch(0.42 0.14 145)"
+                    : "oklch(0.55 0.20 25)",
+              }}
+            >
+              <Zap size={10} />
+              {creditBalance} AI credits
             </span>
           )}
         </div>
@@ -741,6 +780,46 @@ function UserCard({
               </div>
             ));
           })()}
+
+          {/* Set credits inline */}
+          {onSetCredits && (
+            <div
+              className="pt-2 border-t"
+              style={{ borderColor: "oklch(0.88 0.012 240)" }}
+            >
+              <p className="text-xs font-semibold text-foreground mb-2 flex items-center gap-1.5">
+                <Zap size={11} style={{ color: "oklch(0.42 0.14 145)" }} />
+                AI Credits: {creditBalance ?? 0}
+              </p>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min={0}
+                  max={1000}
+                  value={newCreditAmount}
+                  onChange={(e) => setNewCreditAmount(Number(e.target.value))}
+                  className="h-7 w-20 text-xs rounded-md border px-2 outline-none"
+                  style={{ border: "1px solid oklch(0.42 0.14 145 / 0.4)" }}
+                  data-ocid="admin.credits.amount.input"
+                />
+                <Button
+                  size="sm"
+                  className="h-7 text-xs px-3"
+                  style={{ background: "oklch(0.42 0.14 145)", color: "white" }}
+                  disabled={settingCredits}
+                  onClick={handleSetCredits}
+                  data-ocid="admin.credits.set_button"
+                >
+                  {settingCredits ? (
+                    <Loader2 size={11} className="animate-spin" />
+                  ) : (
+                    <Zap size={11} className="mr-1" />
+                  )}
+                  Set Credits
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -755,7 +834,376 @@ function UserCard({
   );
 }
 
-// ─── Main AdminDashboard ──────────────────────────────────────────────────
+// ─── AI Credits Tab ───────────────────────────────────────────────────────────
+
+interface AuditEntry {
+  userId: string;
+  userName: string;
+  systemName: string;
+  riskScore: number;
+  riskLevel: string;
+  creditsUsed: number;
+  timestamp: number;
+}
+
+function AICreditsTab({ users }: { users: UserRegistration[] }) {
+  const [creditMap, setCreditMap] = useState<Record<string, number>>({});
+  const [auditLog, setAuditLog] = useState<AuditEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [auditLoading, setAuditLoading] = useState(true);
+
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    setAuditLoading(true);
+    try {
+      const actor = await createActorWithConfig();
+      const [allCredits, auditRaw] = await Promise.all([
+        actor
+          .getAllUserCredits(ADMIN_TOKEN)
+          .catch(() => [] as Array<[string, bigint]>),
+        actor.getRiskAuditLog(ADMIN_TOKEN).catch(() => []),
+      ]);
+
+      const map: Record<string, number> = {};
+      for (const [uid, amt] of allCredits) {
+        map[uid] = Number(amt);
+      }
+      setCreditMap(map);
+
+      const parsed: AuditEntry[] = auditRaw.map((e: any) => ({
+        userId: e.userId,
+        userName: e.userName,
+        systemName: e.systemName,
+        riskScore: Number(e.riskScore),
+        riskLevel: e.riskLevel,
+        creditsUsed: Number(e.creditsUsed),
+        timestamp:
+          Number(e.timestamp) > 1e15
+            ? Math.round(Number(e.timestamp) / 1_000_000)
+            : Number(e.timestamp),
+      }));
+      parsed.sort((a, b) => b.timestamp - a.timestamp);
+      setAuditLog(parsed);
+    } catch (err) {
+      console.error("Failed to load credits:", err);
+    } finally {
+      setLoading(false);
+      setAuditLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  const handleSetCredits = async (userId: string, amount: number) => {
+    const actor = await createActorWithConfig();
+    const ok = await actor.setUserCredits(userId, BigInt(amount), ADMIN_TOKEN);
+    if (ok) {
+      setCreditMap((prev) => ({ ...prev, [userId]: amount }));
+    } else {
+      throw new Error("Backend rejected credit update");
+    }
+  };
+
+  const riskLevelColor = (level: string) => {
+    if (level === "Critical" || level === "High") return "oklch(0.55 0.20 25)";
+    if (level === "Medium") return "oklch(0.68 0.18 45)";
+    return "oklch(0.42 0.14 145)";
+  };
+
+  return (
+    <div className="space-y-5">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-base font-semibold text-foreground flex items-center gap-2">
+            <Zap size={16} style={{ color: "oklch(0.42 0.14 145)" }} />
+            AI Credits Manager
+          </h3>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Set per-user credit balances for GAMP Risk AI analysis
+          </p>
+        </div>
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-8 text-xs gap-1.5"
+          disabled={loading}
+          onClick={loadData}
+          data-ocid="admin.credits.refresh_button"
+        >
+          {loading ? (
+            <Loader2 size={12} className="animate-spin" />
+          ) : (
+            <RefreshCw size={12} />
+          )}
+          Refresh
+        </Button>
+      </div>
+
+      {/* Admin unlimited note */}
+      <div
+        className="flex items-center gap-3 rounded-xl px-4 py-3 text-sm"
+        style={{
+          background: "oklch(0.42 0.14 145 / 0.08)",
+          border: "1px solid oklch(0.42 0.14 145 / 0.25)",
+        }}
+        data-ocid="admin.credits.admin_info.panel"
+      >
+        <Zap size={14} style={{ color: "oklch(0.42 0.14 145)" }} />
+        <p className="text-xs" style={{ color: "oklch(0.35 0.10 145)" }}>
+          <span className="font-semibold">Admin has unlimited credits.</span>{" "}
+          Users are blocked from running AI analysis when their credit balance
+          reaches 0.
+        </p>
+      </div>
+
+      {/* Users credit list */}
+      {loading ? (
+        <div className="flex justify-center py-8">
+          <Loader2
+            size={24}
+            className="animate-spin"
+            style={{ color: "oklch(0.42 0.14 145)" }}
+          />
+        </div>
+      ) : (
+        <div className="space-y-3" data-ocid="admin.credits.users.list">
+          {users.filter((u) => u.status === "approved").length === 0 ? (
+            <p
+              className="text-sm text-muted-foreground text-center py-6"
+              data-ocid="admin.credits.users.empty_state"
+            >
+              No approved users yet.
+            </p>
+          ) : (
+            users
+              .filter((u) => u.status === "approved")
+              .map((user, i) => {
+                const credits = creditMap[user.id] ?? 0;
+                return (
+                  <div
+                    key={user.id}
+                    data-ocid={`admin.credits.user.item.${i + 1}`}
+                    className="flex items-center gap-4 rounded-xl p-3 flex-wrap"
+                    style={{
+                      background: "oklch(1.0 0 0)",
+                      border: "1px solid oklch(0.88 0.012 240)",
+                    }}
+                  >
+                    <div
+                      className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0"
+                      style={{
+                        background: "oklch(0.72 0.130 78 / 0.15)",
+                        color: "oklch(0.42 0.14 145)",
+                      }}
+                    >
+                      {user.name.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-foreground truncate">
+                        {user.name}
+                      </p>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {user.email}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div
+                        className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold"
+                        style={{
+                          background:
+                            credits > 5
+                              ? "oklch(0.42 0.14 145 / 0.10)"
+                              : credits > 0
+                                ? "oklch(0.72 0.15 78 / 0.10)"
+                                : "oklch(0.55 0.20 25 / 0.10)",
+                          color:
+                            credits > 5
+                              ? "oklch(0.35 0.14 145)"
+                              : credits > 0
+                                ? "oklch(0.50 0.12 78)"
+                                : "oklch(0.45 0.18 25)",
+                        }}
+                      >
+                        <Zap size={11} />
+                        {credits} credits
+                      </div>
+                      <SetCreditsInline
+                        userId={user.id}
+                        currentCredits={credits}
+                        onSet={handleSetCredits}
+                      />
+                    </div>
+                  </div>
+                );
+              })
+          )}
+        </div>
+      )}
+
+      <Separator />
+
+      {/* Usage log */}
+      <div>
+        <h4 className="text-sm font-semibold text-foreground flex items-center gap-2 mb-3">
+          <ShieldAlert size={14} style={{ color: "oklch(0.42 0.14 145)" }} />
+          Risk Analysis Usage Log
+        </h4>
+        {auditLoading ? (
+          <div className="flex justify-center py-6">
+            <Loader2
+              size={20}
+              className="animate-spin"
+              style={{ color: "oklch(0.42 0.14 145)" }}
+            />
+          </div>
+        ) : auditLog.length === 0 ? (
+          <p
+            className="text-sm text-muted-foreground text-center py-6"
+            data-ocid="admin.audit_log.empty_state"
+          >
+            No risk analyses run yet.
+          </p>
+        ) : (
+          <div
+            className="overflow-x-auto rounded-xl"
+            style={{ border: "1px solid oklch(0.88 0.012 240)" }}
+            data-ocid="admin.audit_log.table"
+          >
+            <table className="w-full text-xs">
+              <thead>
+                <tr
+                  style={{
+                    background: "oklch(0.97 0.004 240)",
+                    borderBottom: "1px solid oklch(0.88 0.012 240)",
+                  }}
+                >
+                  <th className="text-left px-3 py-2.5 font-semibold text-muted-foreground">
+                    User
+                  </th>
+                  <th className="text-left px-3 py-2.5 font-semibold text-muted-foreground">
+                    System Name
+                  </th>
+                  <th className="text-left px-3 py-2.5 font-semibold text-muted-foreground">
+                    Risk Score
+                  </th>
+                  <th className="text-left px-3 py-2.5 font-semibold text-muted-foreground">
+                    Risk Level
+                  </th>
+                  <th className="text-left px-3 py-2.5 font-semibold text-muted-foreground">
+                    Credits Used
+                  </th>
+                  <th className="text-left px-3 py-2.5 font-semibold text-muted-foreground">
+                    Timestamp
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {auditLog.map((entry, i) => (
+                  <tr
+                    key={`${entry.userId}-${entry.timestamp}-${i}`}
+                    style={{ borderBottom: "1px solid oklch(0.95 0.005 240)" }}
+                    data-ocid={`admin.audit_log.row.${i + 1}`}
+                  >
+                    <td className="px-3 py-2 font-medium text-foreground">
+                      {entry.userName}
+                    </td>
+                    <td className="px-3 py-2 text-muted-foreground">
+                      {entry.systemName}
+                    </td>
+                    <td
+                      className="px-3 py-2 font-mono font-bold"
+                      style={{ color: riskLevelColor(entry.riskLevel) }}
+                    >
+                      {entry.riskScore}/100
+                    </td>
+                    <td className="px-3 py-2">
+                      <span
+                        className="px-2 py-0.5 rounded-full text-[10px] font-bold"
+                        style={{
+                          background: `${riskLevelColor(entry.riskLevel)}1a`,
+                          color: riskLevelColor(entry.riskLevel),
+                        }}
+                      >
+                        {entry.riskLevel}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2 text-muted-foreground text-center">
+                      {entry.creditsUsed}
+                    </td>
+                    <td className="px-3 py-2 text-muted-foreground font-mono text-[10px]">
+                      {new Date(entry.timestamp).toLocaleString("en-IN", {
+                        day: "2-digit",
+                        month: "short",
+                        year: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SetCreditsInline({
+  userId,
+  currentCredits,
+  onSet,
+}: {
+  userId: string;
+  currentCredits: number;
+  onSet: (id: string, amount: number) => Promise<void>;
+}) {
+  const [amount, setAmount] = useState(currentCredits);
+  const [loading, setLoading] = useState(false);
+
+  const handle = async () => {
+    setLoading(true);
+    try {
+      await onSet(userId, amount);
+      toast.success(`Credits updated to ${amount}`);
+    } catch {
+      toast.error("Failed to update credits.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-1.5">
+      <input
+        type="number"
+        min={0}
+        max={9999}
+        value={amount}
+        onChange={(e) => setAmount(Number(e.target.value))}
+        className="h-7 w-16 text-xs rounded-md border px-2 outline-none"
+        style={{ border: "1px solid oklch(0.42 0.14 145 / 0.4)" }}
+        data-ocid="admin.credits.set.input"
+      />
+      <Button
+        size="sm"
+        className="h-7 text-xs px-2"
+        style={{ background: "oklch(0.42 0.14 145)", color: "white" }}
+        disabled={loading}
+        onClick={handle}
+        data-ocid="admin.credits.set.save_button"
+      >
+        {loading ? <Loader2 size={11} className="animate-spin" /> : "Set"}
+      </Button>
+    </div>
+  );
+}
+
+// ─── Main AdminDashboard ───────────────────────────────────────────────────────────
 
 export function AdminDashboard() {
   const [authed, setAuthed] = useState(isAdminAuthed());
@@ -766,8 +1214,8 @@ export function AdminDashboard() {
   const [activeFilter, setActiveFilter] = useState<
     "all" | "pending" | "approved" | "revoked"
   >("all");
+  const [creditMap, setCreditMap] = useState<Record<string, number>>({});
 
-  // Load users exclusively from backend
   const loadUsers = useCallback(async () => {
     setLoading(true);
     setBackendError("");
@@ -779,23 +1227,34 @@ export function AdminDashboard() {
           await new Promise((r) => setTimeout(r, 3000));
         }
         const actor = await createActorWithConfig();
-        const records: any[] = await actor.getAccessRequests(ADMIN_TOKEN);
-        const parsed: UserRegistration[] = records.map(backendUserToLocal);
-        // Sort newest first
+        const [records, allCredits] = await Promise.all([
+          actor.getAccessRequests(ADMIN_TOKEN),
+          actor
+            .getAllUserCredits(ADMIN_TOKEN)
+            .catch(() => [] as Array<[string, bigint]>),
+        ]);
+        const parsed: UserRegistration[] = (records as any[]).map(
+          backendUserToLocal,
+        );
         parsed.sort((a, b) => b.registeredAt - a.registeredAt);
         setUsers(parsed);
+        const map: Record<string, number> = {};
+        for (const [uid, amt] of allCredits) {
+          map[String(uid)] = Number(amt);
+        }
+        setCreditMap(map);
         setBackendError("");
-        console.log(`Admin panel: loaded ${parsed.length} users from backend`);
         setLoading(false);
         return;
       } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
         console.warn(
           `Admin load attempt ${attempt + 1}/${MAX_RETRIES} failed:`,
-          err,
+          msg,
         );
         if (attempt === MAX_RETRIES - 1) {
           setBackendError(
-            "Could not reach backend. Check your connection and click Refresh.",
+            `Could not reach backend: ${msg}. Click Refresh to retry.`,
           );
         }
       }
@@ -811,6 +1270,16 @@ export function AdminDashboard() {
     setAdminAuthed(false);
     setAuthed(false);
     setUsers([]);
+  };
+
+  const handleSetCredits = async (userId: string, amount: number) => {
+    const actor = await createActorWithConfig();
+    const ok = await actor.setUserCredits(userId, BigInt(amount), ADMIN_TOKEN);
+    if (ok) {
+      setCreditMap((prev) => ({ ...prev, [userId]: amount }));
+    } else {
+      throw new Error("Backend rejected credit update");
+    }
   };
 
   if (!authed) {
@@ -894,11 +1363,11 @@ export function AdminDashboard() {
         </div>
       </div>
 
-      <div className="max-w-2xl mx-auto px-4 py-6 space-y-5">
+      <div className="max-w-3xl mx-auto px-4 py-6">
         {/* Backend error */}
         {backendError && (
           <div
-            className="flex items-start gap-3 rounded-xl px-4 py-3 text-sm"
+            className="flex items-start gap-3 rounded-xl px-4 py-3 text-sm mb-5"
             style={{
               background: "oklch(0.95 0.03 25)",
               border: "1px solid oklch(0.70 0.10 25 / 0.4)",
@@ -921,113 +1390,167 @@ export function AdminDashboard() {
           </div>
         )}
 
-        {/* Stats */}
-        <div className="grid grid-cols-4 gap-3">
-          {(
-            [
-              { label: "Total", count: counts.total, filter: "all" as const },
-              {
-                label: "Pending",
-                count: counts.pending,
-                filter: "pending" as const,
-              },
-              {
-                label: "Active",
-                count: counts.approved,
-                filter: "approved" as const,
-              },
-              {
-                label: "Revoked",
-                count: counts.revoked,
-                filter: "revoked" as const,
-              },
-            ] as const
-          ).map(({ label, count, filter }) => (
-            <button
-              key={filter}
-              type="button"
-              data-ocid={`admin.filter.${filter}`}
-              onClick={() => setActiveFilter(filter)}
-              className="rounded-xl p-3 text-center transition-all"
+        {/* Tabs */}
+        <Tabs defaultValue="users" data-ocid="admin.main.tab">
+          <TabsList className="mb-5">
+            <TabsTrigger
+              value="users"
+              data-ocid="admin.users.tab"
+              className="flex items-center gap-2"
+            >
+              <Users size={13} />
+              Users
+              {counts.pending > 0 && (
+                <span
+                  className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold"
+                  style={{
+                    background: "oklch(0.72 0.130 78 / 0.20)",
+                    color: "oklch(0.50 0.12 78)",
+                  }}
+                >
+                  {counts.pending}
+                </span>
+              )}
+            </TabsTrigger>
+            <TabsTrigger
+              value="credits"
+              data-ocid="admin.credits.tab"
+              className="flex items-center gap-2"
+            >
+              <Zap size={13} />
+              AI Credits
+            </TabsTrigger>
+          </TabsList>
+
+          {/* Users tab */}
+          <TabsContent value="users" className="space-y-5">
+            {/* Stats */}
+            <div className="grid grid-cols-4 gap-3">
+              {(
+                [
+                  {
+                    label: "Total",
+                    count: counts.total,
+                    filter: "all" as const,
+                  },
+                  {
+                    label: "Pending",
+                    count: counts.pending,
+                    filter: "pending" as const,
+                  },
+                  {
+                    label: "Active",
+                    count: counts.approved,
+                    filter: "approved" as const,
+                  },
+                  {
+                    label: "Revoked",
+                    count: counts.revoked,
+                    filter: "revoked" as const,
+                  },
+                ] as const
+              ).map(({ label, count, filter }) => (
+                <button
+                  key={filter}
+                  type="button"
+                  data-ocid={`admin.filter.${filter}`}
+                  onClick={() => setActiveFilter(filter)}
+                  className="rounded-xl p-3 text-center transition-all"
+                  style={{
+                    background:
+                      activeFilter === filter
+                        ? "oklch(0.42 0.14 145 / 0.1)"
+                        : "oklch(1.0 0 0)",
+                    border:
+                      activeFilter === filter
+                        ? "1.5px solid oklch(0.42 0.14 145 / 0.5)"
+                        : "1px solid oklch(0.88 0.012 240)",
+                  }}
+                >
+                  <p className="text-xl font-bold text-foreground">{count}</p>
+                  <p className="text-[10px] text-muted-foreground">{label}</p>
+                </button>
+              ))}
+            </div>
+
+            {/* Search */}
+            <div
+              className="flex items-center gap-2 rounded-xl px-3 py-2"
               style={{
-                background:
-                  activeFilter === filter
-                    ? "oklch(0.42 0.14 145 / 0.1)"
-                    : "oklch(1.0 0 0)",
-                border:
-                  activeFilter === filter
-                    ? "1.5px solid oklch(0.42 0.14 145 / 0.5)"
-                    : "1px solid oklch(0.88 0.012 240)",
+                background: "oklch(1.0 0 0)",
+                border: "1px solid oklch(0.88 0.012 240)",
               }}
             >
-              <p className="text-xl font-bold text-foreground">{count}</p>
-              <p className="text-[10px] text-muted-foreground">{label}</p>
-            </button>
-          ))}
-        </div>
+              <Search size={14} className="text-muted-foreground" />
+              <input
+                data-ocid="admin.search.input"
+                type="text"
+                placeholder="Search by name or email…"
+                className="flex-1 text-sm bg-transparent outline-none placeholder:text-muted-foreground"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
 
-        {/* Search */}
-        <div
-          className="flex items-center gap-2 rounded-xl px-3 py-2"
-          style={{
-            background: "oklch(1.0 0 0)",
-            border: "1px solid oklch(0.88 0.012 240)",
-          }}
-        >
-          <Search size={14} className="text-muted-foreground" />
-          <input
-            data-ocid="admin.search.input"
-            type="text"
-            placeholder="Search by name or email…"
-            className="flex-1 text-sm bg-transparent outline-none placeholder:text-muted-foreground"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </div>
+            {/* User list */}
+            {loading && (
+              <div className="flex items-center justify-center py-12">
+                <Loader2
+                  size={28}
+                  className="animate-spin"
+                  style={{ color: "oklch(0.42 0.14 145)" }}
+                />
+                <span className="ml-3 text-sm text-muted-foreground">
+                  Loading users from backend…
+                </span>
+              </div>
+            )}
 
-        {/* User list */}
-        {loading && (
-          <div className="flex items-center justify-center py-12">
-            <Loader2
-              size={28}
-              className="animate-spin"
-              style={{ color: "oklch(0.42 0.14 145)" }}
-            />
-            <span className="ml-3 text-sm text-muted-foreground">
-              Loading users from backend…
-            </span>
-          </div>
-        )}
+            {!loading && !backendError && users.length === 0 && (
+              <div
+                className="text-center py-12"
+                data-ocid="admin.users.empty_state"
+              >
+                <Users
+                  size={32}
+                  className="mx-auto mb-3"
+                  style={{ color: "oklch(0.75 0.01 240)" }}
+                />
+                <p className="text-sm font-medium text-muted-foreground">
+                  No access requests yet
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  When users submit registration forms, they will appear here.
+                </p>
+              </div>
+            )}
 
-        {!loading && !backendError && users.length === 0 && (
-          <div className="text-center py-12">
-            <Users
-              size={32}
-              className="mx-auto mb-3"
-              style={{ color: "oklch(0.75 0.01 240)" }}
-            />
-            <p className="text-sm font-medium text-muted-foreground">
-              No access requests yet
-            </p>
-            <p className="text-xs text-muted-foreground mt-1">
-              When users submit registration forms, they will appear here.
-            </p>
-          </div>
-        )}
+            {!loading && filtered.length === 0 && users.length > 0 && (
+              <div className="text-center py-8">
+                <p className="text-sm text-muted-foreground">
+                  No users match your filter.
+                </p>
+              </div>
+            )}
 
-        {!loading && filtered.length === 0 && users.length > 0 && (
-          <div className="text-center py-8">
-            <p className="text-sm text-muted-foreground">
-              No users match your filter.
-            </p>
-          </div>
-        )}
+            <div className="space-y-3">
+              {filtered.map((u) => (
+                <UserCard
+                  key={u.id}
+                  user={u}
+                  onRefresh={loadUsers}
+                  creditBalance={creditMap[u.id]}
+                  onSetCredits={handleSetCredits}
+                />
+              ))}
+            </div>
+          </TabsContent>
 
-        <div className="space-y-3">
-          {filtered.map((u) => (
-            <UserCard key={u.id} user={u} onRefresh={loadUsers} />
-          ))}
-        </div>
+          {/* AI Credits tab */}
+          <TabsContent value="credits">
+            <AICreditsTab users={users} />
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   );

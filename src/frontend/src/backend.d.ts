@@ -111,6 +111,16 @@ export interface UserRecord {
   approvedAt: Option<bigint>;
 }
 
+export interface RiskAuditEntry {
+  userId: string;
+  userName: string;
+  systemName: string;
+  riskScore: bigint;
+  riskLevel: string;
+  creditsUsed: bigint;
+  timestamp: bigint;
+}
+
 export interface backendInterface {
   // Auth
   _initializeAccessControlWithSecret(userSecret: string): Promise<void>;
@@ -120,8 +130,18 @@ export interface backendInterface {
   setAppRole(user: Principal, role: AppRole): Promise<void>;
   getMyAppRole(): Promise<Option<AppRole>>;
 
-  // AI Proxy — routes all AI calls through the backend canister to avoid CORS
+  // AI Proxy
   callDeepSeek(prompt: string): Promise<string>;
+  callDeepSeekExtended(prompt: string): Promise<string>;
+
+  // AI Credit System
+  setUserCredits(userId: string, amount: bigint, adminToken: string): Promise<boolean>;
+  getUserCredits(userId: string, adminToken: string): Promise<bigint>;
+  getUserOwnCredits(userId: string): Promise<bigint>;
+  getAllUserCredits(adminToken: string): Promise<Array<[string, bigint]>>;
+  deductCredit(userId: string): Promise<boolean>;
+  logRiskPrediction(userId: string, userName: string, systemName: string, riskScore: bigint, riskLevel: string): Promise<void>;
+  getRiskAuditLog(adminToken: string): Promise<RiskAuditEntry[]>;
 
   // Batch CRUD
   createBatch(input: BatchInput): Promise<bigint>;

@@ -45,7 +45,7 @@ import { AdminDashboard } from "./pages/AdminDashboard";
 import { BatchRecords } from "./pages/BatchRecords";
 import { Dashboard } from "./pages/Dashboard";
 import { FormulationLab } from "./pages/FormulationLab";
-import { Gamp5Page } from "./pages/Gamp5Page";
+import { GampRiskPage } from "./pages/GampRiskPage";
 import { GetFormulationIdea } from "./pages/GetFormulationIdea";
 import { HistoryPage } from "./pages/HistoryPage";
 import { Predictions } from "./pages/Predictions";
@@ -120,7 +120,7 @@ const NAV_ITEMS: {
     icon: Beaker,
     short: "Formula",
   },
-  { id: "gamp5", label: "GAMP 5 Validator", icon: FileCheck2, short: "GAMP5" },
+  { id: "gamp5", label: "GAMP Risk AI", icon: FileCheck2, short: "GAMP AI" },
 ];
 
 function AppShell() {
@@ -288,7 +288,7 @@ function AppShell() {
       case "adminDashboard":
         return <AdminDashboard />;
       case "gamp5":
-        return <Gamp5Page />;
+        return <GampRiskPage />;
     }
   };
 

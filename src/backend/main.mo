@@ -5,8 +5,9 @@ import Map "mo:core/Map";
 import Float "mo:core/Float";
 import Nat "mo:core/Nat";
 import Prim "mo:prim";
+import Array "mo:core/Array";
 
-persistent actor class AyurNexis() = self {
+actor class AyurNexis() = self {
 
   let authState = AccessControl.initState();
 
@@ -26,17 +27,30 @@ persistent actor class AyurNexis() = self {
     appRoles.get(caller);
   };
 
-  // ─── DeepSeek AI Proxy ───────────────────────────────────────────────────────
+  // ─── DeepSeek AI Proxy ──────────────────────────────────────────────────────────────────────────────────
 
   public query func _transform(input : Outcall.TransformationInput) : async Outcall.TransformationOutput {
     { input.response with headers = [] };
   };
 
   public shared func callDeepSeek(prompt : Text) : async Text {
-    // Return raw JSON response — frontend parses choices[0].message.content
-    // This avoids expensive O(n^2) string processing in Motoko
     let escaped = escapeJsonSimple(prompt);
     let body = "{\"model\":\"deepseek-chat\",\"messages\":[{\"role\":\"user\",\"content\":\"" # escaped # "\"}],\"max_tokens\":1500,\"temperature\":0.7}";
+    let headers : [Outcall.Header] = [
+      { name = "Content-Type"; value = "application/json" },
+      { name = "Authorization"; value = "Bearer " # DEEPSEEK_API_KEY },
+    ];
+    try {
+      await Outcall.httpPostRequest(DEEPSEEK_URL, headers, body, _transform);
+    } catch (e) {
+      "{\"error\":\"" # Prim.errorMessage(e) # "\"}";
+    };
+  };
+
+  // Longer token limit version for risk assessment
+  public shared func callDeepSeekExtended(prompt : Text) : async Text {
+    let escaped = escapeJsonSimple(prompt);
+    let body = "{\"model\":\"deepseek-chat\",\"messages\":[{\"role\":\"user\",\"content\":\"" # escaped # "\"}],\"max_tokens\":2500,\"temperature\":0.4}";
     let headers : [Outcall.Header] = [
       { name = "Content-Type"; value = "application/json" },
       { name = "Authorization"; value = "Bearer " # DEEPSEEK_API_KEY },
@@ -61,6 +75,102 @@ persistent actor class AyurNexis() = self {
     };
     result;
   };
+
+  // ─── AI Credit System ───────────────────────────────────────────────────────────────────────
+
+  let ADMIN_TOKEN_CREDITS = "AYURNEXIS-ADMIN-TOKEN-2026";
+  let _ADMIN_UNLIMITED_CREDITS : Nat = 999999;
+
+  // Credits per userId; admin always has ADMIN_UNLIMITED_CREDITS
+  var userCredits : Map.Map<Text, Nat> = Map.empty<Text, Nat>();
+
+  public type RiskAuditEntry = {
+    userId : Text;
+    userName : Text;
+    systemName : Text;
+    riskScore : Nat;
+    riskLevel : Text;
+    creditsUsed : Nat;
+    timestamp : Int;
+  };
+
+  var riskAuditLog : [RiskAuditEntry] = [];
+
+  // Admin sets credits for a user
+  public shared func setUserCredits(userId : Text, amount : Nat, adminToken : Text) : async Bool {
+    if (adminToken != ADMIN_TOKEN_CREDITS) { return false };
+    userCredits.add(userId, amount);
+    true;
+  };
+
+  // Admin reads credits for a user
+  public query func getUserCredits(userId : Text, adminToken : Text) : async Nat {
+    if (adminToken != ADMIN_TOKEN_CREDITS) { return 0 };
+    switch (userCredits.get(userId)) {
+      case (?n) n;
+      case (null) 0;
+    };
+  };
+
+  // User reads their own credits (no admin token needed, by userId)
+  public query func getUserOwnCredits(userId : Text) : async Nat {
+    switch (userCredits.get(userId)) {
+      case (?n) n;
+      case (null) 0;
+    };
+  };
+
+  // Get all user credit balances (admin only)
+  public query func getAllUserCredits(adminToken : Text) : async [(Text, Nat)] {
+    if (adminToken != ADMIN_TOKEN_CREDITS) { return [] };
+    userCredits.entries().toArray();
+  };
+
+  // Deduct 1 credit; returns true if successful, false if no credits
+  // userId = "ADMIN" gets unlimited
+  public shared func deductCredit(userId : Text) : async Bool {
+    if (userId == "ADMIN" or userId == "admin") { return true };
+    switch (userCredits.get(userId)) {
+      case (null) { return false };
+      case (?n) {
+        if (n == 0) { return false };
+        userCredits.add(userId, Nat.sub(n, 1));
+        true;
+      };
+    };
+  };
+
+  // Log a risk prediction run
+  public shared func logRiskPrediction(
+    userId : Text,
+    userName : Text,
+    systemName : Text,
+    riskScore : Nat,
+    riskLevel : Text,
+  ) : async () {
+    let now : Int = Prim.nat64ToNat(Prim.time());
+    let entry : RiskAuditEntry = {
+      userId;
+      userName;
+      systemName;
+      riskScore;
+      riskLevel;
+      creditsUsed = 1;
+      timestamp = now;
+    };
+    let oldLen = riskAuditLog.size();
+    riskAuditLog := Array.tabulate<RiskAuditEntry>(oldLen + 1, func (i : Nat) : RiskAuditEntry {
+      if (i < oldLen) riskAuditLog[i] else entry
+    });
+  };
+
+  // Get risk audit log (admin only)
+  public query func getRiskAuditLog(adminToken : Text) : async [RiskAuditEntry] {
+    if (adminToken != ADMIN_TOKEN_CREDITS) { return [] };
+    riskAuditLog;
+  };
+
+  // ─── Batch Module ────────────────────────────────────────────────────────────────────────────────
 
   public type Batch = {
     id : Nat;
@@ -231,7 +341,7 @@ persistent actor class AyurNexis() = self {
       if (a.timestamp < b.timestamp) #less else if (a.timestamp > b.timestamp) #greater else #equal;
     });
     let sz = sorted.size();
-    let start = if (sz > 20) sz - 20 else 0;
+    let start = if (sz > 20) Nat.sub(sz, 20) else 0;
     sorted.sliceToArray(start, sz).map(func(a : AnalysisResult) : ScoreTrend {
       { batchId = a.batchId; qualityScore = a.qualityScore; timestamp = a.timestamp };
     });
@@ -308,7 +418,7 @@ persistent actor class AyurNexis() = self {
     };
   };
 
-  // ─── User Access Request System ──────────────────────────────────────────
+  // ─── User Access Request System ───────────────────────────────────────────────────────
 
   let ADMIN_TOKEN = "AYURNEXIS-ADMIN-TOKEN-2026";
 

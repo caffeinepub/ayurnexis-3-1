@@ -231,7 +231,16 @@ export interface backendInterface {
     getUserCodeExpiry(email: string): Promise<Option<[bigint, bigint]>>;
     verifyUserCode(email: string, code: string): Promise<Option<string>>;
     callDeepSeek(prompt: string): Promise<string>;
+    callDeepSeekExtended(prompt: string): Promise<string>;
     checkUserAccess(userId: string): Promise<string>;
+    getAllUserCredits(adminToken: string): Promise<Array<[string, bigint]>>;
+    setUserCredits(userId: string, amount: bigint, adminToken: string): Promise<boolean>;
+    getUserCredits(userId: string, adminToken: string): Promise<bigint>;
+    getUserOwnCredits(userId: string): Promise<bigint>;
+    deductCredit(userId: string): Promise<boolean>;
+    logRiskPrediction(userId: string, userName: string, systemName: string, riskScore: bigint, riskLevel: string): Promise<void>;
+    getRiskAuditLog(adminToken: string): Promise<Array<{userId: string, userName: string, systemName: string, riskScore: bigint, riskLevel: string, creditsUsed: bigint, timestamp: bigint}>>;
+    getUserRecord(userId: string, adminToken: string): Promise<Option<UserRecord>>;
 }
 export class Backend implements backendInterface {
     constructor(private actor: ActorSubclass<_SERVICE>, private _uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, private _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, private processError?: (error: unknown) => never){}
@@ -265,8 +274,16 @@ export class Backend implements backendInterface {
     async getUserCodeExpiry(email: string): Promise<Option<[bigint, bigint]>> { return (this.actor as any).getUserCodeExpiry(email); }
     async verifyUserCode(email: string, code: string): Promise<Option<string>> { const r = await this.actor.verifyUserCode(email, code); return r.length > 0 ? some(r[0] as string) : none(); }
     async callDeepSeek(prompt: string): Promise<string> { const result = await (this.actor as any).callDeepSeek(prompt); return Array.isArray(result) ? result[0] as string : result as string; }
+    async callDeepSeekExtended(prompt: string): Promise<string> { const result = await (this.actor as any).callDeepSeekExtended(prompt); return Array.isArray(result) ? result[0] as string : result as string; }
     async checkUserAccess(userId: string): Promise<string> { return (this.actor as any).checkUserAccess(userId); }
-    async getUserRecord(userId: string, adminToken: string): Promise<Option<any>> { const r = await (this.actor as any).getUserRecord(userId, adminToken); return r && r.length > 0 ? some(r[0]) : none(); }
+    async getAllUserCredits(adminToken: string): Promise<Array<[string, bigint]>> { return (this.actor as any).getAllUserCredits(adminToken); }
+    async setUserCredits(userId: string, amount: bigint, adminToken: string): Promise<boolean> { return (this.actor as any).setUserCredits(userId, amount, adminToken); }
+    async getUserCredits(userId: string, adminToken: string): Promise<bigint> { return (this.actor as any).getUserCredits(userId, adminToken); }
+    async getUserOwnCredits(userId: string): Promise<bigint> { return (this.actor as any).getUserOwnCredits(userId); }
+    async deductCredit(userId: string): Promise<boolean> { return (this.actor as any).deductCredit(userId); }
+    async logRiskPrediction(userId: string, userName: string, systemName: string, riskScore: bigint, riskLevel: string): Promise<void> { return (this.actor as any).logRiskPrediction(userId, userName, systemName, riskScore, riskLevel); }
+    async getRiskAuditLog(adminToken: string): Promise<any[]> { return (this.actor as any).getRiskAuditLog(adminToken); }
+    async getUserRecord(userId: string, adminToken: string): Promise<Option<UserRecord>> { const r = await (this.actor as any).getUserRecord(userId, adminToken); return r && r.length > 0 ? some(r[0] as UserRecord) : none(); }
 }
 export interface CreateActorOptions {
     agent?: Agent;

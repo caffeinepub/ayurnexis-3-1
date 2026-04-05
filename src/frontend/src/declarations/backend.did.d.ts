@@ -46,6 +46,14 @@ export interface _SERVICE {
   seedDemoData: ActorMethod<[], void>;
   submitAccessRequest: ActorMethod<[string, string, string, string, string, bigint], boolean>;
   getAccessRequests: ActorMethod<[string], UserRecord[]>;
+  getAllUserCredits: ActorMethod<[string], Array<[string, bigint]>>;
+  setUserCredits: ActorMethod<[string, bigint, string], boolean>;
+  getUserCredits: ActorMethod<[string, string], bigint>;
+  getUserOwnCredits: ActorMethod<[string], bigint>;
+  deductCredit: ActorMethod<[string], boolean>;
+  logRiskPrediction: ActorMethod<[string, string, string, bigint, string], void>;
+  getRiskAuditLog: ActorMethod<[string], any[]>;
+  callDeepSeekExtended: ActorMethod<[string], string>;
   adminApproveUser: ActorMethod<[string, string], boolean>;
   adminRevokeUser: ActorMethod<[string, string], boolean>;
   adminDeleteUser: ActorMethod<[string, string], boolean>;
