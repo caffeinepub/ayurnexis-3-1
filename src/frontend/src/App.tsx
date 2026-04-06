@@ -23,6 +23,7 @@ import {
   History,
   LayoutDashboard,
   Leaf,
+  Library,
   Lightbulb,
   Loader2,
   Lock,
@@ -35,10 +36,31 @@ import {
   X,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { createContext, useContext, useEffect, useState } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { toast } from "sonner";
 import type { backendInterface as FullBackend } from "./backend.d";
 import { AccessGate } from "./components/AccessGate";
+import {
+  apiDrugs,
+  binders,
+  coatingAgents,
+  disintegrants,
+  extraExcipients,
+  fillers,
+  glidants,
+  herbExtracts,
+  lubricants,
+  preservatives,
+} from "./data/formulationData";
+import { pharmacopeiaData } from "./data/pharmacopeiaData";
+import { SEED_BATCHES } from "./data/seedBatches";
 import { useActor } from "./hooks/useActor";
 import { useSeedData } from "./hooks/useQueries";
 import { AdminDashboard } from "./pages/AdminDashboard";
@@ -48,6 +70,7 @@ import { FormulationLab } from "./pages/FormulationLab";
 import { GampRiskPage } from "./pages/GampRiskPage";
 import { GetFormulationIdea } from "./pages/GetFormulationIdea";
 import { HistoryPage } from "./pages/HistoryPage";
+import { IngredientLibrary } from "./pages/IngredientLibrary";
 import { Predictions } from "./pages/Predictions";
 import { QualityAnalysis } from "./pages/QualityAnalysis";
 import { RawMaterialIntake } from "./pages/RawMaterialIntake";
@@ -81,7 +104,8 @@ type Page =
   | "formulationIdea"
   | "history"
   | "adminDashboard"
-  | "gamp5";
+  | "gamp5"
+  | "library";
 
 const NAV_ITEMS: {
   id: Page;
@@ -121,6 +145,12 @@ const NAV_ITEMS: {
     short: "Formula",
   },
   { id: "gamp5", label: "GAMP Risk AI", icon: FileCheck2, short: "GAMP AI" },
+  {
+    id: "library",
+    label: "Ingredient Library",
+    icon: Library,
+    short: "Library",
+  },
 ];
 
 function AppShell() {
@@ -133,6 +163,156 @@ function AppShell() {
   const [initializing, setInitializing] = useState(false);
   const [_initialized, setInitialized] = useState(false);
   const [search, setSearch] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const searchRef = useRef<HTMLDivElement>(null);
+
+  // Global search across all sections
+  const searchResults = useMemo(() => {
+    if (search.length < 2) return [];
+    const q = search.toLowerCase();
+    type SearchResult = {
+      section: string;
+      label: string;
+      subtitle: string;
+      targetPage: Page;
+    };
+    const results: SearchResult[] = [];
+
+    // Herbs
+    const matchedHerbs = pharmacopeiaData
+      .filter(
+        (h) =>
+          h.name.toLowerCase().includes(q) ||
+          h.latinName.toLowerCase().includes(q),
+      )
+      .slice(0, 3);
+    for (const h of matchedHerbs) {
+      results.push({
+        section: "Herbs",
+        label: h.name,
+        subtitle: `${h.latinName} · ${h.source}`,
+        targetPage: "library",
+      });
+    }
+
+    // APIs
+    const matchedAPIs = apiDrugs
+      .filter(
+        (a) =>
+          a.name.toLowerCase().includes(q) ||
+          a.therapeuticCategory.toLowerCase().includes(q),
+      )
+      .slice(0, 3);
+    for (const a of matchedAPIs) {
+      results.push({
+        section: "APIs",
+        label: a.name,
+        subtitle: a.therapeuticCategory,
+        targetPage: "library",
+      });
+    }
+
+    // Extracts
+    const matchedExtracts = herbExtracts
+      .filter((e) => e.name.toLowerCase().includes(q))
+      .slice(0, 2);
+    for (const e of matchedExtracts) {
+      results.push({
+        section: "Extracts",
+        label: e.name,
+        subtitle: e.therapeuticCategory,
+        targetPage: "library",
+      });
+    }
+
+    // Excipients
+    const allExcs = [
+      ...binders,
+      ...disintegrants,
+      ...lubricants,
+      ...fillers,
+      ...glidants,
+      ...coatingAgents,
+      ...preservatives,
+      ...extraExcipients,
+    ];
+    const seenExcIds = new Set<string>();
+    const matchedExcs: typeof allExcs = [];
+    for (const ex of allExcs) {
+      if (
+        !seenExcIds.has(ex.id) &&
+        (ex.name.toLowerCase().includes(q) ||
+          ex.typicalUse.toLowerCase().includes(q))
+      ) {
+        seenExcIds.add(ex.id);
+        matchedExcs.push(ex);
+      }
+    }
+    for (const ex of matchedExcs.slice(0, 3)) {
+      results.push({
+        section: "Excipients",
+        label: ex.name,
+        subtitle: ex.typicalUse,
+        targetPage: "library",
+      });
+    }
+
+    // Batches
+    const displayBatches = SEED_BATCHES.filter(
+      (b) =>
+        b.batchId.toLowerCase().includes(q) ||
+        b.herbName.toLowerCase().includes(q) ||
+        b.supplier.toLowerCase().includes(q),
+    ).slice(0, 3);
+    for (const b of displayBatches) {
+      results.push({
+        section: "Batches",
+        label: b.batchId,
+        subtitle: `${b.herbName} · ${b.qualityStatus}`,
+        targetPage: "batches",
+      });
+    }
+
+    // History (formulations)
+    try {
+      const hist = JSON.parse(
+        localStorage.getItem("ayurnexis_history") || "[]",
+      );
+      const matchedHist = (
+        hist as Array<{
+          name?: string;
+          id?: string;
+          type?: string;
+          date?: string;
+        }>
+      )
+        .filter((h) => (h.name || "").toLowerCase().includes(q))
+        .slice(0, 3);
+      for (const h of matchedHist) {
+        results.push({
+          section: "Formulations",
+          label: h.name || "Unnamed",
+          subtitle: `History · ${h.date || ""}`,
+          targetPage: "history",
+        });
+      }
+    } catch {
+      /* ignore */
+    }
+
+    return results.slice(0, 15);
+  }, [search]);
+
+  // Close search on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
+        setSearchOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
   const [profileOpen, setProfileOpen] = useState(false);
   const [accessLevel, setAccessLevelState] = useState(() =>
     getCurrentAccessLevel(),
@@ -289,6 +469,18 @@ function AppShell() {
         return <AdminDashboard />;
       case "gamp5":
         return <GampRiskPage />;
+      case "library":
+        return (
+          <IngredientLibrary
+            onAddToFormulationLab={(ingredient) => {
+              setFormulationPrefill({
+                dosageForm: "Tablet",
+                ingredients: [ingredient],
+              });
+              handlePageChange("formulation");
+            }}
+          />
+        );
     }
   };
 
@@ -559,7 +751,7 @@ function AppShell() {
             )}
 
             {/* Search */}
-            <div className="relative hidden sm:block">
+            <div className="relative hidden sm:block" ref={searchRef}>
               <Search
                 size={13}
                 className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
@@ -569,8 +761,85 @@ function AppShell() {
                 className="pl-8 h-7 w-48 text-xs bg-input/40 border-border/40 text-foreground placeholder:text-muted-foreground focus:border-primary/60"
                 placeholder="Search…"
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setSearchOpen(true);
+                }}
+                onFocus={() => setSearchOpen(true)}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") {
+                    setSearchOpen(false);
+                    setSearch("");
+                  }
+                }}
               />
+              {/* Search Dropdown */}
+              {searchOpen && searchResults.length > 0 && (
+                <div
+                  className="absolute top-full mt-1 left-0 right-0 z-50 rounded-xl shadow-lg overflow-hidden"
+                  style={{
+                    background: "oklch(1.0 0 0)",
+                    border: "1px solid oklch(0.88 0.012 240)",
+                    minWidth: 300,
+                    maxHeight: 400,
+                    overflowY: "auto",
+                  }}
+                >
+                  {(() => {
+                    const sections = [
+                      ...new Set(searchResults.map((r) => r.section)),
+                    ];
+                    return sections.map((section) => (
+                      <div key={section}>
+                        <div
+                          className="px-3 py-1.5 text-[9px] font-bold uppercase tracking-widest"
+                          style={{
+                            background: "oklch(0.96 0.005 240)",
+                            color: "oklch(0.50 0.015 240)",
+                          }}
+                        >
+                          {section}
+                        </div>
+                        {searchResults
+                          .filter((r) => r.section === section)
+                          .map((r) => (
+                            <button
+                              type="button"
+                              key={`${section}-${r.label}-${r.subtitle}`}
+                              className="w-full text-left px-3 py-2 hover:bg-accent/30 flex items-center gap-2 transition-colors"
+                              onClick={() => {
+                                handlePageChange(r.targetPage);
+                                setSearch("");
+                                setSearchOpen(false);
+                              }}
+                              data-ocid="header.search.result.button"
+                            >
+                              <div className="flex-1 min-w-0">
+                                <div className="text-xs font-medium text-foreground truncate">
+                                  {r.label}
+                                </div>
+                                <div className="text-[10px] text-muted-foreground truncate">
+                                  {r.subtitle}
+                                </div>
+                              </div>
+                              <span
+                                className="text-[9px] font-medium px-1.5 py-0.5 rounded shrink-0"
+                                style={{
+                                  background: "oklch(0.42 0.14 145 / 0.08)",
+                                  color: "oklch(0.35 0.10 145)",
+                                  border:
+                                    "1px solid oklch(0.42 0.14 145 / 0.2)",
+                                }}
+                              >
+                                {r.section}
+                              </span>
+                            </button>
+                          ))}
+                      </div>
+                    ));
+                  })()}
+                </div>
+              )}
             </div>
 
             {/* User + Manual link */}
