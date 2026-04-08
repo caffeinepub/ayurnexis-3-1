@@ -1,0 +1,196 @@
+// Version: 3.0.0
+type AnalysisResult__259640555 =
+  {
+    anomaly : Bool;
+    anomalyDetails : Text;
+    ashOk : Bool;
+    batchId : Text;
+    dateReceived : Text;
+    extractiveOk : Bool;
+    heavyMetalsOk : Bool;
+    herbName : Text;
+    microbialOk : Bool;
+    moistureOk : Bool;
+    probability : Float;
+    qualityScore : Float;
+    region : Text;
+    status : Text;
+    supplier : Text;
+    timestamp : Int
+  };
+type AnalysisResult__698566077 =
+  {
+    anomaly : Bool;
+    anomalyDetails : Text;
+    ashOk : Bool;
+    batchId : Text;
+    dateReceived : Text;
+    extractiveOk : Bool;
+    heavyMetalsOk : Bool;
+    herbName : Text;
+    microbialOk : Bool;
+    moistureOk : Bool;
+    probability : Float;
+    qualityScore : Float;
+    region : Text;
+    status : Text;
+    supplier : Text;
+    timestamp : Int
+  };
+type AppRole__319921778 = {#admin; #labTechnician; #qaManager};
+type AppRole__437829806 = {#admin; #labTechnician; #qaManager};
+type Batch__498205088 =
+  {
+    ash : Float;
+    batchId : Text;
+    createdBy : Principal;
+    dateReceived : Text;
+    extractiveValue : Float;
+    heavyMetals : Float;
+    herbName : Text;
+    id : Nat;
+    microbialCount : Float;
+    moisture : Float;
+    notes : Text;
+    region : Text;
+    supplier : Text
+  };
+type Batch__564540074 =
+  {
+    ash : Float;
+    batchId : Text;
+    createdBy : Principal;
+    dateReceived : Text;
+    extractiveValue : Float;
+    heavyMetals : Float;
+    herbName : Text;
+    id : Nat;
+    microbialCount : Float;
+    moisture : Float;
+    notes : Text;
+    region : Text;
+    supplier : Text
+  };
+type Data__159895909<T> = {var count : Nat__490723111; elements : [var ?T]};
+type Data__791452850<K, V> =
+  {var count : Nat__490723111; kvs : [var ?(K, V)]};
+type Internal__667636161<T> =
+  {children : [var ?Node__92254746<T>]; data : Data__159895909<T>};
+type Internal__8484328<K, V> =
+  {children : [var ?Node__46230540<K, V>]; data : Data__791452850<K, V>};
+type Leaf__520550824<T> = {data : Data__159895909<T>};
+type Leaf__809889148<K, V> = {data : Data__791452850<K, V>};
+type Map__158565046<K, V> = Map__297112838<K, V>;
+type Map__297112838<K, V> =
+  {var root : Node__46230540<K, V>; var size : Nat__490723111};
+type Map__605269027<K, V> = Map__158565046<K, V>;
+type Nat__490723111 = Nat__920180692;
+type Nat__920180692 = Nat;
+type Node__46230540<K, V> =
+  {#internal : Internal__8484328<K, V>; #leaf : Leaf__809889148<K, V>};
+type Node__92254746<T> =
+  {#internal : Internal__667636161<T>; #leaf : Leaf__520550824<T>};
+type OldAuthState__837432159 =
+  {
+    var adminAssigned : Bool;
+    userRoles : Map__605269027<Principal, UserRole__717262347>
+  };
+type RiskAuditEntry__685687585 =
+  {
+    creditsUsed : Nat;
+    riskLevel : Text;
+    riskScore : Nat;
+    systemName : Text;
+    timestamp : Int;
+    userId : Text;
+    userName : Text
+  };
+type RiskAuditEntry__778389111 =
+  {
+    creditsUsed : Nat;
+    riskLevel : Text;
+    riskScore : Nat;
+    systemName : Text;
+    timestamp : Int;
+    userId : Text;
+    userName : Text
+  };
+type UserRecord__235003723 =
+  {
+    accessCode : ?Text;
+    approvedAt : ?Int;
+    codeGeneratedAt : ?Int;
+    email : Text;
+    id : Text;
+    institution : Text;
+    name : Text;
+    purpose : Text;
+    registeredAt : Int;
+    status : Text
+  };
+type UserRecord__599822777 =
+  {
+    accessCode : ?Text;
+    approvedAt : ?Int;
+    codeGeneratedAt : ?Int;
+    email : Text;
+    id : Text;
+    institution : Text;
+    name : Text;
+    purpose : Text;
+    registeredAt : Int;
+    status : Text
+  };
+type UserRole__717262347 = {#admin; #guest; #user};
+actor ({
+  in ADMIN_TOKEN : Text;
+  in ADMIN_TOKEN_CREDITS : Text;
+  in DEEPSEEK_API_KEY : Text;
+  in DEEPSEEK_URL : Text;
+  in _ADMIN_UNLIMITED_CREDITS : Nat;
+  stable var adminPrincipals :
+    {var root : Node__92254746<Principal>; var size : Nat__490723111};
+  in var analyses : Map__605269027<Text, AnalysisResult__698566077>;
+  in var appRoles : Map__605269027<Principal, AppRole__437829806>;
+  in authState : OldAuthState__837432159;
+  in var batches : Map__605269027<Nat, Batch__498205088>;
+  in var codeExpiryMap : Map__605269027<Text, Nat>;
+  in var nextBatchId : Nat;
+  in var riskAuditLog : [RiskAuditEntry__685687585];
+  in var userCredits : Map__605269027<Text, Nat>;
+  in var userRecords : Map__605269027<Text, UserRecord__599822777>
+}, {
+  stable ADMIN_TOKEN : Text;
+  stable ADMIN_TOKEN_CREDITS : Text;
+  stable DEEPSEEK_API_KEY : Text;
+  stable DEEPSEEK_URL : Text;
+  stable _ADMIN_UNLIMITED_CREDITS : Nat;
+  stable var adminPrincipals :
+    {var root : Node__92254746<Principal>; var size : Nat__490723111};
+  stable var analyses :
+    {
+      var root : Node__46230540<Text, AnalysisResult__259640555>;
+      var size : Nat__490723111
+    };
+  stable var appRoles :
+    {
+      var root : Node__46230540<Principal, AppRole__319921778>;
+      var size : Nat__490723111
+    };
+  stable var batches :
+    {
+      var root : Node__46230540<Nat, Batch__564540074>;
+      var size : Nat__490723111
+    };
+  stable var codeExpiryMap :
+    {var root : Node__46230540<Text, Nat>; var size : Nat__490723111};
+  stable var nextBatchId : Nat;
+  stable var riskAuditLog : [RiskAuditEntry__778389111];
+  stable var userCredits :
+    {var root : Node__46230540<Text, Nat>; var size : Nat__490723111};
+  stable var userRecords :
+    {
+      var root : Node__46230540<Text, UserRecord__235003723>;
+      var size : Nat__490723111
+    }
+}) ;

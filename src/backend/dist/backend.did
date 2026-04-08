@@ -1,0 +1,184 @@
+type http_request_result = 
+ record {
+   body: blob;
+   headers: vec http_header;
+   status: nat;
+ };
+type http_header = 
+ record {
+   name: text;
+   value: text;
+ };
+type UserRecord = 
+ record {
+   accessCode: opt text;
+   approvedAt: opt int;
+   codeGeneratedAt: opt int;
+   email: text;
+   id: text;
+   institution: text;
+   name: text;
+   purpose: text;
+   registeredAt: int;
+   status: text;
+ };
+type SupplierStats = 
+ record {
+   avgScore: float64;
+   passRate: float64;
+   supplier: text;
+   totalBatches: nat;
+ };
+type ScoreTrend = 
+ record {
+   batchId: text;
+   qualityScore: float64;
+   timestamp: int;
+ };
+type RiskBatch = 
+ record {
+   batchId: text;
+   herbName: text;
+   qualityScore: float64;
+   riskLevel: text;
+   supplier: text;
+ };
+type RiskAuditEntry = 
+ record {
+   creditsUsed: nat;
+   riskLevel: text;
+   riskScore: nat;
+   systemName: text;
+   timestamp: int;
+   userId: text;
+   userName: text;
+ };
+type QualityOverview = 
+ record {
+   avgScore: float64;
+   failed: nat;
+   highRisk: nat;
+   passed: nat;
+   total: nat;
+ };
+type DashboardStats = 
+ record {
+   avgQualityScore: float64;
+   failCount: nat;
+   openDeviations: nat;
+   passCount: nat;
+   passRate: float64;
+   totalBatches: nat;
+ };
+type BatchInput = 
+ record {
+   ash: float64;
+   batchId: text;
+   dateReceived: text;
+   extractiveValue: float64;
+   heavyMetals: float64;
+   herbName: text;
+   microbialCount: float64;
+   moisture: float64;
+   notes: text;
+   region: text;
+   supplier: text;
+ };
+type Batch = 
+ record {
+   ash: float64;
+   batchId: text;
+   createdBy: principal;
+   dateReceived: text;
+   extractiveValue: float64;
+   heavyMetals: float64;
+   herbName: text;
+   id: nat;
+   microbialCount: float64;
+   moisture: float64;
+   notes: text;
+   region: text;
+   supplier: text;
+ };
+type AyurNexis = 
+ service {
+   _transform: (raw:
+    record {
+      context: blob;
+      response: http_request_result;
+    }) -> (http_request_result) query;
+   addAdmin: (user: principal) -> ();
+   adminApproveUser: (userId: text, adminToken: text) -> (bool);
+   adminDeleteUser: (userId: text, adminToken: text) -> (bool);
+   adminGenerateCode: (userId: text, adminToken: text, expiryDays: nat) ->
+    (opt text);
+   adminRevokeUser: (userId: text, adminToken: text) -> (bool);
+   analyzeBatch: (id: nat) -> (opt AnalysisResult);
+   callDeepSeek: (prompt: text) -> (text);
+   callDeepSeekExtended: (prompt: text) -> (text);
+   checkUserAccess: (userId: text) -> (text) query;
+   createBatch: (input: BatchInput) -> (nat);
+   deductCredit: (userId: text) -> (bool);
+   deleteBatch: (id: nat) -> (bool);
+   getAccessRequests: (adminToken: text) -> (vec UserRecord) query;
+   getAllAnalyses: () -> (vec AnalysisResult) query;
+   getAllBatches: () -> (vec Batch) query;
+   getAllUserCredits: (adminToken: text) -> (vec record {
+                                                   text;
+                                                   nat;
+                                                 }) query;
+   getAnalysis: (batchId: text) -> (opt AnalysisResult) query;
+   getBatch: (id: nat) -> (opt Batch) query;
+   getDashboardStats: () -> (DashboardStats) query;
+   getDeviationReport: () -> (vec AnalysisResult) query;
+   getMyAppRole: () -> (opt AppRole) query;
+   getQualityOverview: () -> (QualityOverview) query;
+   getRiskAssessment: () -> (vec RiskBatch) query;
+   getRiskAuditLog: (adminToken: text) -> (vec RiskAuditEntry) query;
+   getScoreTrends: () -> (vec ScoreTrend) query;
+   getSupplierStats: () -> (vec SupplierStats) query;
+   getUserCodeExpiry: (email: text) -> (opt record {
+                                              int;
+                                              nat;
+                                            }) query;
+   getUserCredits: (userId: text, adminToken: text) -> (nat) query;
+   getUserOwnCredits: (userId: text) -> (nat) query;
+   getUserRecord: (userId: text, adminToken: text) -> (opt UserRecord) query;
+   isCallerAdmin: () -> (bool) query;
+   logRiskPrediction: (userId: text, userName: text, systemName: text,
+    riskScore: nat, riskLevel: text) -> ();
+   removeAdmin: (user: principal) -> ();
+   seedDemoData: () -> ();
+   setAppRole: (user: principal, role: AppRole) -> ();
+   setUserCredits: (userId: text, amount: nat, adminToken: text) -> (bool);
+   submitAccessRequest: (id: text, name: text, institution: text, email:
+    text, purpose: text, registeredAt: int) -> (bool);
+   updateBatch: (id: nat, input: BatchInput) -> (bool);
+   verifyUserCode: (email: text, code: text) -> (opt text) query;
+ };
+type AppRole = 
+ variant {
+   admin;
+   labTechnician;
+   qaManager;
+ };
+type AnalysisResult = 
+ record {
+   anomaly: bool;
+   anomalyDetails: text;
+   ashOk: bool;
+   batchId: text;
+   dateReceived: text;
+   extractiveOk: bool;
+   heavyMetalsOk: bool;
+   herbName: text;
+   microbialOk: bool;
+   moistureOk: bool;
+   probability: float64;
+   qualityScore: float64;
+   region: text;
+   status: text;
+   supplier: text;
+   timestamp: int;
+ };
+service : () -> AyurNexis

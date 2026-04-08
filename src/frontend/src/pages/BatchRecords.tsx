@@ -26,13 +26,12 @@ import {
 import { motion } from "motion/react";
 import React, { useState } from "react";
 import { toast } from "sonner";
-import type { AnalysisResult } from "../backend.d";
-import type { Option } from "../backend.d";
 import {
   useAllBatches,
   useAnalyzeBatch,
   useDeleteBatch,
 } from "../hooks/useQueries";
+import type { AnalysisResult } from "../types";
 import { isAdminAuthed } from "../utils/accessControl";
 import {
   deleteSeedBatch,
@@ -821,12 +820,8 @@ const SEED_BATCHES: SeedBatch[] = [
   },
 ];
 
-function isSome<T>(opt: Option<T>): opt is { __kind__: "Some"; value: T } {
-  return opt.__kind__ === "Some";
-}
-
 type DisplayBatch = {
-  id: bigint;
+  id?: bigint;
   batchId: string;
   herbName: string;
   supplier: string;
@@ -1181,7 +1176,7 @@ function AnalysisResultDialog({
                 />
                 <div className="flex items-center justify-between mt-2">
                   <span className="text-xs text-muted-foreground">
-                    Probability: {(result.probability * 100).toFixed(0)}%
+                    Probability: {((result.probability ?? 0) * 100).toFixed(0)}%
                   </span>
                   <Badge
                     className="text-xs font-bold"
@@ -1690,7 +1685,7 @@ function BatchDetailDialog({
               size="sm"
               className="bg-primary/90 text-primary-foreground hover:opacity-80 text-xs gap-1.5"
               onClick={() => {
-                onAnalyze?.(batch.id, batch.batchId);
+                onAnalyze?.(batch.id ?? 0n, batch.batchId);
                 onClose();
               }}
             >
@@ -1751,8 +1746,13 @@ export function BatchRecords({
     ...batches,
   ].map((b) =>
     statusOverrides[b.batchId]
-      ? { ...b, qualityStatus: statusOverrides[b.batchId] }
-      : b,
+      ? {
+          ...b,
+          qualityStatus: statusOverrides[
+            b.batchId
+          ] as DisplayBatch["qualityStatus"],
+        }
+      : (b as DisplayBatch),
   );
 
   const filtered = allBatches.filter(
@@ -1783,12 +1783,13 @@ export function BatchRecords({
       } else {
         // Real backend batch
         const result = await analyzeBatch.mutateAsync(id);
-        if (isSome(result)) {
-          setAnalysisResult(result.value);
+        if (result.length > 0) {
+          const analysisRes = result[0]!;
+          setAnalysisResult(analysisRes);
           setAnalysisBatch(batch);
           setAnalysisDialogOpen(true);
           toast.success(
-            `Analysis complete for ${batchId}: Score ${result.value.qualityScore.toFixed(1)} — ${result.value.status}`,
+            `Analysis complete for ${batchId}: Score ${analysisRes.qualityScore.toFixed(1)} — ${analysisRes.status}`,
           );
         } else {
           toast.error("Analysis returned no result");
@@ -1972,7 +1973,7 @@ export function BatchRecords({
                             size="sm"
                             data-ocid={`batches.edit_button.${i + 1}`}
                             disabled={analyzingId === b.id}
-                            onClick={() => handleAnalyze(b.id, b.batchId)}
+                            onClick={() => handleAnalyze(b.id ?? 0n, b.batchId)}
                             className="h-7 text-xs bg-primary/90 text-primary-foreground hover:opacity-80 px-2 gap-1"
                           >
                             {analyzingId === b.id ? (
@@ -1990,7 +1991,7 @@ export function BatchRecords({
                             size="sm"
                             variant="ghost"
                             data-ocid={`batches.delete_button.${i + 1}`}
-                            onClick={() => handleDelete(b.id, b.batchId)}
+                            onClick={() => handleDelete(b.id ?? 0n, b.batchId)}
                             className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
                           >
                             <Trash2 size={13} />
@@ -2011,7 +2012,7 @@ export function BatchRecords({
         open={dialogOpen}
         onClose={() => setDialogOpen(false)}
         onUpdateStatus={handleUpdateBatchStatus}
-        onAnalyze={handleAnalyze}
+        onAnalyze={(id, batchId) => handleAnalyze(id ?? 0n, batchId)}
       />
 
       <AnalysisResultDialog

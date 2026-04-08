@@ -1,4 +1,4 @@
-import type { AnalysisResult } from "../backend.d";
+import type { AnalysisResult } from "../types";
 
 export type SeedBatch = {
   id: bigint;

@@ -1,4 +1,4 @@
-import type { AnalysisResult } from "../backend.d";
+import type { AnalysisResult } from "../types";
 
 const LOCAL_ANALYSES_KEY = "ayurnexis_local_analyses";
 const DELETED_IDS_KEY = "ayurnexis_deleted_analyses";

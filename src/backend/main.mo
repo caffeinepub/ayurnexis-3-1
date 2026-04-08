@@ -1,25 +1,49 @@
-import AccessControl "./authorization/access-control";
-import MixinAuthorization "./authorization/MixinAuthorization";
-import Outcall "./http-outcalls/outcall";
 import Map "mo:core/Map";
 import Float "mo:core/Float";
 import Nat "mo:core/Nat";
 import Prim "mo:prim";
 import Array "mo:core/Array";
+import Set "mo:core/Set";
+import Text "mo:core/Text";
+import IC "ic:aaaaa-aa";
+import Migration "migration";
 
+(with migration = Migration.run)
 actor class AyurNexis() = self {
 
-  let authState = AccessControl.initState();
+  // ─── Inline Admin State (replaces caffeineai-authorization) ───────────────
+  var adminPrincipals : Set.Set<Principal> = Set.empty<Principal>();
+
+  func isAdmin(caller : Principal) : Bool {
+    adminPrincipals.contains(caller);
+  };
+
+  public shared ({ caller }) func addAdmin(user : Principal) : async () {
+    // Bootstrap: first caller becomes admin, or existing admin adds another
+    if (adminPrincipals.size() == 0 or isAdmin(caller)) {
+      adminPrincipals.add(user);
+    };
+  };
+
+  public shared ({ caller }) func removeAdmin(user : Principal) : async () {
+    if (isAdmin(caller)) { adminPrincipals.remove(user) };
+  };
+
+  public query ({ caller }) func isCallerAdmin() : async Bool {
+    isAdmin(caller);
+  };
+
+  // ─── Inline HTTP Outcall Types (replaces caffeineai-http-outcalls) ─────────
+  // Use IC management canister types directly
 
   let DEEPSEEK_API_KEY : Text = "sk-2d7fcf900b344a198815df1f571fce11";
   let DEEPSEEK_URL : Text = "https://api.deepseek.com/v1/chat/completions";
-  include MixinAuthorization(authState);
 
   public type AppRole = { #admin; #qaManager; #labTechnician };
   var appRoles : Map.Map<Principal, AppRole> = Map.empty<Principal, AppRole>();
 
   public shared ({ caller }) func setAppRole(user : Principal, role : AppRole) : async () {
-    if (not AccessControl.isAdmin(authState, caller)) { Prim.trap("Unauthorized") };
+    if (not isAdmin(caller)) { Prim.trap("Unauthorized") };
     appRoles.add(user, role);
   };
 
@@ -29,19 +53,28 @@ actor class AyurNexis() = self {
 
   // ─── DeepSeek AI Proxy ──────────────────────────────────────────────────────────────────────────────────
 
-  public query func _transform(input : Outcall.TransformationInput) : async Outcall.TransformationOutput {
-    { input.response with headers = [] };
+  public query func _transform(raw : { context : Blob; response : IC.http_request_result }) : async IC.http_request_result {
+    { raw.response with headers = [] };
   };
 
   public shared func callDeepSeek(prompt : Text) : async Text {
     let escaped = escapeJsonSimple(prompt);
-    let body = "{\"model\":\"deepseek-chat\",\"messages\":[{\"role\":\"user\",\"content\":\"" # escaped # "\"}],\"max_tokens\":1500,\"temperature\":0.7}";
-    let headers : [Outcall.Header] = [
+    let bodyText = "{\"model\":\"deepseek-chat\",\"messages\":[{\"role\":\"user\",\"content\":\"" # escaped # "\"}],\"max_tokens\":1500,\"temperature\":0.7}";
+    let headers : [IC.http_header] = [
       { name = "Content-Type"; value = "application/json" },
       { name = "Authorization"; value = "Bearer " # DEEPSEEK_API_KEY },
     ];
     try {
-      await Outcall.httpPostRequest(DEEPSEEK_URL, headers, body, _transform);
+      let res = await IC.http_request({
+        url = DEEPSEEK_URL;
+        max_response_bytes = ?2048;
+        headers;
+        body = ?bodyText.encodeUtf8();
+        method = #post;
+        is_replicated = ?false;
+        transform = ?{ function = _transform; context = "" };
+      });
+      switch (res.body.decodeUtf8()) { case (?t) t; case null "" };
     } catch (e) {
       "{\"error\":\"" # Prim.errorMessage(e) # "\"}";
     };
@@ -50,13 +83,22 @@ actor class AyurNexis() = self {
   // Longer token limit version for risk assessment
   public shared func callDeepSeekExtended(prompt : Text) : async Text {
     let escaped = escapeJsonSimple(prompt);
-    let body = "{\"model\":\"deepseek-chat\",\"messages\":[{\"role\":\"user\",\"content\":\"" # escaped # "\"}],\"max_tokens\":2500,\"temperature\":0.4}";
-    let headers : [Outcall.Header] = [
+    let bodyText = "{\"model\":\"deepseek-chat\",\"messages\":[{\"role\":\"user\",\"content\":\"" # escaped # "\"}],\"max_tokens\":2500,\"temperature\":0.4}";
+    let headers : [IC.http_header] = [
       { name = "Content-Type"; value = "application/json" },
       { name = "Authorization"; value = "Bearer " # DEEPSEEK_API_KEY },
     ];
     try {
-      await Outcall.httpPostRequest(DEEPSEEK_URL, headers, body, _transform);
+      let res = await IC.http_request({
+        url = DEEPSEEK_URL;
+        max_response_bytes = ?4096;
+        headers;
+        body = ?bodyText.encodeUtf8();
+        method = #post;
+        is_replicated = ?false;
+        transform = ?{ function = _transform; context = "" };
+      });
+      switch (res.body.decodeUtf8()) { case (?t) t; case null "" };
     } catch (e) {
       "{\"error\":\"" # Prim.errorMessage(e) # "\"}";
     };
@@ -257,7 +299,7 @@ actor class AyurNexis() = self {
   };
 
   public shared ({ caller }) func deleteBatch(id : Nat) : async Bool {
-    if (not AccessControl.isAdmin(authState, caller)) { Prim.trap("Unauthorized") };
+    if (not isAdmin(caller)) { Prim.trap("Unauthorized") };
     switch (batches.get(id)) {
       case (null) { false };
       case (?_) { batches.remove(id); true };

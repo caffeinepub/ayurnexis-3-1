@@ -70,9 +70,10 @@ import {
   computeLocalAnalysis,
 } from "../data/seedBatches";
 import { useAllAnalysesMerged, useAllBatches } from "../hooks/useQueries";
+import type { AnalysisResult } from "../types";
 import { deleteAnalysis, saveLocalAnalysis } from "../utils/analysisStore";
 
-const paramLabels: [string, keyof import("../backend.d").AnalysisResult][] = [
+const paramLabels: [string, keyof AnalysisResult][] = [
   ["Moisture", "moistureOk"],
   ["Ash", "ashOk"],
   ["Extractive", "extractiveOk"],
@@ -963,9 +964,7 @@ function ExcipientDetail({ id, source }: { id: string; source: string }) {
 }
 
 // ---- Comparison Panel ----
-function ComparisonPanel({
-  analysis,
-}: { analysis: import("../backend.d").AnalysisResult }) {
+function ComparisonPanel({ analysis }: { analysis: AnalysisResult }) {
   const herb = useMemo(() => findHerb(analysis.herbName), [analysis.herbName]);
   if (!herb) {
     return (
@@ -1266,7 +1265,7 @@ export function QualityAnalysis() {
   const { data: backendBatches = [] } = useAllBatches();
   const allBatchOptions: DisplayBatch[] = [
     ...(SEED_BATCHES as DisplayBatch[]),
-    ...backendBatches.map((b) => ({ ...b })),
+    ...backendBatches.map((b) => ({ ...b, id: b.id ?? 0n }) as DisplayBatch),
   ];
 
   const [selectedBatchId, setSelectedBatchId] = useState<string>("");
@@ -1277,9 +1276,7 @@ export function QualityAnalysis() {
     heavyMetals: 0,
     microbialCount: 0,
   });
-  const [runResult, setRunResult] = useState<
-    import("../backend.d").AnalysisResult | null
-  >(null);
+  const [runResult, setRunResult] = useState<AnalysisResult | null>(null);
 
   const handleBatchSelect = (batchId: string) => {
     setSelectedBatchId(batchId);
@@ -1689,7 +1686,7 @@ export function QualityAnalysis() {
                         className="font-mono font-bold"
                         style={{ color: "#1e293b" }}
                       >
-                        {(runResult.probability * 100).toFixed(1)}%
+                        {((runResult.probability ?? 0) * 100).toFixed(1)}%
                       </span>{" "}
                       accept probability
                     </div>
@@ -1855,7 +1852,7 @@ export function QualityAnalysis() {
                   <div className="flex flex-col gap-1 text-xs">
                     <div className="text-muted-foreground">ML Confidence</div>
                     <div className="text-xl font-bold text-foreground">
-                      {(a.probability * 100).toFixed(1)}%
+                      {((a.probability ?? 0) * 100).toFixed(1)}%
                     </div>
                     <div className="text-muted-foreground text-xs">
                       Accept probability
@@ -1887,7 +1884,7 @@ export function QualityAnalysis() {
                   const ok = a[key] as boolean;
                   return (
                     <div
-                      key={key}
+                      key={String(key)}
                       className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium"
                       style={{
                         background: ok

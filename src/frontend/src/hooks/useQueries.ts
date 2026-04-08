@@ -1,6 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { backendInterface as FullBackend } from "../backend.d";
-import type { BatchInput } from "../backend.d";
+import type {
+  AnalysisResult,
+  BatchInput,
+  BackendInterface as FullBackend,
+} from "../types";
 import { useActor } from "./useActor";
 
 export function useDashboardStats() {
@@ -134,7 +137,7 @@ export function useAnalyzeBatch() {
   const { actor } = useActor();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (id: bigint) => {
+    mutationFn: async (id: bigint): Promise<[AnalysisResult] | []> => {
       if (!actor) throw new Error("No actor");
       return (actor as unknown as FullBackend).analyzeBatch(id);
     },

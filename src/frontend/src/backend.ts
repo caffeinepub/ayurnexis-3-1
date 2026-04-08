@@ -89,201 +89,826 @@ export class ExternalBlob {
         return this;
     }
 }
-
-export type AppRole = { qaManager: null } | { labTechnician: null } | { admin: null };
-export type UserRole = { admin: null } | { user: null } | { guest: null };
-
-export interface Batch {
-    id: bigint;
-    batchId: string;
-    herbName: string;
-    supplier: string;
-    region: string;
-    dateReceived: string;
-    moisture: number;
-    ash: number;
-    extractiveValue: number;
-    heavyMetals: number;
-    microbialCount: number;
-    notes: string;
-    createdBy: Principal;
-}
-
-export interface BatchInput {
-    batchId: string;
-    herbName: string;
-    supplier: string;
-    region: string;
-    dateReceived: string;
-    moisture: number;
-    ash: number;
-    extractiveValue: number;
-    heavyMetals: number;
-    microbialCount: number;
-    notes: string;
-}
-
-export interface AnalysisResult {
-    batchId: string;
-    herbName: string;
-    supplier: string;
-    region: string;
-    dateReceived: string;
-    qualityScore: number;
-    status: string;
-    probability: number;
-    anomaly: boolean;
-    anomalyDetails: string;
-    moistureOk: boolean;
-    ashOk: boolean;
-    extractiveOk: boolean;
-    heavyMetalsOk: boolean;
-    microbialOk: boolean;
-    timestamp: bigint;
-}
-
-export interface DashboardStats {
-    totalBatches: bigint;
-    passCount: bigint;
-    failCount: bigint;
-    passRate: number;
-    openDeviations: bigint;
-    avgQualityScore: number;
-}
-
-export interface ScoreTrend {
-    batchId: string;
-    qualityScore: number;
-    timestamp: bigint;
-}
-
-export interface SupplierStats {
-    supplier: string;
-    passRate: number;
-    avgScore: number;
-    totalBatches: bigint;
-}
-
 export interface RiskBatch {
-    batchId: string;
-    herbName: string;
     supplier: string;
     qualityScore: number;
+    batchId: string;
+    herbName: string;
     riskLevel: string;
 }
-
 export interface QualityOverview {
-    total: bigint;
-    passed: bigint;
-    failed: bigint;
     avgScore: number;
+    total: bigint;
     highRisk: bigint;
+    failed: bigint;
+    passed: bigint;
 }
-
+export interface ScoreTrend {
+    qualityScore: number;
+    timestamp: bigint;
+    batchId: string;
+}
+export interface RiskAuditEntry {
+    userName: string;
+    userId: string;
+    timestamp: bigint;
+    riskLevel: string;
+    creditsUsed: bigint;
+    riskScore: bigint;
+    systemName: string;
+}
+export interface DashboardStats {
+    passRate: number;
+    totalBatches: bigint;
+    passCount: bigint;
+    avgQualityScore: number;
+    openDeviations: bigint;
+    failCount: bigint;
+}
+export interface http_header {
+    value: string;
+    name: string;
+}
 export interface UserRecord {
     id: string;
-    name: string;
-    institution: string;
-    email: string;
-    purpose: string;
-    registeredAt: bigint;
     status: string;
-    accessCode: Option<string>;
-    codeGeneratedAt: Option<bigint>;
-    approvedAt: Option<bigint>;
+    institution: string;
+    approvedAt?: bigint;
+    name: string;
+    accessCode?: string;
+    codeGeneratedAt?: bigint;
+    email: string;
+    registeredAt: bigint;
+    purpose: string;
 }
-
-export interface backendInterface {
-    // Auth
-    _initializeAccessControlWithSecret(userSecret: string): Promise<void>;
-    getCallerUserRole(): Promise<UserRole>;
-    assignCallerUserRole(user: Principal, role: UserRole): Promise<void>;
-    isCallerAdmin(): Promise<boolean>;
-    setAppRole(user: Principal, role: AppRole): Promise<void>;
-    getMyAppRole(): Promise<Option<AppRole>>;
-    // Batch CRUD
-    createBatch(input: BatchInput): Promise<bigint>;
-    getBatch(id: bigint): Promise<Option<Batch>>;
-    getAllBatches(): Promise<Batch[]>;
-    updateBatch(id: bigint, input: BatchInput): Promise<boolean>;
-    deleteBatch(id: bigint): Promise<boolean>;
-    // Analysis
-    analyzeBatch(id: bigint): Promise<Option<AnalysisResult>>;
-    getAnalysis(batchId: string): Promise<Option<AnalysisResult>>;
-    getAllAnalyses(): Promise<AnalysisResult[]>;
-    // Dashboard
-    getDashboardStats(): Promise<DashboardStats>;
-    getScoreTrends(): Promise<ScoreTrend[]>;
-    getSupplierStats(): Promise<SupplierStats[]>;
-    getRiskAssessment(): Promise<RiskBatch[]>;
-    // Reports
-    getQualityOverview(): Promise<QualityOverview>;
-    getDeviationReport(): Promise<AnalysisResult[]>;
-    // Seed
-    seedDemoData(): Promise<void>;
-    // User Access Requests
-    submitAccessRequest(id: string, name: string, institution: string, email: string, purpose: string, registeredAt: bigint): Promise<boolean>;
-    getAccessRequests(adminToken: string): Promise<UserRecord[]>;
+export interface http_request_result {
+    status: bigint;
+    body: Uint8Array;
+    headers: Array<http_header>;
+}
+export interface SupplierStats {
+    avgScore: number;
+    passRate: number;
+    supplier: string;
+    totalBatches: bigint;
+}
+export interface AyurNexisInterface {
+    _transform(raw: {
+        context: Uint8Array;
+        response: http_request_result;
+    }): Promise<http_request_result>;
+    addAdmin(user: Principal): Promise<void>;
     adminApproveUser(userId: string, adminToken: string): Promise<boolean>;
-    adminRevokeUser(userId: string, adminToken: string): Promise<boolean>;
     adminDeleteUser(userId: string, adminToken: string): Promise<boolean>;
-    adminGenerateCode(userId: string, adminToken: string, expiryDays: bigint): Promise<Option<string>>;
-    getUserCodeExpiry(email: string): Promise<Option<[bigint, bigint]>>;
-    verifyUserCode(email: string, code: string): Promise<Option<string>>;
+    adminGenerateCode(userId: string, adminToken: string, expiryDays: bigint): Promise<string | null>;
+    adminRevokeUser(userId: string, adminToken: string): Promise<boolean>;
+    analyzeBatch(id: bigint): Promise<AnalysisResult | null>;
     callDeepSeek(prompt: string): Promise<string>;
     callDeepSeekExtended(prompt: string): Promise<string>;
     checkUserAccess(userId: string): Promise<string>;
+    createBatch(input: BatchInput): Promise<bigint>;
+    deductCredit(userId: string): Promise<boolean>;
+    deleteBatch(id: bigint): Promise<boolean>;
+    getAccessRequests(adminToken: string): Promise<Array<UserRecord>>;
+    getAllAnalyses(): Promise<Array<AnalysisResult>>;
+    getAllBatches(): Promise<Array<Batch>>;
     getAllUserCredits(adminToken: string): Promise<Array<[string, bigint]>>;
-    setUserCredits(userId: string, amount: bigint, adminToken: string): Promise<boolean>;
+    getAnalysis(batchId: string): Promise<AnalysisResult | null>;
+    getBatch(id: bigint): Promise<Batch | null>;
+    getDashboardStats(): Promise<DashboardStats>;
+    getDeviationReport(): Promise<Array<AnalysisResult>>;
+    getMyAppRole(): Promise<AppRole | null>;
+    getQualityOverview(): Promise<QualityOverview>;
+    getRiskAssessment(): Promise<Array<RiskBatch>>;
+    getRiskAuditLog(adminToken: string): Promise<Array<RiskAuditEntry>>;
+    getScoreTrends(): Promise<Array<ScoreTrend>>;
+    getSupplierStats(): Promise<Array<SupplierStats>>;
+    getUserCodeExpiry(email: string): Promise<[bigint, bigint] | null>;
     getUserCredits(userId: string, adminToken: string): Promise<bigint>;
     getUserOwnCredits(userId: string): Promise<bigint>;
-    deductCredit(userId: string): Promise<boolean>;
+    getUserRecord(userId: string, adminToken: string): Promise<UserRecord | null>;
+    isCallerAdmin(): Promise<boolean>;
     logRiskPrediction(userId: string, userName: string, systemName: string, riskScore: bigint, riskLevel: string): Promise<void>;
-    getRiskAuditLog(adminToken: string): Promise<Array<{userId: string, userName: string, systemName: string, riskScore: bigint, riskLevel: string, creditsUsed: bigint, timestamp: bigint}>>;
-    getUserRecord(userId: string, adminToken: string): Promise<Option<UserRecord>>;
+    removeAdmin(user: Principal): Promise<void>;
+    seedDemoData(): Promise<void>;
+    setAppRole(user: Principal, role: AppRole): Promise<void>;
+    setUserCredits(userId: string, amount: bigint, adminToken: string): Promise<boolean>;
+    submitAccessRequest(id: string, name: string, institution: string, email: string, purpose: string, registeredAt: bigint): Promise<boolean>;
+    updateBatch(id: bigint, input: BatchInput): Promise<boolean>;
+    verifyUserCode(email: string, code: string): Promise<string | null>;
 }
+export interface BatchInput {
+    ash: number;
+    region: string;
+    supplier: string;
+    heavyMetals: number;
+    extractiveValue: number;
+    dateReceived: string;
+    notes: string;
+    microbialCount: number;
+    batchId: string;
+    herbName: string;
+    moisture: number;
+}
+export interface Batch {
+    id: bigint;
+    ash: number;
+    region: string;
+    supplier: string;
+    createdBy: Principal;
+    heavyMetals: number;
+    extractiveValue: number;
+    dateReceived: string;
+    notes: string;
+    microbialCount: number;
+    batchId: string;
+    herbName: string;
+    moisture: number;
+}
+export interface AnalysisResult {
+    region: string;
+    status: string;
+    probability: number;
+    ashOk: boolean;
+    supplier: string;
+    extractiveOk: boolean;
+    anomalyDetails: string;
+    qualityScore: number;
+    moistureOk: boolean;
+    heavyMetalsOk: boolean;
+    dateReceived: string;
+    timestamp: bigint;
+    microbialOk: boolean;
+    batchId: string;
+    herbName: string;
+    anomaly: boolean;
+}
+export enum AppRole {
+    admin = "admin",
+    qaManager = "qaManager",
+    labTechnician = "labTechnician"
+}
+export interface backendInterface extends AyurNexisInterface {
+}
+import type { AnalysisResult as _AnalysisResult, AppRole as _AppRole, Batch as _Batch, UserRecord as _UserRecord } from "./declarations/backend.did.d.ts";
 export class Backend implements backendInterface {
     constructor(private actor: ActorSubclass<_SERVICE>, private _uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, private _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, private processError?: (error: unknown) => never){}
-    async _initializeAccessControlWithSecret(userSecret: string): Promise<void> { return this.actor._initializeAccessControlWithSecret(userSecret); }
-    async getCallerUserRole(): Promise<UserRole> { return this.actor.getCallerUserRole() as any; }
-    async assignCallerUserRole(user: Principal, role: UserRole): Promise<void> { return this.actor.assignCallerUserRole(user, role as any); }
-    async isCallerAdmin(): Promise<boolean> { return this.actor.isCallerAdmin(); }
-    async setAppRole(user: Principal, role: AppRole): Promise<void> { return this.actor.setAppRole(user, role as any); }
-    async getMyAppRole(): Promise<Option<AppRole>> { const r = await this.actor.getMyAppRole(); return r.length > 0 ? some(r[0] as any) : none(); }
-    async createBatch(input: BatchInput): Promise<bigint> { return this.actor.createBatch(input as any); }
-    async getBatch(id: bigint): Promise<Option<Batch>> { const r = await this.actor.getBatch(id); return r.length > 0 ? some(r[0] as any) : none(); }
-    async getAllBatches(): Promise<Batch[]> { return this.actor.getAllBatches() as any; }
-    async updateBatch(id: bigint, input: BatchInput): Promise<boolean> { return this.actor.updateBatch(id, input as any); }
-    async deleteBatch(id: bigint): Promise<boolean> { return this.actor.deleteBatch(id); }
-    async analyzeBatch(id: bigint): Promise<Option<AnalysisResult>> { const r = await this.actor.analyzeBatch(id); return r.length > 0 ? some(r[0] as any) : none(); }
-    async getAnalysis(batchId: string): Promise<Option<AnalysisResult>> { const r = await this.actor.getAnalysis(batchId); return r.length > 0 ? some(r[0] as any) : none(); }
-    async getAllAnalyses(): Promise<AnalysisResult[]> { return this.actor.getAllAnalyses() as any; }
-    async getDashboardStats(): Promise<DashboardStats> { return this.actor.getDashboardStats() as any; }
-    async getScoreTrends(): Promise<ScoreTrend[]> { return this.actor.getScoreTrends() as any; }
-    async getSupplierStats(): Promise<SupplierStats[]> { return this.actor.getSupplierStats() as any; }
-    async getRiskAssessment(): Promise<RiskBatch[]> { return this.actor.getRiskAssessment() as any; }
-    async getQualityOverview(): Promise<QualityOverview> { return this.actor.getQualityOverview() as any; }
-    async getDeviationReport(): Promise<AnalysisResult[]> { return this.actor.getDeviationReport() as any; }
-    async seedDemoData(): Promise<void> { return this.actor.seedDemoData(); }
-    async submitAccessRequest(id: string, name: string, institution: string, email: string, purpose: string, registeredAt: bigint): Promise<boolean> { return this.actor.submitAccessRequest(id, name, institution, email, purpose, registeredAt); }
-    async getAccessRequests(adminToken: string): Promise<UserRecord[]> { return this.actor.getAccessRequests(adminToken) as any; }
-    async adminApproveUser(userId: string, adminToken: string): Promise<boolean> { return this.actor.adminApproveUser(userId, adminToken); }
-    async adminRevokeUser(userId: string, adminToken: string): Promise<boolean> { return this.actor.adminRevokeUser(userId, adminToken); }
-    async adminDeleteUser(userId: string, adminToken: string): Promise<boolean> { return (this.actor as any).adminDeleteUser(userId, adminToken); }
-    async adminGenerateCode(userId: string, adminToken: string, expiryDays: bigint): Promise<Option<string>> { const r = await (this.actor as any).adminGenerateCode(userId, adminToken, expiryDays); return r.length > 0 ? some(r[0] as string) : none(); }
-    async getUserCodeExpiry(email: string): Promise<Option<[bigint, bigint]>> { return (this.actor as any).getUserCodeExpiry(email); }
-    async verifyUserCode(email: string, code: string): Promise<Option<string>> { const r = await this.actor.verifyUserCode(email, code); return r.length > 0 ? some(r[0] as string) : none(); }
-    async callDeepSeek(prompt: string): Promise<string> { const result = await (this.actor as any).callDeepSeek(prompt); return Array.isArray(result) ? result[0] as string : result as string; }
-    async callDeepSeekExtended(prompt: string): Promise<string> { const result = await (this.actor as any).callDeepSeekExtended(prompt); return Array.isArray(result) ? result[0] as string : result as string; }
-    async checkUserAccess(userId: string): Promise<string> { return (this.actor as any).checkUserAccess(userId); }
-    async getAllUserCredits(adminToken: string): Promise<Array<[string, bigint]>> { return (this.actor as any).getAllUserCredits(adminToken); }
-    async setUserCredits(userId: string, amount: bigint, adminToken: string): Promise<boolean> { return (this.actor as any).setUserCredits(userId, amount, adminToken); }
-    async getUserCredits(userId: string, adminToken: string): Promise<bigint> { return (this.actor as any).getUserCredits(userId, adminToken); }
-    async getUserOwnCredits(userId: string): Promise<bigint> { return (this.actor as any).getUserOwnCredits(userId); }
-    async deductCredit(userId: string): Promise<boolean> { return (this.actor as any).deductCredit(userId); }
-    async logRiskPrediction(userId: string, userName: string, systemName: string, riskScore: bigint, riskLevel: string): Promise<void> { return (this.actor as any).logRiskPrediction(userId, userName, systemName, riskScore, riskLevel); }
-    async getRiskAuditLog(adminToken: string): Promise<any[]> { return (this.actor as any).getRiskAuditLog(adminToken); }
-    async getUserRecord(userId: string, adminToken: string): Promise<Option<UserRecord>> { const r = await (this.actor as any).getUserRecord(userId, adminToken); return r && r.length > 0 ? some(r[0] as UserRecord) : none(); }
+    async _transform(arg0: {
+        context: Uint8Array;
+        response: http_request_result;
+    }): Promise<http_request_result> {
+        if (this.processError) {
+            try {
+                const result = await this.actor._transform(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor._transform(arg0);
+            return result;
+        }
+    }
+    async addAdmin(arg0: Principal): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.addAdmin(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.addAdmin(arg0);
+            return result;
+        }
+    }
+    async adminApproveUser(arg0: string, arg1: string): Promise<boolean> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.adminApproveUser(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.adminApproveUser(arg0, arg1);
+            return result;
+        }
+    }
+    async adminDeleteUser(arg0: string, arg1: string): Promise<boolean> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.adminDeleteUser(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.adminDeleteUser(arg0, arg1);
+            return result;
+        }
+    }
+    async adminGenerateCode(arg0: string, arg1: string, arg2: bigint): Promise<string | null> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.adminGenerateCode(arg0, arg1, arg2);
+                return from_candid_opt_n1(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.adminGenerateCode(arg0, arg1, arg2);
+            return from_candid_opt_n1(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async adminRevokeUser(arg0: string, arg1: string): Promise<boolean> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.adminRevokeUser(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.adminRevokeUser(arg0, arg1);
+            return result;
+        }
+    }
+    async analyzeBatch(arg0: bigint): Promise<AnalysisResult | null> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.analyzeBatch(arg0);
+                return from_candid_opt_n2(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.analyzeBatch(arg0);
+            return from_candid_opt_n2(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async callDeepSeek(arg0: string): Promise<string> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.callDeepSeek(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.callDeepSeek(arg0);
+            return result;
+        }
+    }
+    async callDeepSeekExtended(arg0: string): Promise<string> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.callDeepSeekExtended(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.callDeepSeekExtended(arg0);
+            return result;
+        }
+    }
+    async checkUserAccess(arg0: string): Promise<string> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.checkUserAccess(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.checkUserAccess(arg0);
+            return result;
+        }
+    }
+    async createBatch(arg0: BatchInput): Promise<bigint> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.createBatch(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.createBatch(arg0);
+            return result;
+        }
+    }
+    async deductCredit(arg0: string): Promise<boolean> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.deductCredit(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.deductCredit(arg0);
+            return result;
+        }
+    }
+    async deleteBatch(arg0: bigint): Promise<boolean> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.deleteBatch(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.deleteBatch(arg0);
+            return result;
+        }
+    }
+    async getAccessRequests(arg0: string): Promise<Array<UserRecord>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getAccessRequests(arg0);
+                return from_candid_vec_n3(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getAccessRequests(arg0);
+            return from_candid_vec_n3(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async getAllAnalyses(): Promise<Array<AnalysisResult>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getAllAnalyses();
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getAllAnalyses();
+            return result;
+        }
+    }
+    async getAllBatches(): Promise<Array<Batch>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getAllBatches();
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getAllBatches();
+            return result;
+        }
+    }
+    async getAllUserCredits(arg0: string): Promise<Array<[string, bigint]>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getAllUserCredits(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getAllUserCredits(arg0);
+            return result;
+        }
+    }
+    async getAnalysis(arg0: string): Promise<AnalysisResult | null> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getAnalysis(arg0);
+                return from_candid_opt_n2(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getAnalysis(arg0);
+            return from_candid_opt_n2(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async getBatch(arg0: bigint): Promise<Batch | null> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getBatch(arg0);
+                return from_candid_opt_n7(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getBatch(arg0);
+            return from_candid_opt_n7(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async getDashboardStats(): Promise<DashboardStats> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getDashboardStats();
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getDashboardStats();
+            return result;
+        }
+    }
+    async getDeviationReport(): Promise<Array<AnalysisResult>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getDeviationReport();
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getDeviationReport();
+            return result;
+        }
+    }
+    async getMyAppRole(): Promise<AppRole | null> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getMyAppRole();
+                return from_candid_opt_n8(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getMyAppRole();
+            return from_candid_opt_n8(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async getQualityOverview(): Promise<QualityOverview> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getQualityOverview();
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getQualityOverview();
+            return result;
+        }
+    }
+    async getRiskAssessment(): Promise<Array<RiskBatch>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getRiskAssessment();
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getRiskAssessment();
+            return result;
+        }
+    }
+    async getRiskAuditLog(arg0: string): Promise<Array<RiskAuditEntry>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getRiskAuditLog(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getRiskAuditLog(arg0);
+            return result;
+        }
+    }
+    async getScoreTrends(): Promise<Array<ScoreTrend>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getScoreTrends();
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getScoreTrends();
+            return result;
+        }
+    }
+    async getSupplierStats(): Promise<Array<SupplierStats>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getSupplierStats();
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getSupplierStats();
+            return result;
+        }
+    }
+    async getUserCodeExpiry(arg0: string): Promise<[bigint, bigint] | null> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getUserCodeExpiry(arg0);
+                return from_candid_opt_n11(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getUserCodeExpiry(arg0);
+            return from_candid_opt_n11(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async getUserCredits(arg0: string, arg1: string): Promise<bigint> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getUserCredits(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getUserCredits(arg0, arg1);
+            return result;
+        }
+    }
+    async getUserOwnCredits(arg0: string): Promise<bigint> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getUserOwnCredits(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getUserOwnCredits(arg0);
+            return result;
+        }
+    }
+    async getUserRecord(arg0: string, arg1: string): Promise<UserRecord | null> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getUserRecord(arg0, arg1);
+                return from_candid_opt_n12(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getUserRecord(arg0, arg1);
+            return from_candid_opt_n12(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async isCallerAdmin(): Promise<boolean> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.isCallerAdmin();
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.isCallerAdmin();
+            return result;
+        }
+    }
+    async logRiskPrediction(arg0: string, arg1: string, arg2: string, arg3: bigint, arg4: string): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.logRiskPrediction(arg0, arg1, arg2, arg3, arg4);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.logRiskPrediction(arg0, arg1, arg2, arg3, arg4);
+            return result;
+        }
+    }
+    async removeAdmin(arg0: Principal): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.removeAdmin(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.removeAdmin(arg0);
+            return result;
+        }
+    }
+    async seedDemoData(): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.seedDemoData();
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.seedDemoData();
+            return result;
+        }
+    }
+    async setAppRole(arg0: Principal, arg1: AppRole): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.setAppRole(arg0, to_candid_AppRole_n13(this._uploadFile, this._downloadFile, arg1));
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.setAppRole(arg0, to_candid_AppRole_n13(this._uploadFile, this._downloadFile, arg1));
+            return result;
+        }
+    }
+    async setUserCredits(arg0: string, arg1: bigint, arg2: string): Promise<boolean> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.setUserCredits(arg0, arg1, arg2);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.setUserCredits(arg0, arg1, arg2);
+            return result;
+        }
+    }
+    async submitAccessRequest(arg0: string, arg1: string, arg2: string, arg3: string, arg4: string, arg5: bigint): Promise<boolean> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.submitAccessRequest(arg0, arg1, arg2, arg3, arg4, arg5);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.submitAccessRequest(arg0, arg1, arg2, arg3, arg4, arg5);
+            return result;
+        }
+    }
+    async updateBatch(arg0: bigint, arg1: BatchInput): Promise<boolean> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.updateBatch(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.updateBatch(arg0, arg1);
+            return result;
+        }
+    }
+    async verifyUserCode(arg0: string, arg1: string): Promise<string | null> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.verifyUserCode(arg0, arg1);
+                return from_candid_opt_n1(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.verifyUserCode(arg0, arg1);
+            return from_candid_opt_n1(this._uploadFile, this._downloadFile, result);
+        }
+    }
+}
+function from_candid_AppRole_n9(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _AppRole): AppRole {
+    return from_candid_variant_n10(_uploadFile, _downloadFile, value);
+}
+function from_candid_UserRecord_n4(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _UserRecord): UserRecord {
+    return from_candid_record_n5(_uploadFile, _downloadFile, value);
+}
+function from_candid_opt_n1(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [string]): string | null {
+    return value.length === 0 ? null : value[0];
+}
+function from_candid_opt_n11(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [[bigint, bigint]]): [bigint, bigint] | null {
+    return value.length === 0 ? null : value[0];
+}
+function from_candid_opt_n12(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_UserRecord]): UserRecord | null {
+    return value.length === 0 ? null : from_candid_UserRecord_n4(_uploadFile, _downloadFile, value[0]);
+}
+function from_candid_opt_n2(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_AnalysisResult]): AnalysisResult | null {
+    return value.length === 0 ? null : value[0];
+}
+function from_candid_opt_n6(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [bigint]): bigint | null {
+    return value.length === 0 ? null : value[0];
+}
+function from_candid_opt_n7(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_Batch]): Batch | null {
+    return value.length === 0 ? null : value[0];
+}
+function from_candid_opt_n8(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_AppRole]): AppRole | null {
+    return value.length === 0 ? null : from_candid_AppRole_n9(_uploadFile, _downloadFile, value[0]);
+}
+function from_candid_record_n5(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
+    id: string;
+    status: string;
+    institution: string;
+    approvedAt: [] | [bigint];
+    name: string;
+    accessCode: [] | [string];
+    codeGeneratedAt: [] | [bigint];
+    email: string;
+    registeredAt: bigint;
+    purpose: string;
+}): {
+    id: string;
+    status: string;
+    institution: string;
+    approvedAt?: bigint;
+    name: string;
+    accessCode?: string;
+    codeGeneratedAt?: bigint;
+    email: string;
+    registeredAt: bigint;
+    purpose: string;
+} {
+    return {
+        id: value.id,
+        status: value.status,
+        institution: value.institution,
+        approvedAt: record_opt_to_undefined(from_candid_opt_n6(_uploadFile, _downloadFile, value.approvedAt)),
+        name: value.name,
+        accessCode: record_opt_to_undefined(from_candid_opt_n1(_uploadFile, _downloadFile, value.accessCode)),
+        codeGeneratedAt: record_opt_to_undefined(from_candid_opt_n6(_uploadFile, _downloadFile, value.codeGeneratedAt)),
+        email: value.email,
+        registeredAt: value.registeredAt,
+        purpose: value.purpose
+    };
+}
+function from_candid_variant_n10(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
+    admin: null;
+} | {
+    qaManager: null;
+} | {
+    labTechnician: null;
+}): AppRole {
+    return "admin" in value ? AppRole.admin : "qaManager" in value ? AppRole.qaManager : "labTechnician" in value ? AppRole.labTechnician : value;
+}
+function from_candid_vec_n3(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: Array<_UserRecord>): Array<UserRecord> {
+    return value.map((x)=>from_candid_UserRecord_n4(_uploadFile, _downloadFile, x));
+}
+function to_candid_AppRole_n13(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: AppRole): _AppRole {
+    return to_candid_variant_n14(_uploadFile, _downloadFile, value);
+}
+function to_candid_variant_n14(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: AppRole): {
+    admin: null;
+} | {
+    qaManager: null;
+} | {
+    labTechnician: null;
+} {
+    return value == AppRole.admin ? {
+        admin: null
+    } : value == AppRole.qaManager ? {
+        qaManager: null
+    } : value == AppRole.labTechnician ? {
+        labTechnician: null
+    } : value;
 }
 export interface CreateActorOptions {
     agent?: Agent;

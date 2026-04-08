@@ -604,7 +604,7 @@ export function Dashboard() {
         totalBatches: Number(stats.totalBatches),
         passCount: Number(stats.passCount),
         failCount: Number(stats.failCount),
-        passRate: stats.passRate,
+        passRate: stats.passRate ?? 0,
         openDeviations: Number(stats.openDeviations),
         avgQualityScore: stats.avgQualityScore,
       };
@@ -929,7 +929,7 @@ export function Dashboard() {
                         {rb.qualityScore.toFixed(0)}
                       </div>
                       <div
-                        className={`text-xs font-medium ${riskColor(rb.riskLevel)}`}
+                        className={`text-xs font-medium ${riskColor(rb.riskLevel ?? "Low")}`}
                       >
                         {rb.riskLevel}
                       </div>

@@ -45,8 +45,8 @@ import {
   useState,
 } from "react";
 import { toast } from "sonner";
-import type { backendInterface as FullBackend } from "./backend.d";
 import { AccessGate } from "./components/AccessGate";
+import { IntroAnimation } from "./components/IntroAnimation";
 import {
   apiDrugs,
   binders,
@@ -76,6 +76,7 @@ import { QualityAnalysis } from "./pages/QualityAnalysis";
 import { RawMaterialIntake } from "./pages/RawMaterialIntake";
 import { Reports } from "./pages/Reports";
 import { UserManual } from "./pages/UserManual";
+import type { BackendInterface as FullBackend } from "./types";
 import {
   getCurrentAccessLevel,
   isAdminAuthed,
@@ -1638,8 +1639,16 @@ function ConfigPage() {
 }
 
 function AppRoot() {
-  // Check for admin hash
   const isAdminRoute = window.location.hash === "#admin";
+  const [showIntro, setShowIntro] = useState(() => {
+    if (isAdminRoute) return false;
+    return sessionStorage.getItem("ayurnexis_intro_shown") !== "1";
+  });
+
+  const handleIntroComplete = () => {
+    sessionStorage.setItem("ayurnexis_intro_shown", "1");
+    setShowIntro(false);
+  };
 
   if (isAdminRoute) {
     return (
@@ -1651,11 +1660,14 @@ function AppRoot() {
   }
 
   return (
-    <AccessGate>
-      <div className="h-screen flex flex-col">
-        <AppShell />
-      </div>
-    </AccessGate>
+    <>
+      {showIntro && <IntroAnimation onComplete={handleIntroComplete} />}
+      <AccessGate>
+        <div className="h-screen flex flex-col">
+          <AppShell />
+        </div>
+      </AccessGate>
+    </>
   );
 }
 

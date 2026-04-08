@@ -20,7 +20,6 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import type { AnalysisResult } from "../backend.d";
 import { getProfileByHerbName } from "../data/pharmacologicalProfiles";
 import { SEED_BATCHES, type SeedBatch } from "../data/seedBatches";
 import {
@@ -29,6 +28,7 @@ import {
   useScoreTrends,
   useSupplierStats,
 } from "../hooks/useQueries";
+import type { AnalysisResult } from "../types";
 
 type ModalState = {
   analysis: AnalysisResult;
@@ -1241,7 +1241,7 @@ export function Predictions() {
                         </Badge>
                       </td>
                       <td className="px-3 py-2 text-foreground">
-                        {(a.probability * 100).toFixed(1)}%
+                        {((a.probability ?? 0) * 100).toFixed(1)}%
                       </td>
                       <td className="px-3 py-2">
                         {a.anomaly ? (
